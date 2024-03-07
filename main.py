@@ -52,7 +52,7 @@ class stageControl:
         try:
             self.ser.write(f'{command}\r\n'.encode())
             response = self.ser.readline()
-            self.ser.readline() #clears next line
+            self.ser.readline()  # clears next line
         except Exception as error:
             error_dialog = QtWidgets.QErrorMessage(window)
             error_dialog.showMessage(str(error))
