@@ -1,7 +1,17 @@
 from PyQt6 import QtWidgets, uic
+import pyqtgraph as pg
 import sys
 import serial
 import serial.tools.list_ports
+
+
+uiclass, baseclass = pg.Qt.loadUiType("scanning_magnetometer.ui")
+
+try:
+    import qdarktheme
+    dark_theme = True
+except Exception as error:
+    dark_theme = False
 
 
 
@@ -23,6 +33,8 @@ class MainUI(QtWidgets.QMainWindow):
         self.getStagePositionButton.clicked.connect(self.stageController.get_stage_pos)
         self.actionChange_Max_Position_Values.triggered.connect(self.stageController.set_max_stage_position)
 
+        self.graphWidget.plot([1,2,3,4,5], [1,2,3,4,5]) #dummy data for now
+
         try:
             ports = serial.tools.list_ports.comports()
             available_ports = []
@@ -35,6 +47,11 @@ class MainUI(QtWidgets.QMainWindow):
             error_dialog.setText("ERROR: Could not populate COM port list")
             error_dialog.exec()
         return
+
+# class pqGraph(uiclass, baseclass):
+#     def __init__(self):
+#         super().__init__()
+#         self.setupUI(self)
 
 class stageControl:
     def __init__(self):
@@ -122,5 +139,7 @@ class stage_options(QtWidgets.QWidget):
 
 
 app = QtWidgets.QApplication(sys.argv)  # Create an instance of QtWidgets.QApplication
+if dark_theme:
+    qdarktheme.setup_theme()
 window = MainUI()  # Create an instance of our class
 app.exec()
