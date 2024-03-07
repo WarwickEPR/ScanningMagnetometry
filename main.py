@@ -44,10 +44,13 @@ class stageControl(QtWidgets.QMainWindow):
         try:
             # connect to stage code here
             self.ser = serial.Serial(port=com_port, baudrate=baud_rate)
+            msg = QtWidgets.QMessageBox(self)
+            msg.setText("Connected Successful to: " + str(com_port))
+            msg.exec()
         except Exception as error:
             error_dialog = QtWidgets.QErrorMessage(self)
             error_dialog.showMessage(str(error))
-
+x
     def home_stage(self):
         self.execute_gcode('G28')  # home gcode
         return
