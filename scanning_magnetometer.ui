@@ -35,7 +35,7 @@
      <enum>QTabWidget::Rounded</enum>
     </property>
     <property name="currentIndex">
-     <number>0</number>
+     <number>2</number>
     </property>
     <widget class="QWidget" name="stage_control">
      <attribute name="title">
@@ -584,7 +584,7 @@
      <widget class="QFrame" name="frame_4">
       <property name="geometry">
        <rect>
-        <x>450</x>
+        <x>490</x>
         <y>320</y>
         <width>311</width>
         <height>51</height>
@@ -628,9 +628,9 @@
      <widget class="QLineEdit" name="MWSourceIPAddressBox">
       <property name="geometry">
        <rect>
-        <x>630</x>
+        <x>620</x>
         <y>340</y>
-        <width>171</width>
+        <width>180</width>
         <height>31</height>
        </rect>
       </property>
@@ -641,9 +641,9 @@
      <widget class="QPushButton" name="connectMWSourceButton">
       <property name="geometry">
        <rect>
-        <x>550</x>
+        <x>510</x>
         <y>340</y>
-        <width>75</width>
+        <width>100</width>
         <height>31</height>
        </rect>
       </property>
@@ -1086,7 +1086,7 @@
      <widget class="QPushButton" name="pushButton_3">
       <property name="geometry">
        <rect>
-        <x>519</x>
+        <x>510</x>
         <y>340</y>
         <width>101</width>
         <height>31</height>
@@ -1099,9 +1099,9 @@
      <widget class="QLineEdit" name="MWSourceIPAddressBox_3">
       <property name="geometry">
        <rect>
-        <x>630</x>
+        <x>620</x>
         <y>340</y>
-        <width>171</width>
+        <width>180</width>
         <height>31</height>
        </rect>
       </property>
