@@ -23,8 +23,6 @@ class MainUI(QtWidgets.QMainWindow):
 
         self.stageController = stageControl()  # stage controller class instance
 
-
-
         self.connectStageButton.clicked.connect(lambda: self.stageController.connect_stage(self.comPortBox.currentText()))
         self.homeStageButton.clicked.connect(self.stageController.home_stage)
         self.setPositionButton.clicked.connect(lambda: self.stageController.set_stage_pos(self.xPosSpinBox.value(),
