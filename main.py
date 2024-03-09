@@ -3,6 +3,7 @@ import pyqtgraph as pg
 import sys
 import serial
 import serial.tools.list_ports
+import numpy as np
 
 
 uiclass, baseclass = pg.Qt.loadUiType("scanning_magnetometer.ui")
@@ -31,7 +32,11 @@ class MainUI(QtWidgets.QMainWindow):
         self.getStagePositionButton.clicked.connect(self.stageController.get_stage_pos)
         self.actionChange_Max_Position_Values.triggered.connect(self.stageController.set_max_stage_position)
 
-        self.graphWidget.plot([1,2,3,4,5], [1,2,3,4,5]) #dummy data for now
+
+        self.takeFFTButton.clicked.connect(self.stageController.open_fft_graph)
+        self.takeODMRButton.clicked.connect(self.stageController.open_odmr_grah)
+
+        # self.graphWidget.plot([1,2,3,4,5], [1,2,3,4,5]) #dummy data for now
 
         try:
             ports = serial.tools.list_ports.comports()
@@ -61,7 +66,7 @@ class stageControl:
         try:
             self.ser.write(f'{command}\r\n'.encode())
         except:
-            print("ERROR: Could not execute stage command")
+            self.show_error_message("ERROR: Could not execute stage command")
 
     def read_gcode(self, command):
         try:
@@ -91,12 +96,10 @@ class stageControl:
         return
 
     def set_stage_pos(self, x, y):
-        print(x, y)
         self.execute_gcode(f'G00 X{x} Y{y}')
         return
 
     def set_stage_height(self, z):
-        print(z)
         self.execute_gcode(f'G00 Z{z}')
         return
 
@@ -115,6 +118,18 @@ class stageControl:
 
     def set_max_stage_position(self):
         self.stage_options = stage_options()
+
+    def open_fft_graph(self):
+        self.fft_graph_window = FFTGraphWindow()
+
+    def open_odmr_grah(self):
+        self.odmr_graph_window = ODMRGraphWindow()
+
+    def show_error_message(self, text):
+        error_dialog = QtWidgets.QErrorMessage(window)
+        error_dialog.showMessage(text)
+        return
+
 
 class stage_options(QtWidgets.QWidget):
     def __init__(self):
@@ -135,6 +150,33 @@ class stage_options(QtWidgets.QWidget):
     def apply_jerk_changes(self):
         return
 
+class FFTGraphWindow(QtWidgets.QWidget):
+    def __init__(self):
+        super().__init__()
+        super(FFTGraphWindow, self).__init__()  # Call the inherited classes __init__ method
+        uic.loadUi('FFTGraphWindow.ui', self)  # Load the .ui file
+        self.show()
+        self.graphWidget.plot([1, 2, 3, 4, 5], [1, 2, 3, 4, 5])
+        self.graphWidget.setLogMode(True, True)
+
+        return
+
+class ODMRGraphWindow(QtWidgets.QWidget):
+    def __init__(self):
+        super().__init__()
+        super(ODMRGraphWindow, self).__init__()  # Call the inherited classes __init__ method
+        uic.loadUi('ODMRGraphWindow.ui', self)  # Load the .ui file
+        self.show()
+
+        self.dummy_data() #plot dummy odmr data
+
+    def dummy_data(self):
+        x_values = np.linspace(-3, 3, 120)
+        self.graphWidget.plot(x_values, self.gaussian_derivative(x_values, 1,1))
+        return
+
+    def gaussian_derivative(self, x, mu, sig):
+        return -2 * x * np.exp(-x**2) / np.sqrt(np.pi)
 
 app = QtWidgets.QApplication(sys.argv)  # Create an instance of QtWidgets.QApplication
 if dark_theme:
