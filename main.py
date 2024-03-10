@@ -157,10 +157,36 @@ class FFTGraphWindow(QtWidgets.QWidget):
         super(FFTGraphWindow, self).__init__()  # Call the inherited classes __init__ method
         uic.loadUi('FFTGraphWindow.ui', self)  # Load the .ui file
         self.show()
-        self.graphWidget.plot([1, 2, 3, 4, 5], [1, 2, 3, 4, 5])
-        self.graphWidget.setLogMode(True, True)
+        # self.graphWidget.plot([1, 2, 3, 4, 5], [1, 2, 3, 4, 5])
 
+        x,y = self.dummy_data() #plot dummy fft data
+        self.calc_sens(x,y)
         return
+
+    def calc_sens(self, x, y, freq_start=10, freq_end=100):
+        freq_start = freq_start/1e3  # convert khz to hz
+        freq_end = freq_end/1e3  # convert khz to hz
+        array = np.asarray(x)  # make it an array if its not
+        idx_min = (np.abs(array - freq_start)).argmin()  # find closest value idx of min freq
+        idx_max = (np.abs(array - freq_end)).argmin()  # find closest value idx of max freq
+        x_range = x[idx_min:idx_max]  # set x range to be between min and max freq idx
+        y_range = y[idx_min:idx_max]  # set y range to be between min and max freq idx
+
+        print(np.mean(y_range))  # mean sens value
+
+
+    # self.dummy_data(x_values,y)  # plot dummy odmr data
+    def dummy_data(self):
+        """plots dummy FFT data for demonstrating/debugging/feature testing"""
+        arr = np.loadtxt("example_data\example_data_fft.csv", delimiter=',')
+        x = arr[:, 0]
+        y = arr[:, 1]
+        self.odmr_plot = self.graphWidget.plot(x, y)
+        self.graphWidget.setLogMode(True, True)
+        return x,y
+
+    def lorentzian_derivative(self, x, x0, gamma, A):
+        return -2 * A * gamma ** 2 * (x - x0) / ((x - x0) ** 2 + gamma ** 2) ** 2
 
 class ODMRGraphWindow(QtWidgets.QWidget):
     def __init__(self):
@@ -246,6 +272,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                                            peak_distance=self.peakDistanceSpinBox.value(),
                                            peak_prom=self.peakPromSpinBox.value(),
                                            ))
+
 
         x_values = np.linspace(0, 10, 1000) # dummy x values
         y = (self.lorentzian_derivative(x_values, 2, 0.5, 1) + self.lorentzian_derivative(x_values, 4, 0.5, 1) +
