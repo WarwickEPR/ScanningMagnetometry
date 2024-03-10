@@ -1,10 +1,11 @@
-from PyQt6 import QtWidgets, uic
+from PyQt6 import QtCore, QtWidgets, uic
 import pyqtgraph as pg
 import sys
 import serial
 import serial.tools.list_ports
 import numpy as np
-
+from sklearn.linear_model import LinearRegression
+from scipy.signal import savgol_filter
 
 uiclass, baseclass = pg.Qt.loadUiType("scanning_magnetometer.ui")
 
@@ -51,10 +52,10 @@ class MainUI(QtWidgets.QMainWindow):
             error_dialog.exec()
         return
 
-# class pqGraph(uiclass, baseclass):
-#     def __init__(self):
-#         super().__init__()
-#         self.setupUI(self)
+    def show_error_message(self, text):
+        error_dialog = QtWidgets.QErrorMessage(self)
+        error_dialog.showMessage(text)
+        return
 
 class stageControl:
     def __init__(self):
@@ -168,15 +169,119 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         uic.loadUi('ODMRGraphWindow.ui', self)  # Load the .ui file
         self.show()
 
-        self.dummy_data() #plot dummy odmr data
+        self.odmr_plot = None
+        self.odmr_deriv_plot = None
+        self.odmr_linear_region_plot = None
 
-    def dummy_data(self):
-        x_values = np.linspace(-3, 3, 120)
-        self.graphWidget.plot(x_values, self.gaussian_derivative(x_values, 1,1))
+        self.odmrRegionFitBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y, self.odmrRegionFitBox.value(),
+                                                                                  plot_derivative=self.showDerivativeCheckbox.isChecked(),
+                                                                                  denoise=self.smoothingCheckBox.isChecked()
+                                                                                  ))
+        self.showDerivativeCheckbox.stateChanged.connect(lambda: self.fit_linear_region(x_values, y,
+                                                                                        self.odmrRegionFitBox.value(),
+                                                                                        plot_derivative=self.showDerivativeCheckbox.isChecked(),
+                                                                                        denoise=self.smoothingCheckBox.isChecked()))
+        self.smoothingCheckBox.stateChanged.connect(lambda: self.fit_linear_region(x_values, y,
+                                                                                        self.odmrRegionFitBox.value(),
+                                                                                        plot_derivative=self.showDerivativeCheckbox.isChecked(),
+                                                                                        denoise = self.smoothingCheckBox.isChecked()))
+
+        self.polyorderSpinBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y, self.odmrRegionFitBox.value(),
+                                                                                  plot_derivative=self.showDerivativeCheckbox.isChecked(),
+                                                                                  denoise=self.smoothingCheckBox.isChecked(),
+                                                                                  window_length=self.smoothWindowBox.value(),
+                                                                                  polyorder=self.polyorderSpinBox.value(),
+                                                                                  ))
+
+        self.smoothWindowBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y, self.odmrRegionFitBox.value(),
+                                           plot_derivative=self.showDerivativeCheckbox.isChecked(),
+                                           denoise=self.smoothingCheckBox.isChecked(),
+                                           window_length=self.smoothWindowBox.value(),
+                                           polyorder=self.polyorderSpinBox.value(),
+                                           ))
+
+        x_values = np.linspace(0, 10, 1000) # dummy x values
+        y = (self.lorentzian_derivative(x_values, 2, 0.5, 1) + self.lorentzian_derivative(x_values, 4, 0.5, 1) +
+             self.lorentzian_derivative(x_values, 6, 0.5, 1) + self.lorentzian_derivative(x_values, 8, 0.5, 1))
+        # dummy y data
+        np.random.seed(0)  # For reproducibility
+        noise = np.random.normal(0, 0.05, len(x_values))  # Gaussian noise with mean and standard deviation
+        y += noise  # add noise
+        # self.dummy_data(x_values,y)  # plot dummy odmr data
+
+        self.fit_linear_region(x_values, y)  # find linear region of data for fitting
+
+    def dummy_data(self,x,y):
+        pen = pg.mkPen(style = QtCore.Qt.PenStyle.DashLine)
+        self.odmr_plot = self.graphWidget.plot(x, y,pen=pen)
         return
 
-    def gaussian_derivative(self, x, mu, sig):
-        return -2 * x * np.exp(-x**2) / np.sqrt(np.pi)
+    def gaussian_derivative(self, x, mu, sigma):
+        return -2 * (x - mu) * np.exp(-((x - mu) / sigma)**2) / (np.sqrt(np.pi) * sigma)
+
+    def lorentzian_derivative(self, x, x0, gamma, A):
+        return -2 * A * gamma ** 2 * (x - x0) / ((x - x0) ** 2 + gamma ** 2) ** 2
+
+    def fit_linear_region(self, x, y, linear_region_width=50, window_length=50, polyorder=3, plot_derivative=False, denoise=False):
+        try:
+            window_length = int(window_length)
+            polyorder = int(polyorder)
+            if denoise:
+                y = savgol_filter(y, window_length=window_length, polyorder=polyorder)
+            try:
+                self.odmr_plot.clear()
+                self.dummy_data(x, y)
+            except:
+                self.dummy_data(x, y)
+            linear_region_width = int(linear_region_width)
+            derivative = np.gradient(y, x)  # take derivative of curve, find elbow or "knee" point of curve
+            elbow_index = np.argmin(derivative)  # find the minimum of the gradient, use that to determine linear region
+            # Adjust linear region parameter to control the width of the linear region
+            linear_region_start = max(0, elbow_index - linear_region_width // 2)
+            linear_region_end = min(len(x) - 1, elbow_index + linear_region_width // 2)
+            # Extract data points for the linear region
+            x_linear = x[linear_region_start:linear_region_end].reshape(-1, 1)
+            y_linear = y[linear_region_start:linear_region_end]
+
+            # Perform linear regression
+            model = LinearRegression()
+            model.fit(x_linear, y_linear)
+
+            slope = model.coef_[0]
+            intercept = model.intercept_
+
+            prd = model.predict(x_linear)
+            x_linear = x_linear.flatten()
+
+
+            pen = pg.mkPen(color=(255, 0, 0), width=5)
+            if self.odmr_linear_region_plot == None:
+                self.odmr_linear_region_plot = self.graphWidget.plot(x_linear, prd, pen=pen)
+            else:
+                self.odmr_linear_region_plot.setData(x_linear,prd)
+
+
+            #if plot deriviate is true, plot it else, if false, clear deriv plot.
+            if plot_derivative:
+                try:
+                    self.odmr_deriv_plot.clear()
+                except:
+                    pass
+                pen = pg.mkPen(color=(0,255,0), style=QtCore.Qt.PenStyle.DashDotLine)
+                self.odmr_deriv_plot = self.graphWidget.plot(x, derivative, pen=pen)
+            else:
+                try:
+                    self.odmr_deriv_plot.clear()
+                except:
+                    pass
+
+
+            self.odmrGradientLabel.setText(str(round(slope,3)))
+            return
+
+        except Exception as error:
+            print(error)
+            window.show_error_message("ERROR: Linear region too large/small")
 
 app = QtWidgets.QApplication(sys.argv)  # Create an instance of QtWidgets.QApplication
 if dark_theme:

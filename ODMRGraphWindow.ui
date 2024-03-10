@@ -13,7 +13,7 @@
   <property name="windowTitle">
    <string>ODMR Graph</string>
   </property>
-  <layout class="QVBoxLayout" name="verticalLayout" stretch="100,5,5">
+  <layout class="QVBoxLayout" name="verticalLayout" stretch="100,5,5,5">
    <item>
     <layout class="QHBoxLayout" name="horizontalLayout_5" stretch="100">
      <item>
@@ -28,10 +28,132 @@
     </layout>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="horizontalLayout_2"/>
+    <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="10,10,10,10">
+     <item>
+      <widget class="QLabel" name="label_3">
+       <property name="text">
+        <string>Linear Region Slope (V/MHz):</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="odmrGradientLabel">
+       <property name="text">
+        <string>TextLabel</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="label_4">
+       <property name="text">
+        <string>Linear Region Width</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QDoubleSpinBox" name="odmrRegionFitBox">
+       <property name="minimum">
+        <double>2.000000000000000</double>
+       </property>
+       <property name="maximum">
+        <double>1000.000000000000000</double>
+       </property>
+       <property name="value">
+        <double>50.000000000000000</double>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="horizontalLayout_3"/>
+    <layout class="QHBoxLayout" name="horizontalLayout_6" stretch="10,5,10,5,10">
+     <item>
+      <widget class="QLabel" name="label">
+       <property name="font">
+        <font>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string>Smoothing Window Size</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QSpinBox" name="smoothWindowBox">
+       <property name="font">
+        <font>
+         <bold>true</bold>
+        </font>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QLabel" name="label_2">
+       <property name="font">
+        <font>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string>Polynomial Order</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QSpinBox" name="polyorderSpinBox">
+       <property name="font">
+        <font>
+         <bold>true</bold>
+        </font>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="smoothingCheckBox">
+       <property name="font">
+        <font>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string>Smoothing Enabled</string>
+       </property>
+      </widget>
+     </item>
+    </layout>
+   </item>
+   <item>
+    <layout class="QHBoxLayout" name="horizontalLayout_4" stretch="40,13">
+     <item>
+      <widget class="QPushButton" name="fitODMRButton">
+       <property name="text">
+        <string>Fit ODMR</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QCheckBox" name="showDerivativeCheckbox">
+       <property name="font">
+        <font>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string>Show Derivative</string>
+       </property>
+       <property name="checkable">
+        <bool>true</bool>
+       </property>
+       <property name="checked">
+        <bool>false</bool>
+       </property>
+       <property name="tristate">
+        <bool>false</bool>
+       </property>
+      </widget>
+     </item>
+    </layout>
    </item>
   </layout>
  </widget>
