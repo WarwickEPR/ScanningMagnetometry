@@ -1,11 +1,11 @@
-from PyQt6 import QtCore, QtWidgets, uic
+from PyQt6 import QtCore, QtWidgets, uic, QtGui
 import pyqtgraph as pg
 import sys
 import serial
 import serial.tools.list_ports
 import numpy as np
 from sklearn.linear_model import LinearRegression
-from scipy.signal import savgol_filter
+from scipy.signal import savgol_filter, find_peaks
 
 uiclass, baseclass = pg.Qt.loadUiType("scanning_magnetometer.ui")
 
@@ -172,25 +172,48 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         self.odmr_plot = None
         self.odmr_deriv_plot = None
         self.odmr_linear_region_plot = None
+        self.linear_region_list = None
 
-        self.odmrRegionFitBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y, self.odmrRegionFitBox.value(),
-                                                                                  plot_derivative=self.showDerivativeCheckbox.isChecked(),
-                                                                                  denoise=self.smoothingCheckBox.isChecked()
-                                                                                  ))
-        self.showDerivativeCheckbox.stateChanged.connect(lambda: self.fit_linear_region(x_values, y,
-                                                                                        self.odmrRegionFitBox.value(),
-                                                                                        plot_derivative=self.showDerivativeCheckbox.isChecked(),
-                                                                                        denoise=self.smoothingCheckBox.isChecked()))
-        self.smoothingCheckBox.stateChanged.connect(lambda: self.fit_linear_region(x_values, y,
-                                                                                        self.odmrRegionFitBox.value(),
-                                                                                        plot_derivative=self.showDerivativeCheckbox.isChecked(),
-                                                                                        denoise = self.smoothingCheckBox.isChecked()))
-
-        self.polyorderSpinBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y, self.odmrRegionFitBox.value(),
+        self.odmrRegionFitBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y,
+                                                                                  self.odmrRegionFitBox.value(),
                                                                                   plot_derivative=self.showDerivativeCheckbox.isChecked(),
                                                                                   denoise=self.smoothingCheckBox.isChecked(),
                                                                                   window_length=self.smoothWindowBox.value(),
                                                                                   polyorder=self.polyorderSpinBox.value(),
+                                                                                  peak_height=self.peakHeightSpinBox.value(),
+                                                                                  peak_distance=self.peakDistanceSpinBox.value(),
+                                                                                  peak_prom=self.peakPromSpinBox.value(),
+                                                                                  ))
+        self.showDerivativeCheckbox.stateChanged.connect(lambda: self.fit_linear_region(x_values, y,
+                                                                                        self.odmrRegionFitBox.value(),
+                                                                                        plot_derivative=self.showDerivativeCheckbox.isChecked(),
+                                                                                        denoise=self.smoothingCheckBox.isChecked(),
+                                                                                        window_length=self.smoothWindowBox.value(),
+                                                                                        polyorder=self.polyorderSpinBox.value(),
+                                                                                        peak_height=self.peakHeightSpinBox.value(),
+                                                                                        peak_distance=self.peakDistanceSpinBox.value(),
+                                                                                        peak_prom=self.peakPromSpinBox.value(),
+                                                                                        ))
+        self.smoothingCheckBox.stateChanged.connect(lambda: self.fit_linear_region(x_values, y,
+                                                                                        self.odmrRegionFitBox.value(),
+                                                                                        plot_derivative=self.showDerivativeCheckbox.isChecked(),
+                                                                                        denoise = self.smoothingCheckBox.isChecked(),
+                                                                                   window_length=self.smoothWindowBox.value(),
+                                                                                   polyorder=self.polyorderSpinBox.value(),
+                                                                                   peak_height=self.peakHeightSpinBox.value(),
+                                                                                   peak_distance=self.peakDistanceSpinBox.value(),
+                                                                                   peak_prom=self.peakPromSpinBox.value(),
+                                                                                   ))
+
+        self.polyorderSpinBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y,
+                                                                                   self.odmrRegionFitBox.value(),
+                                                                                  plot_derivative=self.showDerivativeCheckbox.isChecked(),
+                                                                                  denoise=self.smoothingCheckBox.isChecked(),
+                                                                                  window_length=self.smoothWindowBox.value(),
+                                                                                  polyorder=self.polyorderSpinBox.value(),
+                                                                                  peak_height=self.peakHeightSpinBox.value(),
+                                                                                  peak_distance=self.peakDistanceSpinBox.value(),
+                                                                                  peak_prom=self.peakPromSpinBox.value(),
                                                                                   ))
 
         self.smoothWindowBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y, self.odmrRegionFitBox.value(),
@@ -198,6 +221,30 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                                            denoise=self.smoothingCheckBox.isChecked(),
                                            window_length=self.smoothWindowBox.value(),
                                            polyorder=self.polyorderSpinBox.value(),
+                                             peak_height=self.peakHeightSpinBox.value(),
+                                             peak_distance=self.peakDistanceSpinBox.value(),
+                                             peak_prom=self.peakPromSpinBox.value(),
+                                           ))
+
+        self.peakHeightSpinBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y, self.odmrRegionFitBox.value(),
+                                           plot_derivative=self.showDerivativeCheckbox.isChecked(),
+                                           denoise=self.smoothingCheckBox.isChecked(),
+                                           window_length=self.smoothWindowBox.value(),
+                                           polyorder=self.polyorderSpinBox.value(),
+                                            peak_height=self.peakHeightSpinBox.value(),
+                                            peak_distance=self.peakDistanceSpinBox.value(),
+                                            peak_prom=self.peakPromSpinBox.value(),
+                                           ))
+
+        self.peakHeightSpinBox.valueChanged.connect(
+            lambda: self.fit_linear_region(x_values, y, self.odmrRegionFitBox.value(),
+                                           plot_derivative=self.showDerivativeCheckbox.isChecked(),
+                                           denoise=self.smoothingCheckBox.isChecked(),
+                                           window_length=self.smoothWindowBox.value(),
+                                           polyorder=self.polyorderSpinBox.value(),
+                                           peak_height=self.peakHeightSpinBox.value(),
+                                           peak_distance=self.peakDistanceSpinBox.value(),
+                                           peak_prom=self.peakPromSpinBox.value(),
                                            ))
 
         x_values = np.linspace(0, 10, 1000) # dummy x values
@@ -222,7 +269,8 @@ class ODMRGraphWindow(QtWidgets.QWidget):
     def lorentzian_derivative(self, x, x0, gamma, A):
         return -2 * A * gamma ** 2 * (x - x0) / ((x - x0) ** 2 + gamma ** 2) ** 2
 
-    def fit_linear_region(self, x, y, linear_region_width=50, window_length=50, polyorder=3, plot_derivative=False, denoise=False):
+    def fit_linear_region(self, x, y, linear_region_width=50, window_length=50, polyorder=3, peak_height = -5,
+                          peak_distance = 100, peak_prom = 5, plot_derivative=False, denoise=False):
         try:
             window_length = int(window_length)
             polyorder = int(polyorder)
@@ -233,33 +281,45 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                 self.dummy_data(x, y)
             except:
                 self.dummy_data(x, y)
+
             linear_region_width = int(linear_region_width)
             derivative = np.gradient(y, x)  # take derivative of curve, find elbow or "knee" point of curve
             elbow_index = np.argmin(derivative)  # find the minimum of the gradient, use that to determine linear region
-            # Adjust linear region parameter to control the width of the linear region
-            linear_region_start = max(0, elbow_index - linear_region_width // 2)
-            linear_region_end = min(len(x) - 1, elbow_index + linear_region_width // 2)
-            # Extract data points for the linear region
-            x_linear = x[linear_region_start:linear_region_end].reshape(-1, 1)
-            y_linear = y[linear_region_start:linear_region_end]
+            peaks, _ = find_peaks(-derivative, height=peak_height, distance=peak_distance, prominence=peak_prom)
 
-            # Perform linear regression
-            model = LinearRegression()
-            model.fit(x_linear, y_linear)
+            try:
+                for i in self.linear_region_list:
+                    i.clear()
+            except:
+                pass
+            self.linear_region_list = []
+            self.linearRegionTable.setRowCount(0)
+            for i in range(len(peaks)):
+                # Adjust linear region parameter to control the width of the linear region
+                linear_region_start = max(0, peaks[i] - linear_region_width // 2)
+                linear_region_end = min(len(x) - 1, peaks[i] + linear_region_width // 2)
+                # Extract data points for the linear region
+                x_linear = x[linear_region_start:linear_region_end].reshape(-1, 1)
+                y_linear = y[linear_region_start:linear_region_end]
 
-            slope = model.coef_[0]
-            intercept = model.intercept_
+                # Perform linear regression
+                model = LinearRegression()
+                model.fit(x_linear, y_linear)
 
-            prd = model.predict(x_linear)
-            x_linear = x_linear.flatten()
+                slope = model.coef_[0]
+                intercept = model.intercept_
 
+                prd = model.predict(x_linear)
+                x_linear = x_linear.flatten()
 
-            pen = pg.mkPen(color=(255, 0, 0), width=5)
-            if self.odmr_linear_region_plot == None:
+                pen = pg.mkPen(color=(255, 0, 0), width=5)
+
                 self.odmr_linear_region_plot = self.graphWidget.plot(x_linear, prd, pen=pen)
-            else:
-                self.odmr_linear_region_plot.setData(x_linear,prd)
+                self.linear_region_list.append(self.odmr_linear_region_plot)
 
+                self.linearRegionTable.insertRow(i)
+                self.linearRegionTable.setItem(i, 0, QtWidgets.QTableWidgetItem(str(round(x_linear[i], 3))))
+                self.linearRegionTable.setItem(i, 1, QtWidgets.QTableWidgetItem(str(round(slope, 3))))
 
             #if plot deriviate is true, plot it else, if false, clear deriv plot.
             if plot_derivative:
@@ -267,7 +327,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                     self.odmr_deriv_plot.clear()
                 except:
                     pass
-                pen = pg.mkPen(color=(0,255,0), style=QtCore.Qt.PenStyle.DashDotLine)
+                pen = pg.mkPen(color=(0, 255, 0), style=QtCore.Qt.PenStyle.DashDotLine)
                 self.odmr_deriv_plot = self.graphWidget.plot(x, derivative, pen=pen)
             else:
                 try:
@@ -276,12 +336,13 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                     pass
 
 
-            self.odmrGradientLabel.setText(str(round(slope,3)))
+            # self.odmrGradientLabel.setText(str(round(slope,3)))
+
+
             return
 
         except Exception as error:
             print(error)
-            window.show_error_message("ERROR: Linear region too large/small")
 
 app = QtWidgets.QApplication(sys.argv)  # Create an instance of QtWidgets.QApplication
 if dark_theme:
