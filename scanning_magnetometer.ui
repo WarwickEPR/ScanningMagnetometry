@@ -29,7 +29,7 @@
        <enum>QTabWidget::Rounded</enum>
       </property>
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="stage_control">
        <attribute name="title">
@@ -844,7 +844,7 @@
           </rect>
          </property>
          <property name="text">
-          <string>Sweep Step (MHz)</string>
+          <string>Sweep Step (kHz)</string>
          </property>
          <property name="alignment">
           <set>Qt::AlignCenter</set>
@@ -1038,7 +1038,7 @@
           <set>Qt::AlignCenter</set>
          </property>
         </widget>
-        <widget class="QSpinBox" name="spinBox_3">
+        <widget class="QDoubleSpinBox" name="doubleSpinBox_3">
          <property name="geometry">
           <rect>
            <x>180</x>
@@ -1048,7 +1048,7 @@
           </rect>
          </property>
         </widget>
-        <widget class="QSpinBox" name="spinBox_4">
+        <widget class="QDoubleSpinBox" name="doubleSpinBox_4">
          <property name="geometry">
           <rect>
            <x>180</x>
