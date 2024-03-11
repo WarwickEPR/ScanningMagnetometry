@@ -162,18 +162,23 @@ class FFTGraphWindow(QtWidgets.QWidget):
         super(FFTGraphWindow, self).__init__()  # Call the inherited classes __init__ method
         uic.loadUi('FFTGraphWindow.ui', self)  # Load the .ui file
         self.show()
-        # self.graphWidget.plot([1, 2, 3, 4, 5], [1, 2, 3, 4, 5])
+        self.fft_plot = None
+        self.x = None
+        self.y = None
 
-        self.calcSensButton.clicked.connect(lambda: self.calc_sens(x, y, freq_start=self.minFreqSpinBox.value(),
+        self.calcSensButton.clicked.connect(lambda: self.calc_sens(freq_start=self.minFreqSpinBox.value(),
                                                                    freq_end=self.maxFreqSpinBox.value(),
                                                                    ignore_freqs=self.ignoreListFreqCheckBox.isChecked()))
 
         self.addFreqButton.clicked.connect(
             lambda: self.add_ignore_freq(self.freqStartSpinBox.value(), self.freqEndSpinBox.value()))
 
-        x, y = self.dummy_data("example_data\example_data_fft_dbu.csv", units="dBu",
-                               calib_const=0.8873)  # plot dummy fft data
-        self.calc_sens(x, y, freq_start=self.minFreqSpinBox.value(), freq_end=self.maxFreqSpinBox.value(),
+        self.odmrGradientSpinBox.valueChanged.connect(lambda: self.dummy_data("example_data\example_data_fft_dbu.csv", units="dBu",
+                               calib_const=self.odmrGradientSpinBox.value()))
+
+        self.dummy_data("example_data\example_data_fft_dbu.csv", units="dBu",
+                               calib_const=self.odmrGradientSpinBox.value())  # plot dummy fft data
+        self.calc_sens(freq_start=self.minFreqSpinBox.value(), freq_end=self.maxFreqSpinBox.value(),
                        ignore_freqs=self.ignoreListFreqCheckBox.isChecked())
         return
 
@@ -184,26 +189,26 @@ class FFTGraphWindow(QtWidgets.QWidget):
         self.ignoreFrequencyList.setItem(row_pos, 1, QtWidgets.QTableWidgetItem(str(freq_end)))
         return
 
-    def calc_sens(self, x, y, freq_start=10, freq_end=100, ignore_freqs=False):
+    def calc_sens(self, freq_start=10, freq_end=100, ignore_freqs=False):
         if ignore_freqs == True:
             freq_start = freq_start / 1e3  # convert khz to hz
             freq_end = freq_end / 1e3  # convert khz to hz
             ignore_freqs_range_idxs = []
 
             # clip frequency data to the selected range
-            idx_min_start = np.abs(x - freq_start).argmin()  # find closest value idx of min freq
-            idx_max_end = np.abs(x - freq_end).argmin()  # find closest value idx of max freq
+            idx_min_start = np.abs(self.x - freq_start).argmin()  # find closest value idx of min freq
+            idx_max_end = np.abs(self.x - freq_end).argmin()  # find closest value idx of max freq
 
             top_end = np.arange(0, idx_min_start + 1, 1, dtype=int)
             for i in range(len(top_end)):
                 ignore_freqs_range_idxs.append(top_end[i])
-            tail_end = np.arange(idx_max_end + 1, len(x), 1, dtype=int)
+            tail_end = np.arange(idx_max_end + 1, len(self.x), 1, dtype=int)
             for row in range(self.ignoreFrequencyList.rowCount()):
                 try:
                     ignore_min_freq = (int(self.ignoreFrequencyList.item(row, 0).text())) / 1e3
                     ignore_max_freq = (int(self.ignoreFrequencyList.item(row, 1).text())) / 1e3
-                    idx_min = np.abs(x - ignore_min_freq).argmin()
-                    idx_max = (np.abs(x - ignore_max_freq)).argmin()
+                    idx_min = np.abs(self.x - ignore_min_freq).argmin()
+                    idx_max = (np.abs(self.x - ignore_max_freq)).argmin()
                     idx_range = np.arange(idx_min, idx_max + 1, 1, dtype=int)
                     for i in range(len(idx_range)):
                         ignore_freqs_range_idxs.append(idx_range[i])
@@ -214,29 +219,33 @@ class FFTGraphWindow(QtWidgets.QWidget):
             for i in range(len(tail_end)):
                 ignore_freqs_range_idxs.append(tail_end[i])
 
-            mask = np.ones_like(x, dtype=bool)
+            mask = np.ones_like(self.x, dtype=bool)
             mask[ignore_freqs_range_idxs] = False
-            mean_sens = round(np.mean(y[mask]), 4)
+            mean_sens = round(np.mean(self.y[mask]), 4)
 
             self.meanSensLabel.setText(str(mean_sens))
         else:
-            mean_sens = round(np.mean(y), 4)
+            mean_sens = round(np.mean(self.y), 4)
             self.meanSensLabel.setText(str(mean_sens))
         # print(mean_sens) # mean sens value
 
-    # self.dummy_data(x_values,y)  # plot dummy odmr data
     def dummy_data(self, file_path, units="nT", calib_const=1, x_col=0, y_col=1):
+        calib_const = float(calib_const)
         """plots dummy FFT data for demonstrating/debugging/feature testing"""
         arr = np.loadtxt(file_path, delimiter=',')
-        x = arr[:, x_col]
-        y = arr[:, y_col]
+        self.x = arr[:, x_col]
+        self.y = arr[:, y_col]
         if units == "dBu":
             # converts dBu to nT/sqrt(Hz)
-            y = 0.775 * 10 ** (y / 20)
-            y = y / (23e-6 * calib_const)  # convert using calib_const (assumes units of V/MHz)
-        self.odmr_plot = self.graphWidget.plot(x, y)
+            self.y = 0.775 * 10 ** (self.y / 20)
+            self.y = self.y / (23e-6 * calib_const)  # convert using calib_const (assumes units of V/MHz)
+        try:
+            self.fft_plot.clear()
+        except:
+            pass
+        self.fft_plot = self.graphWidget.plot(self.x, self.y)
         self.graphWidget.setLogMode(True, True)
-        return x, y
+        return
 
     def lorentzian_derivative(self, x, x0, gamma, A):
         return -2 * A * gamma ** 2 * (x - x0) / ((x - x0) ** 2 + gamma ** 2) ** 2

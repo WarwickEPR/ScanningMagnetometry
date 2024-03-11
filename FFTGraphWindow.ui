@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>866</width>
-    <height>673</height>
+    <width>1056</width>
+    <height>700</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -202,7 +202,7 @@
     </layout>
    </item>
    <item>
-    <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="10,3,10,3,5,5,3">
+    <layout class="QHBoxLayout" name="horizontalLayout_2" stretch="10,3,10,3,0,0,5,5,3">
      <item>
       <widget class="QLabel" name="label_5">
        <property name="font">
@@ -245,6 +245,34 @@
       </widget>
      </item>
      <item>
+      <widget class="QLabel" name="label_2">
+       <property name="font">
+        <font>
+         <bold>true</bold>
+        </font>
+       </property>
+       <property name="text">
+        <string>ODMR Gradient (V/MHz)</string>
+       </property>
+      </widget>
+     </item>
+     <item>
+      <widget class="QDoubleSpinBox" name="odmrGradientSpinBox">
+       <property name="decimals">
+        <number>4</number>
+       </property>
+       <property name="minimum">
+        <double>0.001000000000000</double>
+       </property>
+       <property name="maximum">
+        <double>1000.000000000000000</double>
+       </property>
+       <property name="singleStep">
+        <double>0.100000000000000</double>
+       </property>
+      </widget>
+     </item>
+     <item>
       <widget class="QPushButton" name="calcSensButton">
        <property name="font">
         <font>
@@ -258,13 +286,23 @@
      </item>
      <item>
       <widget class="QLabel" name="label">
+       <property name="font">
+        <font>
+         <bold>true</bold>
+        </font>
+       </property>
        <property name="text">
-        <string>Mean Sens (nT/ √Hz): </string>
+        <string>Mean Sens (nT/√Hz): </string>
        </property>
       </widget>
      </item>
      <item>
       <widget class="QLabel" name="meanSensLabel">
+       <property name="font">
+        <font>
+         <bold>true</bold>
+        </font>
+       </property>
        <property name="text">
         <string>--</string>
        </property>
