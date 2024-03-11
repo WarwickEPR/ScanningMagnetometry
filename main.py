@@ -4,6 +4,8 @@ import sys
 import serial
 import serial.tools.list_ports
 import numpy as np
+import time
+import traceback
 from sklearn.linear_model import LinearRegression
 from scipy.signal import savgol_filter, find_peaks
 
@@ -38,6 +40,10 @@ class MainUI(QtWidgets.QMainWindow):
         self.takeFFTButton.clicked.connect(self.stageController.open_fft_graph)
         self.takeODMRButton.clicked.connect(self.stageController.open_odmr_graph)
         self.startScanButton.clicked.connect(self.stageController.open_scan_window)
+
+        # configure thread pool
+        self.threadpool = QtCore.QThreadPool()
+        print('max %d threads' % self.threadpool.maxThreadCount())
 
         # self.graphWidget.plot([1,2,3,4,5], [1,2,3,4,5]) #dummy data for now
 
@@ -258,10 +264,27 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         uic.loadUi('ODMRGraphWindow.ui', self)  # Load the .ui file
         self.show()
 
+
+        #configure two y axis plot
+
+        self.p1 = self.graphWidget.plotItem
+        self.p1.setLabels(left='axis 1')
+
+        self.p2 = pg.ViewBox()
+        self.p1.showAxis('right')
+        self.p1.scene().addItem(self.p2)
+        self.p1.getAxis('right').linkToView(self.p2)
+        self.p2.setXLink(self.p1)
+        self.p1.getAxis('right').setLabel('axis2', color='#0000ff')
+
+        self.p1.vb.sigResized.connect(self.updateViews)
+
         self.odmr_plot = None
         self.odmr_deriv_plot = None
         self.odmr_linear_region_plot = None
         self.linear_region_list = None
+        self.MainWindow = window
+        self.worker_running = False
 
         self.odmrRegionFitBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y,
                                                                                   self.odmrRegionFitBox.value(),
@@ -340,20 +363,78 @@ class ODMRGraphWindow(QtWidgets.QWidget):
 
         self.setODMRButton.clicked.connect(self.send_to_scan_table)
 
-        x_values = np.linspace(0, 10, 1000)  # dummy x values
-        y = (self.lorentzian_derivative(x_values, 2, 0.5, 1) + self.lorentzian_derivative(x_values, 4, 0.5, 1) +
-             self.lorentzian_derivative(x_values, 6, 0.5, 1) + self.lorentzian_derivative(x_values, 8, 0.5, 1))
+        data = np.loadtxt("example_data\example_odmr_data.csv", delimiter=",")
+        x_values = data[:, 0]
+        y = data[:, 1]
+        # x_values = np.linspace(0, 10, 1000)  # dummy x values
+        # y = (self.lorentzian_derivative(x_values, 2, 0.5, 1) + self.lorentzian_derivative(x_values, 4, 0.5, 1) +
+        #      self.lorentzian_derivative(x_values, 6, 0.5, 1) + self.lorentzian_derivative(x_values, 8, 0.5, 1))
         # dummy y data
-        np.random.seed(0)  # For reproducibility
-        noise = np.random.normal(0, 0.05, len(x_values))  # Gaussian noise with mean and standard deviation
-        y += noise  # add noise
+        # np.random.seed(0)  # For reproducibility
+        # noise = np.random.normal(0, 0.05, len(x_values))  # Gaussian noise with mean and standard deviation
+        # y += noise  # add noise
         # self.dummy_data(x_values,y)  # plot dummy odmr data
 
         self.fit_linear_region(x_values, y)  # find linear region of data for fitting
 
+        self.thing_happend()
+
+    def thing_happend(self):
+        """
+        what should happen when ODMR is started, thread is created and function is passed to worker
+         to start data collection.
+        :return:
+        """
+        self.worker = Worker(self.execute_this_function)
+
+
+        """connect up the results signal to print the result it emits when triggered"""
+        self.worker.signals.results.connect(self.print_this)
+
+
+        window.threadpool.start(self.worker)
+
+    def execute_this_function(self):
+        """this function then theoretically will trigger the LIA to start data collection when the MW sweep is started
+        then once the sweep is stopped, the trigger will stop LIA aquisition and then this function collects the data and
+        passes the data back to be plotted using signals and slots...haven't worked that out yet ._."""
+
+        self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
+        i = 0
+        while self.worker_running and (i < 5):
+            i += 1
+            print('hello', i)
+            time.sleep(1)
+
+        self.worker_running = False
+        return i
+
+
+    def print_this(self, s):
+        """this then prints the result emitted from the results signal, that is returned by the function 
+        'execute_this_function'"""
+        print(s)
+        
+    def closeEvent(self, event):
+        """this function executes when the ODMR graph window closes, used to stop thread but can be used for anything
+        else, such as printing or saving data, clearing graphs/memory etc."""
+        self.worker_running = False
+        return
+
+    def updateViews(self):
+        ## view has resized; update auxiliary views to match
+        self.p2.setGeometry(self.p1.vb.sceneBoundingRect())
+
+        ## need to re-update linked axes since this was called
+        ## incorrectly while views had different shapes.
+        ## (probably this should be handled in ViewBox.resizeEvent)
+        self.p2.linkedViewChanged(self.p1.vb, self.p2.XAxis)
+
+
     def dummy_data(self, x, y):
         pen = pg.mkPen(style=QtCore.Qt.PenStyle.DashLine)
         self.odmr_plot = self.graphWidget.plot(x, y, pen=pen)
+        self.updateViews()
         return
 
     def gaussian_derivative(self, x, mu, sigma):
@@ -378,7 +459,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
             linear_region_width = int(linear_region_width)
             derivative = np.gradient(y, x)  # take derivative of curve, find elbow or "knee" point of curve
             elbow_index = np.argmin(derivative)  # find the minimum of the gradient, use that to determine linear region
-            peaks, _ = find_peaks(-derivative, height=peak_height, distance=peak_distance, prominence=peak_prom)
+            peaks, _ = find_peaks(derivative, height=peak_height, distance=peak_distance, prominence=peak_prom)
 
             try:
                 for i in self.linear_region_list:
@@ -419,23 +500,28 @@ class ODMRGraphWindow(QtWidgets.QWidget):
             # if plot deriviate is true, plot it else, if false, clear deriv plot.
             if plot_derivative:
                 try:
-                    self.odmr_deriv_plot.clear()
+                    # self.odmr_deriv_plot.clear()
+                    self.p2.removeItem(self.odmr_deriv_plot)
                 except:
                     pass
                 pen = pg.mkPen(color=(0, 255, 0), style=QtCore.Qt.PenStyle.DashDotLine)
-                self.odmr_deriv_plot = self.graphWidget.plot(x, derivative, pen=pen)
+                # self.odmr_deriv_plot = self.graphWidget.plot(x, derivative, pen=pen)
+                self.odmr_deriv_plot = pg.PlotCurveItem(x, derivative, pen=pen)
+                self.p2.addItem(self.odmr_deriv_plot)
+                # self.p2.setYRange(np.min(derivative), np.max(derivative))
             else:
                 try:
-                    self.odmr_deriv_plot.clear()
+                    # self.odmr_deriv_plot.clear()
+                    self.p2.removeItem(self.odmr_deriv_plot)
                 except:
                     pass
 
             # self.odmrGradientLabel.setText(str(round(slope,3)))
-
-            return
-
         except Exception as error:
             print(error)
+
+        self.updateViews()
+        return
 
     def send_to_scan_table(self):
         self.table = self.linearRegionTable
@@ -490,6 +576,32 @@ class scanningImageWindow(QtWidgets.QWidget):
             self.i += 1
         return
 
+class Worker(QtCore.QRunnable):
+    """"worker thread"""
+    def __init__(self, fn, *args, **kwargs):
+        super(Worker, self).__init__()
+        self.fn = fn
+        self.args = args
+        self.kwargs = kwargs
+        self.signals = WorkerSignals()
+
+    @QtCore.pyqtSlot()
+    def run(self):
+        try:
+            result = self.fn(*self.args, **self.kwargs)
+        except:
+            traceback.print_exc()
+            exctype, value = sys.exc_info()[:2]
+            self.signals.error.emit((exctype, value, traceback.format_exc()))
+        else:
+            self.signals.results.emit(result)
+        finally:
+            self.signals.finished.emit()
+
+class WorkerSignals(QtCore.QObject):
+    finished = QtCore.pyqtSignal()
+    error = QtCore.pyqtSignal(tuple)
+    results = QtCore.pyqtSignal(object)
 
 app = QtWidgets.QApplication(sys.argv)  # Create an instance of QtWidgets.QApplication
 if dark_theme:
