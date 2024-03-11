@@ -29,7 +29,7 @@
        <enum>QTabWidget::Rounded</enum>
       </property>
       <property name="currentIndex">
-       <number>0</number>
+       <number>1</number>
       </property>
       <widget class="QWidget" name="stage_control">
        <attribute name="title">
@@ -795,8 +795,8 @@
          <rect>
           <x>310</x>
           <y>10</y>
-          <width>490</width>
-          <height>231</height>
+          <width>401</width>
+          <height>241</height>
          </rect>
         </property>
         <property name="font">
@@ -808,19 +808,6 @@
         <property name="title">
          <string>Sweep Control</string>
         </property>
-        <widget class="QPushButton" name="startSwpBtn">
-         <property name="geometry">
-          <rect>
-           <x>300</x>
-           <y>60</y>
-           <width>81</width>
-           <height>30</height>
-          </rect>
-         </property>
-         <property name="text">
-          <string>Start Sweep</string>
-         </property>
-        </widget>
         <widget class="QDoubleSpinBox" name="startFreqBox">
          <property name="geometry">
           <rect>
@@ -837,7 +824,7 @@
         <widget class="QLabel" name="label_6">
          <property name="geometry">
           <rect>
-           <x>150</x>
+           <x>160</x>
            <y>30</y>
            <width>141</width>
            <height>21</height>
@@ -869,7 +856,7 @@
         <widget class="QDoubleSpinBox" name="endFreqBox">
          <property name="geometry">
           <rect>
-           <x>160</x>
+           <x>170</x>
            <y>60</y>
            <width>121</width>
            <height>29</height>
@@ -955,7 +942,7 @@
          <property name="geometry">
           <rect>
            <x>20</x>
-           <y>190</y>
+           <y>200</y>
            <width>121</width>
            <height>30</height>
           </rect>
@@ -965,7 +952,7 @@
          <property name="geometry">
           <rect>
            <x>20</x>
-           <y>160</y>
+           <y>170</y>
            <width>121</width>
            <height>21</height>
           </rect>
@@ -977,43 +964,17 @@
           <set>Qt::AlignCenter</set>
          </property>
         </widget>
-        <widget class="QPushButton" name="setSweepParamBtn">
-         <property name="geometry">
-          <rect>
-           <x>160</x>
-           <y>190</y>
-           <width>271</width>
-           <height>30</height>
-          </rect>
-         </property>
-         <property name="text">
-          <string>Set Sweep Parameters</string>
-         </property>
-        </widget>
-        <widget class="QPushButton" name="startSwpBtn_3">
-         <property name="geometry">
-          <rect>
-           <x>390</x>
-           <y>60</y>
-           <width>81</width>
-           <height>30</height>
-          </rect>
-         </property>
-         <property name="text">
-          <string>Stop Sweep</string>
-         </property>
-        </widget>
         <widget class="QPushButton" name="takeODMRButton">
          <property name="geometry">
           <rect>
-           <x>390</x>
-           <y>130</y>
-           <width>81</width>
+           <x>190</x>
+           <y>190</y>
+           <width>141</width>
            <height>30</height>
           </rect>
          </property>
          <property name="text">
-          <string>ODMR</string>
+          <string>Take ODMR Spectrum</string>
          </property>
         </widget>
        </widget>
