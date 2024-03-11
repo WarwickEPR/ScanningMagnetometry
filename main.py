@@ -377,7 +377,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
 
         self.fit_linear_region(x_values, y)  # find linear region of data for fitting
 
-        self.thing_happend()
+        # self.thing_happend()
 
     def thing_happend(self):
         """
@@ -400,20 +400,22 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         passes the data back to be plotted using signals and slots...haven't worked that out yet ._."""
 
         self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
-        i = 0
-        while self.worker_running and (i < 5):
-            i += 1
-            print('hello', i)
-            time.sleep(1)
+        x = np.linspace(0, 100, 1000)
+        y = np.sin(x)
+        data = []
 
-        self.worker_running = False
-        return i
+        while self.worker_running:
+            for i in range(len(x)):
+                data.append(y[i])
+            time.sleep(5)
+            self.worker_running = False
+        return x, data
 
 
-    def print_this(self, s):
+    def print_this(self, x, y):
         """this then prints the result emitted from the results signal, that is returned by the function 
         'execute_this_function'"""
-        print(s)
+        self.dummy_data(x, y)
         
     def closeEvent(self, event):
         """this function executes when the ODMR graph window closes, used to stop thread but can be used for anything
@@ -432,6 +434,10 @@ class ODMRGraphWindow(QtWidgets.QWidget):
 
 
     def dummy_data(self, x, y):
+        try:
+            self.odmr_plot.clear()
+        except:
+            pass
         pen = pg.mkPen(style=QtCore.Qt.PenStyle.DashLine)
         self.odmr_plot = self.graphWidget.plot(x, y, pen=pen)
         self.updateViews()
@@ -594,14 +600,14 @@ class Worker(QtCore.QRunnable):
             exctype, value = sys.exc_info()[:2]
             self.signals.error.emit((exctype, value, traceback.format_exc()))
         else:
-            self.signals.results.emit(result)
+            self.signals.results.emit(result[0], result[1])
         finally:
             self.signals.finished.emit()
 
 class WorkerSignals(QtCore.QObject):
     finished = QtCore.pyqtSignal()
     error = QtCore.pyqtSignal(tuple)
-    results = QtCore.pyqtSignal(object)
+    results = QtCore.pyqtSignal(object, object)
 
 app = QtWidgets.QApplication(sys.argv)  # Create an instance of QtWidgets.QApplication
 if dark_theme:
