@@ -11,10 +11,10 @@ uiclass, baseclass = pg.Qt.loadUiType("scanning_magnetometer.ui")
 
 try:
     import qdarktheme
+
     dark_theme = True
 except Exception as error:
     dark_theme = False
-
 
 
 class MainUI(QtWidgets.QMainWindow):
@@ -25,17 +25,19 @@ class MainUI(QtWidgets.QMainWindow):
 
         self.stageController = stageControl()  # stage controller class instance
 
-        self.connectStageButton.clicked.connect(lambda: self.stageController.connect_stage(self.comPortBox.currentText()))
+        self.connectStageButton.clicked.connect(
+            lambda: self.stageController.connect_stage(self.comPortBox.currentText()))
         self.homeStageButton.clicked.connect(self.stageController.home_stage)
         self.setPositionButton.clicked.connect(lambda: self.stageController.set_stage_pos(self.xPosSpinBox.value(),
                                                                                           self.yPosSpinBox.value()))
-        self.setStageHeightButton.clicked.connect(lambda: self.stageController.set_stage_height(self.zPosSpinBox.value()))
+        self.setStageHeightButton.clicked.connect(
+            lambda: self.stageController.set_stage_height(self.zPosSpinBox.value()))
         self.getStagePositionButton.clicked.connect(self.stageController.get_stage_pos)
         self.actionChange_Max_Position_Values.triggered.connect(self.stageController.set_max_stage_position)
 
-
         self.takeFFTButton.clicked.connect(self.stageController.open_fft_graph)
-        self.takeODMRButton.clicked.connect(self.stageController.open_odmr_grah)
+        self.takeODMRButton.clicked.connect(self.stageController.open_odmr_graph)
+        self.startScanButton.clicked.connect(self.stageController.open_scan_window)
 
         # self.graphWidget.plot([1,2,3,4,5], [1,2,3,4,5]) #dummy data for now
 
@@ -80,7 +82,6 @@ class stageControl:
             error_dialog.showMessage(str(error))
         return response
 
-
     def connect_stage(self, com_port, baud_rate=115200):
         try:
             # connect to stage code here
@@ -91,7 +92,6 @@ class stageControl:
         except Exception as error:
             error_dialog = QtWidgets.QErrorMessage(window)
             error_dialog.showMessage(str(error))
-
 
     def home_stage(self):
         self.execute_gcode('G28')  # home gcode
@@ -124,8 +124,11 @@ class stageControl:
     def open_fft_graph(self):
         self.fft_graph_window = FFTGraphWindow()
 
-    def open_odmr_grah(self):
+    def open_odmr_graph(self):
         self.odmr_graph_window = ODMRGraphWindow()
+
+    def open_scan_window(self):
+        self.scan_window = scanningImageWindow()
 
     def show_error_message(self, text):
         error_dialog = QtWidgets.QErrorMessage(window)
@@ -152,6 +155,7 @@ class stage_options(QtWidgets.QWidget):
     def apply_jerk_changes(self):
         return
 
+
 class FFTGraphWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
@@ -160,15 +164,16 @@ class FFTGraphWindow(QtWidgets.QWidget):
         self.show()
         # self.graphWidget.plot([1, 2, 3, 4, 5], [1, 2, 3, 4, 5])
 
-
-        self.calcSensButton.clicked.connect(lambda: self.calc_sens(x,y, freq_start=self.minFreqSpinBox.value(),
+        self.calcSensButton.clicked.connect(lambda: self.calc_sens(x, y, freq_start=self.minFreqSpinBox.value(),
                                                                    freq_end=self.maxFreqSpinBox.value(),
                                                                    ignore_freqs=self.ignoreListFreqCheckBox.isChecked()))
 
-        self.addFreqButton.clicked.connect(lambda: self.add_ignore_freq(self.freqStartSpinBox.value(), self.freqEndSpinBox.value()))
+        self.addFreqButton.clicked.connect(
+            lambda: self.add_ignore_freq(self.freqStartSpinBox.value(), self.freqEndSpinBox.value()))
 
-        x,y = self.dummy_data("example_data\example_data_fft_dbu.csv", units="dBu", calib_const=0.8873) #plot dummy fft data
-        self.calc_sens(x,y, freq_start=self.minFreqSpinBox.value(), freq_end=self.maxFreqSpinBox.value(),
+        x, y = self.dummy_data("example_data\example_data_fft_dbu.csv", units="dBu",
+                               calib_const=0.8873)  # plot dummy fft data
+        self.calc_sens(x, y, freq_start=self.minFreqSpinBox.value(), freq_end=self.maxFreqSpinBox.value(),
                        ignore_freqs=self.ignoreListFreqCheckBox.isChecked())
         return
 
@@ -179,13 +184,13 @@ class FFTGraphWindow(QtWidgets.QWidget):
         self.ignoreFrequencyList.setItem(row_pos, 1, QtWidgets.QTableWidgetItem(str(freq_end)))
         return
 
-    def calc_sens(self, x, y, freq_start=10, freq_end=100, ignore_freqs = False):
+    def calc_sens(self, x, y, freq_start=10, freq_end=100, ignore_freqs=False):
         if ignore_freqs == True:
-            freq_start = freq_start/1e3  # convert khz to hz
+            freq_start = freq_start / 1e3  # convert khz to hz
             freq_end = freq_end / 1e3  # convert khz to hz
             ignore_freqs_range_idxs = []
 
-            #clip frequency data to the selected range
+            # clip frequency data to the selected range
             idx_min_start = np.abs(x - freq_start).argmin()  # find closest value idx of min freq
             idx_max_end = np.abs(x - freq_end).argmin()  # find closest value idx of max freq
 
@@ -195,15 +200,15 @@ class FFTGraphWindow(QtWidgets.QWidget):
             tail_end = np.arange(idx_max_end + 1, len(x), 1, dtype=int)
             for row in range(self.ignoreFrequencyList.rowCount()):
                 try:
-                    ignore_min_freq = (int(self.ignoreFrequencyList.item(row, 0).text()))/1e3
-                    ignore_max_freq = (int(self.ignoreFrequencyList.item(row, 1).text()))/1e3
+                    ignore_min_freq = (int(self.ignoreFrequencyList.item(row, 0).text())) / 1e3
+                    ignore_max_freq = (int(self.ignoreFrequencyList.item(row, 1).text())) / 1e3
                     idx_min = np.abs(x - ignore_min_freq).argmin()
                     idx_max = (np.abs(x - ignore_max_freq)).argmin()
                     idx_range = np.arange(idx_min, idx_max + 1, 1, dtype=int)
                     for i in range(len(idx_range)):
                         ignore_freqs_range_idxs.append(idx_range[i])
                 except Exception as error:
-                    #probably will fail if empty rows are left in the table, this just ignores them but will print error to console incase its another issue
+                    # probably will fail if empty rows are left in the table, this just ignores them but will print error to console incase its another issue
                     print(error, "This is probably fine if its a text error")
                     pass
             for i in range(len(tail_end)):
@@ -211,31 +216,31 @@ class FFTGraphWindow(QtWidgets.QWidget):
 
             mask = np.ones_like(x, dtype=bool)
             mask[ignore_freqs_range_idxs] = False
-            mean_sens = round(np.mean(y[mask]),4)
+            mean_sens = round(np.mean(y[mask]), 4)
 
             self.meanSensLabel.setText(str(mean_sens))
         else:
-            mean_sens = round(np.mean(y),4)
+            mean_sens = round(np.mean(y), 4)
             self.meanSensLabel.setText(str(mean_sens))
         # print(mean_sens) # mean sens value
 
-
     # self.dummy_data(x_values,y)  # plot dummy odmr data
-    def dummy_data(self, file_path, units = "nT", calib_const = 1, x_col = 0, y_col = 1):
+    def dummy_data(self, file_path, units="nT", calib_const=1, x_col=0, y_col=1):
         """plots dummy FFT data for demonstrating/debugging/feature testing"""
         arr = np.loadtxt(file_path, delimiter=',')
         x = arr[:, x_col]
         y = arr[:, y_col]
         if units == "dBu":
-            #converts dBu to nT/sqrt(Hz)
-            y = 0.775 * 10**(y/20)
-            y = y / (23e-6 * calib_const) #convert using calib_const (assumes units of V/MHz)
+            # converts dBu to nT/sqrt(Hz)
+            y = 0.775 * 10 ** (y / 20)
+            y = y / (23e-6 * calib_const)  # convert using calib_const (assumes units of V/MHz)
         self.odmr_plot = self.graphWidget.plot(x, y)
         self.graphWidget.setLogMode(True, True)
         return x, y
 
     def lorentzian_derivative(self, x, x0, gamma, A):
         return -2 * A * gamma ** 2 * (x - x0) / ((x - x0) ** 2 + gamma ** 2) ** 2
+
 
 class ODMRGraphWindow(QtWidgets.QWidget):
     def __init__(self):
@@ -248,8 +253,6 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         self.odmr_deriv_plot = None
         self.odmr_linear_region_plot = None
         self.linear_region_list = None
-
-
 
         self.odmrRegionFitBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y,
                                                                                   self.odmrRegionFitBox.value(),
@@ -272,9 +275,9 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                                                                                         peak_prom=self.peakPromSpinBox.value(),
                                                                                         ))
         self.smoothingCheckBox.stateChanged.connect(lambda: self.fit_linear_region(x_values, y,
-                                                                                        self.odmrRegionFitBox.value(),
-                                                                                        plot_derivative=self.showDerivativeCheckbox.isChecked(),
-                                                                                        denoise = self.smoothingCheckBox.isChecked(),
+                                                                                   self.odmrRegionFitBox.value(),
+                                                                                   plot_derivative=self.showDerivativeCheckbox.isChecked(),
+                                                                                   denoise=self.smoothingCheckBox.isChecked(),
                                                                                    window_length=self.smoothWindowBox.value(),
                                                                                    polyorder=self.polyorderSpinBox.value(),
                                                                                    peak_height=self.peakHeightSpinBox.value(),
@@ -283,7 +286,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                                                                                    ))
 
         self.polyorderSpinBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y,
-                                                                                   self.odmrRegionFitBox.value(),
+                                                                                  self.odmrRegionFitBox.value(),
                                                                                   plot_derivative=self.showDerivativeCheckbox.isChecked(),
                                                                                   denoise=self.smoothingCheckBox.isChecked(),
                                                                                   window_length=self.smoothWindowBox.value(),
@@ -293,24 +296,15 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                                                                                   peak_prom=self.peakPromSpinBox.value(),
                                                                                   ))
 
-        self.smoothWindowBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y, self.odmrRegionFitBox.value(),
+        self.smoothWindowBox.valueChanged.connect(
+            lambda: self.fit_linear_region(x_values, y, self.odmrRegionFitBox.value(),
                                            plot_derivative=self.showDerivativeCheckbox.isChecked(),
                                            denoise=self.smoothingCheckBox.isChecked(),
                                            window_length=self.smoothWindowBox.value(),
                                            polyorder=self.polyorderSpinBox.value(),
-                                             peak_height=self.peakHeightSpinBox.value(),
-                                             peak_distance=self.peakDistanceSpinBox.value(),
-                                             peak_prom=self.peakPromSpinBox.value(),
-                                           ))
-
-        self.peakHeightSpinBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y, self.odmrRegionFitBox.value(),
-                                           plot_derivative=self.showDerivativeCheckbox.isChecked(),
-                                           denoise=self.smoothingCheckBox.isChecked(),
-                                           window_length=self.smoothWindowBox.value(),
-                                           polyorder=self.polyorderSpinBox.value(),
-                                            peak_height=self.peakHeightSpinBox.value(),
-                                            peak_distance=self.peakDistanceSpinBox.value(),
-                                            peak_prom=self.peakPromSpinBox.value(),
+                                           peak_height=self.peakHeightSpinBox.value(),
+                                           peak_distance=self.peakDistanceSpinBox.value(),
+                                           peak_prom=self.peakPromSpinBox.value(),
                                            ))
 
         self.peakHeightSpinBox.valueChanged.connect(
@@ -324,10 +318,20 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                                            peak_prom=self.peakPromSpinBox.value(),
                                            ))
 
+        self.peakHeightSpinBox.valueChanged.connect(
+            lambda: self.fit_linear_region(x_values, y, self.odmrRegionFitBox.value(),
+                                           plot_derivative=self.showDerivativeCheckbox.isChecked(),
+                                           denoise=self.smoothingCheckBox.isChecked(),
+                                           window_length=self.smoothWindowBox.value(),
+                                           polyorder=self.polyorderSpinBox.value(),
+                                           peak_height=self.peakHeightSpinBox.value(),
+                                           peak_distance=self.peakDistanceSpinBox.value(),
+                                           peak_prom=self.peakPromSpinBox.value(),
+                                           ))
 
         self.setODMRButton.clicked.connect(self.send_to_scan_table)
 
-        x_values = np.linspace(0, 10, 1000) # dummy x values
+        x_values = np.linspace(0, 10, 1000)  # dummy x values
         y = (self.lorentzian_derivative(x_values, 2, 0.5, 1) + self.lorentzian_derivative(x_values, 4, 0.5, 1) +
              self.lorentzian_derivative(x_values, 6, 0.5, 1) + self.lorentzian_derivative(x_values, 8, 0.5, 1))
         # dummy y data
@@ -338,19 +342,19 @@ class ODMRGraphWindow(QtWidgets.QWidget):
 
         self.fit_linear_region(x_values, y)  # find linear region of data for fitting
 
-    def dummy_data(self,x,y):
-        pen = pg.mkPen(style = QtCore.Qt.PenStyle.DashLine)
-        self.odmr_plot = self.graphWidget.plot(x, y,pen=pen)
+    def dummy_data(self, x, y):
+        pen = pg.mkPen(style=QtCore.Qt.PenStyle.DashLine)
+        self.odmr_plot = self.graphWidget.plot(x, y, pen=pen)
         return
 
     def gaussian_derivative(self, x, mu, sigma):
-        return -2 * (x - mu) * np.exp(-((x - mu) / sigma)**2) / (np.sqrt(np.pi) * sigma)
+        return -2 * (x - mu) * np.exp(-((x - mu) / sigma) ** 2) / (np.sqrt(np.pi) * sigma)
 
     def lorentzian_derivative(self, x, x0, gamma, A):
         return -2 * A * gamma ** 2 * (x - x0) / ((x - x0) ** 2 + gamma ** 2) ** 2
 
-    def fit_linear_region(self, x, y, linear_region_width=50, window_length=50, polyorder=3, peak_height = -5,
-                          peak_distance = 100, peak_prom = 5, plot_derivative=False, denoise=False):
+    def fit_linear_region(self, x, y, linear_region_width=50, window_length=50, polyorder=3, peak_height=-5,
+                          peak_distance=100, peak_prom=5, plot_derivative=False, denoise=False):
         try:
             window_length = int(window_length)
             polyorder = int(polyorder)
@@ -403,7 +407,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                 self.linearRegionTable.setItem(i, 1, QtWidgets.QTableWidgetItem(str(round(slope, 3))))
                 self.linearRegionTable.setCellWidget(i, 2, QtWidgets.QCheckBox())
 
-            #if plot deriviate is true, plot it else, if false, clear deriv plot.
+            # if plot deriviate is true, plot it else, if false, clear deriv plot.
             if plot_derivative:
                 try:
                     self.odmr_deriv_plot.clear()
@@ -417,9 +421,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                 except:
                     pass
 
-
             # self.odmrGradientLabel.setText(str(round(slope,3)))
-
 
             return
 
@@ -440,6 +442,43 @@ class ODMRGraphWindow(QtWidgets.QWidget):
             window.scanODMRPropertiesTable.setItem(row, 0, QtWidgets.QTableWidgetItem(str(round(freqs[row], 3))))
             window.scanODMRPropertiesTable.setItem(row, 1, QtWidgets.QTableWidgetItem(str(round(grads[row], 3))))
 
+        return
+
+
+class scanningImageWindow(QtWidgets.QWidget):
+    def __init__(self):
+        super().__init__()
+        super(scanningImageWindow, self).__init__()  # Call the inherited classes __init__ method
+        uic.loadUi('scanningWindow.ui', self)  # Load the .ui file
+        self.show()
+        self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
+
+        #this is just for testing purposes, do not use when plotting real data
+        self.dummy_data = np.loadtxt("example_data\example_2d_scan_data.csv", ndmin=2, delimiter=",")
+        self.data = np.zeros([np.size(self.dummy_data, 0), np.size(self.dummy_data, 1)])
+        self.i = 0
+        self.j = 0
+
+        # self.dummy_data()
+        self.timer = QtCore.QTimer(self)  # time to trigger replot of image for testing purposes,
+        self.timer.setInterval(10)
+        self.timer.timeout.connect(lambda: self.update_plot(self.data))
+        self.timer.start()
+        #  in real life the replot will be triggered when the stage moves
+        #  and takes a data point
+
+    def update_plot(self, data):
+        self.data[self.i, self.j] = self.dummy_data[self.i, self.j]
+        self.imageWidget.setImage(data)
+
+        #  this is just to cylce through dummy data, not for real data use (not useful i think?)
+        if self.i == np.size(self.dummy_data, 0) - 1 and self.j == np.size(self.dummy_data, 1) - 1:
+            return
+        if self.i == np.size(self.dummy_data, 0) - 1:
+            self.i = 0
+            self.j += 1
+        else:
+            self.i += 1
         return
 
 
