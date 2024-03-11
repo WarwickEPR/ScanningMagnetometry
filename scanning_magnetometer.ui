@@ -29,7 +29,7 @@
        <enum>QTabWidget::Rounded</enum>
       </property>
       <property name="currentIndex">
-       <number>1</number>
+       <number>2</number>
       </property>
       <widget class="QWidget" name="stage_control">
        <attribute name="title">
@@ -986,6 +986,9 @@
            <height>23</height>
           </rect>
          </property>
+         <property name="maximum">
+          <number>10000</number>
+         </property>
          <property name="value">
           <number>0</number>
          </property>
@@ -1415,11 +1418,6 @@
          </property>
         </widget>
        </widget>
-      </widget>
-      <widget class="QWidget" name="scanTab">
-       <attribute name="title">
-        <string>Scan</string>
-       </attribute>
       </widget>
      </widget>
     </item>
