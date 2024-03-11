@@ -159,20 +159,64 @@ class FFTGraphWindow(QtWidgets.QWidget):
         self.show()
         # self.graphWidget.plot([1, 2, 3, 4, 5], [1, 2, 3, 4, 5])
 
+
+        self.calcSensButton.clicked.connect(lambda: self.calc_sens(x,y, freq_start=self.minFreqSpinBox.value(),
+                                                                   freq_end=self.maxFreqSpinBox.value(),
+                                                                   ignore_freqs=self.ignoreListFreqCheckBox.isChecked()))
+
+        self.addFreqButton.clicked.connect(lambda: self.add_ignore_freq(self.freqStartSpinBox.value(), self.freqEndSpinBox.value()))
+
         x,y = self.dummy_data() #plot dummy fft data
-        self.calc_sens(x,y)
+        self.calc_sens(x,y, freq_start=self.minFreqSpinBox.value(), freq_end=self.maxFreqSpinBox.value(),
+                       ignore_freqs=self.ignoreListFreqCheckBox.isChecked())
         return
 
-    def calc_sens(self, x, y, freq_start=10, freq_end=100):
-        freq_start = freq_start/1e3  # convert khz to hz
-        freq_end = freq_end/1e3  # convert khz to hz
-        array = np.asarray(x)  # make it an array if its not
-        idx_min = (np.abs(array - freq_start)).argmin()  # find closest value idx of min freq
-        idx_max = (np.abs(array - freq_end)).argmin()  # find closest value idx of max freq
-        x_range = x[idx_min:idx_max]  # set x range to be between min and max freq idx
-        y_range = y[idx_min:idx_max]  # set y range to be between min and max freq idx
+    def add_ignore_freq(self, freq_start, freq_end):
+        row_pos = self.ignoreFrequencyList.rowCount()
+        self.ignoreFrequencyList.insertRow(row_pos)
+        self.ignoreFrequencyList.setItem(row_pos, 0, QtWidgets.QTableWidgetItem(str(freq_start)))
+        self.ignoreFrequencyList.setItem(row_pos, 1, QtWidgets.QTableWidgetItem(str(freq_end)))
+        return
 
-        print(np.mean(y_range))  # mean sens value
+    def calc_sens(self, x, y, freq_start=10, freq_end=100, ignore_freqs = False):
+        if ignore_freqs == True:
+            freq_start = freq_start/1e3  # convert khz to hz
+            freq_end = freq_end / 1e3  # convert khz to hz
+            ignore_freqs_range_idxs = []
+
+            #clip frequency data to the selected range
+            idx_min = np.abs(x - freq_start).argmin()  # find closest value idx of min freq
+            idx_max = np.abs(x - freq_end).argmin()  # find closest value idx of max freq
+
+            top_end = np.arange(0, idx_min + 1, 1, dtype=int)
+            for i in range(len(top_end)):
+                ignore_freqs_range_idxs.append(top_end[i])
+            tail_end = np.arange(idx_max + 1, len(x), 1, dtype=int)
+            for row in range(self.ignoreFrequencyList.rowCount()):
+                try:
+                    ignore_min_freq = (int(self.ignoreFrequencyList.item(row, 0).text()))/1e3
+                    ignore_max_freq = (int(self.ignoreFrequencyList.item(row, 1).text()))/1e3
+                    idx_min = np.abs(x - ignore_min_freq).argmin()
+                    idx_max = (np.abs(x - ignore_max_freq)).argmin()
+                    idx_range = np.arange(idx_min, idx_max + 1, 1, dtype=int)
+                    for i in range(len(idx_range)):
+                        ignore_freqs_range_idxs.append(idx_range[i])
+                except Exception as error:
+                    #probably will fail if empty rows are left in the table, this just ignores them but will print error to console incase its another issue
+                    print(error, "This is probably fine if its a text error")
+                    pass
+            for i in range(len(tail_end)):
+                ignore_freqs_range_idxs.append(tail_end[i])
+
+            mask = np.ones_like(x, dtype=bool)
+            mask[ignore_freqs_range_idxs] = False
+            mean_sens = round(np.mean(y[mask]),4)
+
+            self.meanSensLabel.setText(str(mean_sens))
+        else:
+            mean_sens = round(np.mean(y),4)
+            self.meanSensLabel.setText(str(mean_sens))
+        # print(mean_sens) # mean sens value
 
 
     # self.dummy_data(x_values,y)  # plot dummy odmr data
