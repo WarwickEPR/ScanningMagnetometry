@@ -259,7 +259,7 @@
      <item>
       <widget class="QLabel" name="label">
        <property name="text">
-        <string>Mean Sens (V/MHz): </string>
+        <string>Mean Sens (nT/ √Hz): </string>
        </property>
       </widget>
      </item>
