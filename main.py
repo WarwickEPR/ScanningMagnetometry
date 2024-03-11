@@ -57,6 +57,7 @@ class MainUI(QtWidgets.QMainWindow):
         error_dialog.showMessage(text)
         return
 
+
 class stageControl:
     def __init__(self):
         super(stageControl, self).__init__()
@@ -248,6 +249,8 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         self.odmr_linear_region_plot = None
         self.linear_region_list = None
 
+
+
         self.odmrRegionFitBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y,
                                                                                   self.odmrRegionFitBox.value(),
                                                                                   plot_derivative=self.showDerivativeCheckbox.isChecked(),
@@ -322,6 +325,8 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                                            ))
 
 
+        self.setODMRButton.clicked.connect(self.send_to_scan_table)
+
         x_values = np.linspace(0, 10, 1000) # dummy x values
         y = (self.lorentzian_derivative(x_values, 2, 0.5, 1) + self.lorentzian_derivative(x_values, 4, 0.5, 1) +
              self.lorentzian_derivative(x_values, 6, 0.5, 1) + self.lorentzian_derivative(x_values, 8, 0.5, 1))
@@ -368,6 +373,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
             except:
                 pass
             self.linear_region_list = []
+            self.linear_region_list_checkboxes = []
             self.linearRegionTable.setRowCount(0)
             for i in range(len(peaks)):
                 # Adjust linear region parameter to control the width of the linear region
@@ -395,6 +401,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                 self.linearRegionTable.insertRow(i)
                 self.linearRegionTable.setItem(i, 0, QtWidgets.QTableWidgetItem(str(round(x_linear[i], 3))))
                 self.linearRegionTable.setItem(i, 1, QtWidgets.QTableWidgetItem(str(round(slope, 3))))
+                self.linearRegionTable.setCellWidget(i, 2, QtWidgets.QCheckBox())
 
             #if plot deriviate is true, plot it else, if false, clear deriv plot.
             if plot_derivative:
@@ -418,6 +425,23 @@ class ODMRGraphWindow(QtWidgets.QWidget):
 
         except Exception as error:
             print(error)
+
+    def send_to_scan_table(self):
+        self.table = self.linearRegionTable
+        freqs = []
+        grads = []
+        for row in range(self.linearRegionTable.rowCount()):
+            if self.linearRegionTable.cellWidget(row, 2).isChecked():
+                freqs.append(float(self.linearRegionTable.item(row, 0).text()))
+                grads.append(float(self.linearRegionTable.item(row, 1).text()))
+        window.scanODMRPropertiesTable.setRowCount(0)
+        for row in range(len(freqs)):
+            window.scanODMRPropertiesTable.insertRow(row)
+            window.scanODMRPropertiesTable.setItem(row, 0, QtWidgets.QTableWidgetItem(str(round(freqs[row], 3))))
+            window.scanODMRPropertiesTable.setItem(row, 1, QtWidgets.QTableWidgetItem(str(round(grads[row], 3))))
+
+        return
+
 
 app = QtWidgets.QApplication(sys.argv)  # Create an instance of QtWidgets.QApplication
 if dark_theme:

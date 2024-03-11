@@ -240,14 +240,14 @@
         </layout>
        </item>
        <item>
-        <widget class="QPushButton" name="fitODMRButton">
+        <widget class="QPushButton" name="setODMRButton">
          <property name="font">
           <font>
            <bold>true</bold>
           </font>
          </property>
          <property name="text">
-          <string>Fit ODMR</string>
+          <string>Set ODMR Frequencies and Gradients</string>
          </property>
         </widget>
        </item>
@@ -263,6 +263,11 @@
        <column>
         <property name="text">
          <string>Gradient</string>
+        </property>
+       </column>
+       <column>
+        <property name="text">
+         <string>Select</string>
         </property>
        </column>
       </widget>
