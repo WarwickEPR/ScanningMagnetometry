@@ -166,7 +166,7 @@ class FFTGraphWindow(QtWidgets.QWidget):
 
         self.addFreqButton.clicked.connect(lambda: self.add_ignore_freq(self.freqStartSpinBox.value(), self.freqEndSpinBox.value()))
 
-        x,y = self.dummy_data() #plot dummy fft data
+        x,y = self.dummy_data("example_data\example_data_fft_dbu.csv", units="dBu", calib_const=0.8873) #plot dummy fft data
         self.calc_sens(x,y, freq_start=self.minFreqSpinBox.value(), freq_end=self.maxFreqSpinBox.value(),
                        ignore_freqs=self.ignoreListFreqCheckBox.isChecked())
         return
@@ -185,13 +185,13 @@ class FFTGraphWindow(QtWidgets.QWidget):
             ignore_freqs_range_idxs = []
 
             #clip frequency data to the selected range
-            idx_min = np.abs(x - freq_start).argmin()  # find closest value idx of min freq
-            idx_max = np.abs(x - freq_end).argmin()  # find closest value idx of max freq
+            idx_min_start = np.abs(x - freq_start).argmin()  # find closest value idx of min freq
+            idx_max_end = np.abs(x - freq_end).argmin()  # find closest value idx of max freq
 
-            top_end = np.arange(0, idx_min + 1, 1, dtype=int)
+            top_end = np.arange(0, idx_min_start + 1, 1, dtype=int)
             for i in range(len(top_end)):
                 ignore_freqs_range_idxs.append(top_end[i])
-            tail_end = np.arange(idx_max + 1, len(x), 1, dtype=int)
+            tail_end = np.arange(idx_max_end + 1, len(x), 1, dtype=int)
             for row in range(self.ignoreFrequencyList.rowCount()):
                 try:
                     ignore_min_freq = (int(self.ignoreFrequencyList.item(row, 0).text()))/1e3
@@ -220,14 +220,18 @@ class FFTGraphWindow(QtWidgets.QWidget):
 
 
     # self.dummy_data(x_values,y)  # plot dummy odmr data
-    def dummy_data(self):
+    def dummy_data(self, file_path, units = "nT", calib_const = 1, x_col = 0, y_col = 1):
         """plots dummy FFT data for demonstrating/debugging/feature testing"""
-        arr = np.loadtxt("example_data\example_data_fft.csv", delimiter=',')
-        x = arr[:, 0]
-        y = arr[:, 1]
+        arr = np.loadtxt(file_path, delimiter=',')
+        x = arr[:, x_col]
+        y = arr[:, y_col]
+        if units == "dBu":
+            #converts dBu to nT/sqrt(Hz)
+            y = 0.775 * 10**(y/20)
+            y = y / (23e-6 * calib_const) #convert using calib_const (assumes units of V/MHz)
         self.odmr_plot = self.graphWidget.plot(x, y)
         self.graphWidget.setLogMode(True, True)
-        return x,y
+        return x, y
 
     def lorentzian_derivative(self, x, x0, gamma, A):
         return -2 * A * gamma ** 2 * (x - x0) / ((x - x0) ** 2 + gamma ** 2) ** 2
