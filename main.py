@@ -269,14 +269,15 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         #configure two y axis plot
 
         self.p1 = self.graphWidget.plotItem
-        self.p1.setLabels(left='axis 1')
+        self.p1.setLabels(left='Voltage (V)')
+        self.p1.setLabels(bottom='Frequency (GHz)')
 
         self.p2 = pg.ViewBox()
         self.p1.showAxis('right')
         self.p1.scene().addItem(self.p2)
         self.p1.getAxis('right').linkToView(self.p2)
         self.p2.setXLink(self.p1)
-        self.p1.getAxis('right').setLabel('axis2', color='#0000ff')
+        self.p1.getAxis('right').setLabel('dV/df (V/MHz)', color='#0000ff')
 
         self.p1.vb.sigResized.connect(self.updateViews)
 
@@ -417,8 +418,8 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                 datax.append(self.x[i])
                 datay.append(self.y[i])
                 # print('hello')
-                time.sleep(0.1)
-                progress_callback.emit((i/len(self.x))*100)
+                # time.sleep(0.1)
+                # progress_callback.emit((i/len(self.x))*100)
                 if self.worker_running == False:
                     break
             self.worker_running = False
@@ -464,12 +465,6 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         self.odmr_plot = self.graphWidget.plot(x, y, pen=pen)
         self.updateViews()
         return
-
-    def gaussian_derivative(self, x, mu, sigma):
-        return -2 * (x - mu) * np.exp(-((x - mu) / sigma) ** 2) / (np.sqrt(np.pi) * sigma)
-
-    def lorentzian_derivative(self, x, x0, gamma, A):
-        return -2 * A * gamma ** 2 * (x - x0) / ((x - x0) ** 2 + gamma ** 2) ** 2
 
     def fit_linear_region(self, x, y, linear_region_width=50, window_length=50, polyorder=3, peak_height=-5,
                           peak_distance=100, peak_prom=5, plot_derivative=False, denoise=False):
