@@ -1,68 +1,146 @@
-# -*- coding: utf-8 -*-
-"""
-Demonstrates a way to put multiple axes around a single plot.
+from PyQt6.QtGui import *
+from PyQt6.QtWidgets import *
+from PyQt6.QtCore import *
 
-(This will eventually become a built-in feature of PlotItem)
-
-"""
-# import initExample  ## Add path to library (just for examples; you do not need this)
-
-import pyqtgraph as pg
-from pyqtgraph.Qt import QtCore, QtWidgets
-import numpy as np
-
-pg.mkQApp()
-
-pw = pg.PlotWidget()
-pw.show()
-pw.setWindowTitle('pyqtgraph example: MultiplePlotAxes')
-p1 = pw.plotItem
-p1.setLabels(left='axis 1')
-
-## create a new ViewBox, link the right axis to its coordinate system
-p2 = pg.ViewBox()
-p1.showAxis('right')
-p1.scene().addItem(p2)
-p1.getAxis('right').linkToView(p2)
-p2.setXLink(p1)
-p1.getAxis('right').setLabel('axis2', color='#0000ff')
-
-## create third ViewBox.
-## this time we need to create a new axis as well.
-p3 = pg.ViewBox()
-ax3 = pg.AxisItem('right')
-p1.layout.addItem(ax3, 2, 3)
-p1.scene().addItem(p3)
-ax3.linkToView(p3)
-p3.setXLink(p1)
-ax3.setZValue(-10000)
-ax3.setLabel('axis 3', color='#ff0000')
+import time
+import traceback, sys
 
 
-## Handle view resizing
-def updateViews():
-    ## view has resized; update auxiliary views to match
-    global p1, p2, p3
-    p2.setGeometry(p1.vb.sceneBoundingRect())
-    p3.setGeometry(p1.vb.sceneBoundingRect())
+class WorkerSignals(QObject):
+    '''
+    Defines the signals available from a running worker thread.
 
-    ## need to re-update linked axes since this was called
-    ## incorrectly while views had different shapes.
-    ## (probably this should be handled in ViewBox.resizeEvent)
-    p2.linkedViewChanged(p1.vb, p2.XAxis)
-    p3.linkedViewChanged(p1.vb, p3.XAxis)
+    Supported signals are:
+
+    finished
+        No data
+
+    error
+        tuple (exctype, value, traceback.format_exc() )
+
+    result
+        object data returned from processing, anything
+
+    progress
+        int indicating % progress
+
+    '''
+    finished = pyqtSignal()
+    error = pyqtSignal(tuple)
+    result = pyqtSignal(object)
+    progress = pyqtSignal(int)
 
 
-updateViews()
-p1.vb.sigResized.connect(updateViews)
+class Worker(QRunnable):
+    '''
+    Worker thread
 
-p1.plot([1, 2, 4, 8, 16, 32])
-p2.addItem(pg.PlotCurveItem([10, 20, 40, 80, 40, 20], pen='b'))
-p3.addItem(pg.PlotCurveItem([3200, 1600, 800, 400, 200, 100], pen='r'))
+    Inherits from QRunnable to handler worker thread setup, signals and wrap-up.
 
-## Start Qt event loop unless running in interactive mode or using pyside.
-if __name__ == '__main__':
-    import sys
+    :param callback: The function callback to run on this worker thread. Supplied args and
+                     kwargs will be passed through to the runner.
+    :type callback: function
+    :param args: Arguments to pass to the callback function
+    :param kwargs: Keywords to pass to the callback function
 
-    if (sys.flags.interactive != 1) or not hasattr(QtCore, 'PYQT_VERSION'):
-        QtWidgets.QApplication.instance().exec()
+    '''
+
+    def __init__(self, fn, *args, **kwargs):
+        super(Worker, self).__init__()
+
+        # Store constructor arguments (re-used for processing)
+        self.fn = fn
+        self.args = args
+        self.kwargs = kwargs
+        self.signals = WorkerSignals()
+
+        # Add the callback to our kwargs
+        self.kwargs['progress_callback'] = self.signals.progress
+
+    @pyqtSlot()
+    def run(self):
+        '''
+        Initialise the runner function with passed args, kwargs.
+        '''
+
+        # Retrieve args/kwargs here; and fire processing using them
+        try:
+            result = self.fn(*self.args, **self.kwargs)
+        except:
+            traceback.print_exc()
+            exctype, value = sys.exc_info()[:2]
+            self.signals.error.emit((exctype, value, traceback.format_exc()))
+        else:
+            self.signals.result.emit(result)  # Return the result of the processing
+        finally:
+            self.signals.finished.emit()  # Done
+
+
+
+class MainWindow(QMainWindow):
+
+
+    def __init__(self, *args, **kwargs):
+        super(MainWindow, self).__init__(*args, **kwargs)
+
+        self.counter = 0
+
+        layout = QVBoxLayout()
+
+        self.l = QLabel("Start")
+        b = QPushButton("DANGER!")
+        b.pressed.connect(self.oh_no)
+
+        layout.addWidget(self.l)
+        layout.addWidget(b)
+
+        w = QWidget()
+        w.setLayout(layout)
+
+        self.setCentralWidget(w)
+
+        self.show()
+
+        self.threadpool = QThreadPool()
+        print("Multithreading with maximum %d threads" % self.threadpool.maxThreadCount())
+
+        self.timer = QTimer()
+        self.timer.setInterval(1000)
+        self.timer.timeout.connect(self.recurring_timer)
+        self.timer.start()
+
+    def progress_fn(self, n):
+        print("%d%% done" % n)
+
+    def execute_this_fn(self, progress_callback):
+        for n in range(0, 5):
+            time.sleep(1)
+            progress_callback.emit(n*100/4)
+
+        return "Done."
+
+    def print_output(self, s):
+        print(s)
+
+    def thread_complete(self):
+        print("THREAD COMPLETE!")
+
+    def oh_no(self):
+        # Pass the function to execute
+        worker = Worker(self.execute_this_fn) # Any other args, kwargs are passed to the run function
+        worker.signals.result.connect(self.print_output)
+        worker.signals.finished.connect(self.thread_complete)
+        worker.signals.progress.connect(self.progress_fn)
+
+        # Execute
+        self.threadpool.start(worker)
+
+
+    def recurring_timer(self):
+        self.counter +=1
+        self.l.setText("Counter: %d" % self.counter)
+
+
+app = QApplication([])
+window = MainWindow()
+app.exec()

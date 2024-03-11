@@ -1,3 +1,4 @@
+import scipy.signal
 from PyQt6 import QtCore, QtWidgets, uic, QtGui
 import pyqtgraph as pg
 import sys
@@ -131,6 +132,7 @@ class stageControl:
         self.fft_graph_window = FFTGraphWindow()
 
     def open_odmr_graph(self):
+        window.takeODMRButton.setEnabled(False)
         self.odmr_graph_window = ODMRGraphWindow()
 
     def open_scan_window(self):
@@ -258,9 +260,8 @@ class FFTGraphWindow(QtWidgets.QWidget):
 
 
 class ODMRGraphWindow(QtWidgets.QWidget):
-    def __init__(self):
-        super().__init__()
-        super(ODMRGraphWindow, self).__init__()  # Call the inherited classes __init__ method
+    def __init__(self, *args, **kwargs):
+        super(ODMRGraphWindow, self).__init__(*args, **kwargs)  # Call the inherited classes __init__ method
         uic.loadUi('ODMRGraphWindow.ui', self)  # Load the .ui file
         self.show()
 
@@ -285,8 +286,10 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         self.linear_region_list = None
         self.MainWindow = window
         self.worker_running = False
+        self.x = None
+        self.y = None
 
-        self.odmrRegionFitBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y,
+        self.odmrRegionFitBox.valueChanged.connect(lambda: self.fit_linear_region(self.x, self.y,
                                                                                   self.odmrRegionFitBox.value(),
                                                                                   plot_derivative=self.showDerivativeCheckbox.isChecked(),
                                                                                   denoise=self.smoothingCheckBox.isChecked(),
@@ -296,7 +299,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                                                                                   peak_distance=self.peakDistanceSpinBox.value(),
                                                                                   peak_prom=self.peakPromSpinBox.value(),
                                                                                   ))
-        self.showDerivativeCheckbox.stateChanged.connect(lambda: self.fit_linear_region(x_values, y,
+        self.showDerivativeCheckbox.stateChanged.connect(lambda: self.fit_linear_region(self.x, self.y,
                                                                                         self.odmrRegionFitBox.value(),
                                                                                         plot_derivative=self.showDerivativeCheckbox.isChecked(),
                                                                                         denoise=self.smoothingCheckBox.isChecked(),
@@ -306,7 +309,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                                                                                         peak_distance=self.peakDistanceSpinBox.value(),
                                                                                         peak_prom=self.peakPromSpinBox.value(),
                                                                                         ))
-        self.smoothingCheckBox.stateChanged.connect(lambda: self.fit_linear_region(x_values, y,
+        self.smoothingCheckBox.stateChanged.connect(lambda: self.fit_linear_region(self.x, self.y,
                                                                                    self.odmrRegionFitBox.value(),
                                                                                    plot_derivative=self.showDerivativeCheckbox.isChecked(),
                                                                                    denoise=self.smoothingCheckBox.isChecked(),
@@ -317,7 +320,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                                                                                    peak_prom=self.peakPromSpinBox.value(),
                                                                                    ))
 
-        self.polyorderSpinBox.valueChanged.connect(lambda: self.fit_linear_region(x_values, y,
+        self.polyorderSpinBox.valueChanged.connect(lambda: self.fit_linear_region(self.x, self.y,
                                                                                   self.odmrRegionFitBox.value(),
                                                                                   plot_derivative=self.showDerivativeCheckbox.isChecked(),
                                                                                   denoise=self.smoothingCheckBox.isChecked(),
@@ -329,7 +332,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                                                                                   ))
 
         self.smoothWindowBox.valueChanged.connect(
-            lambda: self.fit_linear_region(x_values, y, self.odmrRegionFitBox.value(),
+            lambda: self.fit_linear_region(self.x, self.y, self.odmrRegionFitBox.value(),
                                            plot_derivative=self.showDerivativeCheckbox.isChecked(),
                                            denoise=self.smoothingCheckBox.isChecked(),
                                            window_length=self.smoothWindowBox.value(),
@@ -340,7 +343,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                                            ))
 
         self.peakHeightSpinBox.valueChanged.connect(
-            lambda: self.fit_linear_region(x_values, y, self.odmrRegionFitBox.value(),
+            lambda: self.fit_linear_region(self.x, self.y, self.odmrRegionFitBox.value(),
                                            plot_derivative=self.showDerivativeCheckbox.isChecked(),
                                            denoise=self.smoothingCheckBox.isChecked(),
                                            window_length=self.smoothWindowBox.value(),
@@ -351,7 +354,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                                            ))
 
         self.peakHeightSpinBox.valueChanged.connect(
-            lambda: self.fit_linear_region(x_values, y, self.odmrRegionFitBox.value(),
+            lambda: self.fit_linear_region(self.x, self.y, self.odmrRegionFitBox.value(),
                                            plot_derivative=self.showDerivativeCheckbox.isChecked(),
                                            denoise=self.smoothingCheckBox.isChecked(),
                                            window_length=self.smoothWindowBox.value(),
@@ -362,10 +365,11 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                                            ))
 
         self.setODMRButton.clicked.connect(self.send_to_scan_table)
+        self.stopSweepButton.clicked.connect(self.stop_odmr_sweep)
 
-        data = np.loadtxt("example_data\example_odmr_data.csv", delimiter=",")
-        x_values = data[:, 0]
-        y = data[:, 1]
+        # data = np.loadtxt("example_data\example_odmr_data.csv", delimiter=",")
+        # x_values = data[:, 0]
+        # y = data[:, 1]
         # x_values = np.linspace(0, 10, 1000)  # dummy x values
         # y = (self.lorentzian_derivative(x_values, 2, 0.5, 1) + self.lorentzian_derivative(x_values, 4, 0.5, 1) +
         #      self.lorentzian_derivative(x_values, 6, 0.5, 1) + self.lorentzian_derivative(x_values, 8, 0.5, 1))
@@ -375,9 +379,9 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         # y += noise  # add noise
         # self.dummy_data(x_values,y)  # plot dummy odmr data
 
-        self.fit_linear_region(x_values, y)  # find linear region of data for fitting
+        # self.fit_linear_region(x_values, y)  # find linear region of data for fitting
 
-        # self.thing_happend()
+        self.thing_happend()
 
     def thing_happend(self):
         """
@@ -392,37 +396,55 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         self.worker.signals.results.connect(self.print_this)
 
 
+        self.worker.signals.progress.connect(self.progress_fn)
+
+
         window.threadpool.start(self.worker)
 
-    def execute_this_function(self):
+    def execute_this_function(self, progress_callback):
         """this function then theoretically will trigger the LIA to start data collection when the MW sweep is started
         then once the sweep is stopped, the trigger will stop LIA aquisition and then this function collects the data and
         passes the data back to be plotted using signals and slots...haven't worked that out yet ._."""
 
         self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
-        x = np.linspace(0, 100, 1000)
-        y = np.sin(x)
-        data = []
-
+        data = np.loadtxt("example_data\example_odmr_data.csv", delimiter=",")
+        self.x = data[:, 0]
+        self.y = data[:, 1]
+        datax = []
+        datay = []
         while self.worker_running:
-            for i in range(len(x)):
-                data.append(y[i])
-            time.sleep(5)
+            for i in range(len(self.x)):
+                datax.append(self.x[i])
+                datay.append(self.y[i])
+                # print('hello')
+                time.sleep(0.1)
+                progress_callback.emit((i/len(self.x))*100)
+                if self.worker_running == False:
+                    break
             self.worker_running = False
-        return x, data
+        return datax, datay
 
+    def progress_fn(self, perc_comp):
+        "update progress bar of odmr sweep"
+        window.ODMRProgressBar.setValue(int(perc_comp*2))
+        window.ODMRProgressBar.setFormat("%.02f %%" % perc_comp)
+        window.ODMRProgressBar.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        # self.odmr_plot = self.graphWidget.plot(x, y)
 
     def print_this(self, x, y):
         """this then prints the result emitted from the results signal, that is returned by the function 
         'execute_this_function'"""
+        self.worker_running = False
         self.dummy_data(x, y)
+        window.takeODMRButton.setEnabled(True)
         
     def closeEvent(self, event):
         """this function executes when the ODMR graph window closes, used to stop thread but can be used for anything
         else, such as printing or saving data, clearing graphs/memory etc."""
         self.worker_running = False
-        return
 
+    def stop_odmr_sweep(self):
+        self.worker_running = False
     def updateViews(self):
         ## view has resized; update auxiliary views to match
         self.p2.setGeometry(self.p1.vb.sceneBoundingRect())
@@ -591,6 +613,8 @@ class Worker(QtCore.QRunnable):
         self.kwargs = kwargs
         self.signals = WorkerSignals()
 
+        #add callback to kwargs
+        self.kwargs['progress_callback'] = self.signals.progress
     @QtCore.pyqtSlot()
     def run(self):
         try:
@@ -608,6 +632,7 @@ class WorkerSignals(QtCore.QObject):
     finished = QtCore.pyqtSignal()
     error = QtCore.pyqtSignal(tuple)
     results = QtCore.pyqtSignal(object, object)
+    progress = QtCore.pyqtSignal(object)
 
 app = QtWidgets.QApplication(sys.argv)  # Create an instance of QtWidgets.QApplication
 if dark_theme:

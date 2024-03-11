@@ -986,6 +986,9 @@
            <height>23</height>
           </rect>
          </property>
+         <property name="maximum">
+          <number>10000</number>
+         </property>
          <property name="value">
           <number>0</number>
          </property>
