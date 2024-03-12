@@ -7,6 +7,7 @@ import serial.tools.list_ports
 import numpy as np
 import time
 import traceback
+import pyvisa
 from sklearn.linear_model import LinearRegression
 from scipy.signal import savgol_filter, find_peaks
 
@@ -27,6 +28,7 @@ class MainUI(QtWidgets.QMainWindow):
         self.show()  # Show the GUI
 
         self.stageController = stageControl()  # stage controller class instance
+        self.rfController = RfControl()
 
         self.connectStageButton.clicked.connect(
             lambda: self.stageController.connect_stage(self.comPortBox.currentText()))
@@ -41,6 +43,18 @@ class MainUI(QtWidgets.QMainWindow):
         self.takeFFTButton.clicked.connect(self.stageController.open_fft_graph)
         self.takeODMRButton.clicked.connect(self.stageController.open_odmr_graph)
         self.startScanButton.clicked.connect(self.stageController.open_scan_window)
+
+        self.connectMWSourceButton.clicked.connect(lambda: self.rfController.connect_rf(self.MWSourceIPAddressBox.text()))
+        self.togglePwrChk.stateChanged.connect(lambda: self.rfController.power_on_off(self.togglePwrChk.isChecked()))
+        self.toggleModOnOff.stateChanged.connect(lambda: self.rfController.mod_on_off(self.toggleModOnOff.isChecked()))
+        self.setFreqBtn.clicked.connect(self.rfController.set_freq)
+        self.setPwrBtn.clicked.connect(self.rfController.set_power)
+        self.applyModParamsButton.clicked.connect(self.rfController.set_mod_params)
+        self.sineWaveRadio.setChecked(True)
+        self.sineWaveRadio.toggled.connect(self.rfController.change_mod_type)
+        self.squareWaveRadio.setChecked(False)
+        self.squareWaveRadio.toggled.connect(self.rfController.change_mod_type)
+        self.toggleExtModOnOff.stateChanged.connect(lambda: self.rfController.ext_mod_on_off(self.toggleExtModOnOff.isChecked()))
 
         # configure thread pool
         self.threadpool = QtCore.QThreadPool()
@@ -144,9 +158,97 @@ class stageControl:
         return
 
 
+class RfControl:
+    def __init__(self):
+        super(RfControl, self).__init__()
+        self.mw_power_on = False
+        self.mod_on = False
+
+
+    def connect_rf(self, ip_address):
+        try:
+            self.rm = pyvisa.ResourceManager()
+            ip_address = "TCPIP::" + ip_address + "::INSTR"
+            self.inst = self.rm.open_resource(ip_address)
+            self.inst.chunk_size = 102400
+            self.inst.write("*CLS")  # clear error bank
+            self.inst.baud_rate = 115200
+
+            #turn power and modulation off by default
+            self.inst.write('OUTP OFF') # sets RF output to off by default, green LED should be off
+            self.mw_power_on = False
+            self.inst.write('FM:STAT OFF') #This is not the output on the front, this is the internal fm on/off
+            self.inst.write('OUTP:MOD:STAT OFF') #this is the output on the front panel, green LED should go off
+            self.mod_on = False
+
+            msg = QtWidgets.QMessageBox(window)
+            msg.setText("Connected Successful to: " + str(ip_address))
+            msg.exec()
+            # self.RFconnected = True
+        except Exception as error:
+            window.show_error_message('Could not connect to RF Source', error)
+        return
+
+    def power_on_off(self, state):
+        if state:
+            self.inst.write('OUTP ON')
+            self.mw_power_on = True
+        elif not state:
+            self.inst.write('OUTP OFF')
+            self.mw_power_on = False
+        return
+
+    def set_freq(self):
+        self.inst.write('FREQ ' + str(round(float(window.freqBox.value()) * 1e9, 12)))
+        window.currentFreqLabel.setText(str(round(float(self.get_freq())/1e9, 3)))
+        return
+
+    def get_freq(self):
+        return self.inst.query("FREQ?")
+
+    def set_power(self):
+        self.inst.write(f'POW {float(window.pwrBox.value())} dBm')
+        curr_p = round(float(self.inst.query('POW?')), 3)
+        window.powerLabel.setText(str(curr_p))
+
+    def mod_on_off(self, state):
+        if state:
+            self.mod_on = True
+            self.inst.write('FM:STAT ON')
+            self.inst.write('OUTP:MOD:STAT ON')
+        elif not state:
+            self.mod_on = False
+            self.inst.write('FM:STAT OFF')
+            self.inst.write('OUTP:MOD:STAT OFF')
+        return
+
+    def set_mod_params(self):
+        self.inst.write(f'FM {float(window.modAmpSpinBox.value())} MHz')
+        self.inst.write(f'FM:FREQ {float(window.modFreqSpinBox.value())} kHz')
+        mod_freq, mod_amp = self.get_mod_params()
+        window.modAmpLabel.setText(str(round(float(mod_amp)/1e6, 3)))
+        window.modFreqLabel.setText(str(round(float(mod_freq)/1e3, 3)))
+        return
+
+    def get_mod_params(self):
+        return self.inst.query('FM:FREQ?'), self.inst.query('FM?')
+
+    def change_mod_type(self):
+        if window.squareWaveRadio.isChecked():
+            self.inst.write(':FM:INT:FUNC SQU') #set square wave fm
+        elif window.sineWaveRadio.isChecked():
+            self.inst.write(':FM:INT:FUNC SIN') #set sine wave fm
+
+    def ext_mod_on_off(self, state):
+        if state:
+            self.inst.write(':FM:SOUR EXT')
+        elif not state:
+            self.inst.write(':FM:SOUR INT')
+        return
+
+
 class stage_options(QtWidgets.QWidget):
     def __init__(self):
-        super().__init__()
         super(stage_options, self).__init__()  # Call the inherited classes __init__ method
         uic.loadUi('stage_options.ui', self)  # Load the .ui file
         self.show()

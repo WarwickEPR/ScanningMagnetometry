@@ -679,8 +679,8 @@
          <rect>
           <x>10</x>
           <y>10</y>
-          <width>291</width>
-          <height>160</height>
+          <width>301</width>
+          <height>161</height>
          </rect>
         </property>
         <property name="font">
@@ -695,7 +695,7 @@
         <widget class="QCheckBox" name="togglePwrChk">
          <property name="geometry">
           <rect>
-           <x>90</x>
+           <x>100</x>
            <y>130</y>
            <width>101</width>
            <height>21</height>
@@ -705,55 +705,26 @@
           <string>Power On/Off</string>
          </property>
         </widget>
-        <widget class="QLabel" name="label_4">
-         <property name="geometry">
-          <rect>
-           <x>10</x>
-           <y>30</y>
-           <width>121</width>
-           <height>21</height>
-          </rect>
-         </property>
-         <property name="text">
-          <string>Set Frequency (GHz)</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
-        <widget class="QLabel" name="label_5">
-         <property name="geometry">
-          <rect>
-           <x>150</x>
-           <y>30</y>
-           <width>121</width>
-           <height>21</height>
-          </rect>
-         </property>
-         <property name="text">
-          <string>Set Power (dbm)</string>
-         </property>
-         <property name="alignment">
-          <set>Qt::AlignCenter</set>
-         </property>
-        </widget>
         <widget class="QDoubleSpinBox" name="freqBox">
          <property name="geometry">
           <rect>
-           <x>10</x>
-           <y>60</y>
+           <x>160</x>
+           <y>30</y>
            <width>121</width>
            <height>22</height>
           </rect>
          </property>
          <property name="decimals">
-          <number>5</number>
+          <number>12</number>
+         </property>
+         <property name="maximum">
+          <double>6.000000000000000</double>
          </property>
         </widget>
         <widget class="QDoubleSpinBox" name="pwrBox">
          <property name="geometry">
           <rect>
-           <x>150</x>
+           <x>160</x>
            <y>60</y>
            <width>121</width>
            <height>22</height>
@@ -762,11 +733,17 @@
          <property name="decimals">
           <number>2</number>
          </property>
+         <property name="minimum">
+          <double>-144.000000000000000</double>
+         </property>
+         <property name="maximum">
+          <double>19.000000000000000</double>
+         </property>
         </widget>
         <widget class="QPushButton" name="setFreqBtn">
          <property name="geometry">
           <rect>
-           <x>10</x>
+           <x>20</x>
            <y>90</y>
            <width>121</width>
            <height>30</height>
@@ -779,7 +756,7 @@
         <widget class="QPushButton" name="setPwrBtn">
          <property name="geometry">
           <rect>
-           <x>150</x>
+           <x>160</x>
            <y>90</y>
            <width>121</width>
            <height>30</height>
@@ -789,11 +766,75 @@
           <string>Set Power</string>
          </property>
         </widget>
+        <widget class="QLabel" name="label_20">
+         <property name="geometry">
+          <rect>
+           <x>12</x>
+           <y>30</y>
+           <width>101</width>
+           <height>20</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>Frequency (GHz):</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+        <widget class="QLabel" name="currentFreqLabel">
+         <property name="geometry">
+          <rect>
+           <x>120</x>
+           <y>32</y>
+           <width>40</width>
+           <height>16</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>--</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+        <widget class="QLabel" name="powerLabel">
+         <property name="geometry">
+          <rect>
+           <x>120</x>
+           <y>60</y>
+           <width>41</width>
+           <height>16</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>--</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+        <widget class="QLabel" name="label_23">
+         <property name="geometry">
+          <rect>
+           <x>30</x>
+           <y>58</y>
+           <width>81</width>
+           <height>16</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>Power (dBm):</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
        </widget>
        <widget class="QGroupBox" name="groupBox_2">
         <property name="geometry">
          <rect>
-          <x>310</x>
+          <x>410</x>
           <y>10</y>
           <width>401</width>
           <height>241</height>
@@ -999,8 +1040,8 @@
          <rect>
           <x>10</x>
           <y>180</y>
-          <width>291</width>
-          <height>130</height>
+          <width>331</width>
+          <height>181</height>
          </rect>
         </property>
         <property name="font">
@@ -1012,11 +1053,11 @@
         <property name="title">
          <string>Modulation Settings</string>
         </property>
-        <widget class="QCheckBox" name="togglePwrChk_4">
+        <widget class="QCheckBox" name="toggleModOnOff">
          <property name="geometry">
           <rect>
            <x>10</x>
-           <y>90</y>
+           <y>120</y>
            <width>131</width>
            <height>21</height>
           </rect>
@@ -1025,7 +1066,7 @@
           <string>Modulation On/Off</string>
          </property>
         </widget>
-        <widget class="QLabel" name="label_44">
+        <widget class="QLabel" name="label_21">
          <property name="geometry">
           <rect>
            <x>10</x>
@@ -1035,18 +1076,18 @@
           </rect>
          </property>
          <property name="text">
-          <string>Modulation Frequency (kHZ)</string>
+          <string>Modulation Frequency (kHz):</string>
          </property>
          <property name="alignment">
           <set>Qt::AlignCenter</set>
          </property>
         </widget>
-        <widget class="QPushButton" name="setFreqBtn_4">
+        <widget class="QPushButton" name="applyModParamsButton">
          <property name="geometry">
           <rect>
-           <x>150</x>
-           <y>90</y>
-           <width>131</width>
+           <x>200</x>
+           <y>130</y>
+           <width>121</width>
            <height>30</height>
           </rect>
          </property>
@@ -1070,24 +1111,107 @@
           <set>Qt::AlignCenter</set>
          </property>
         </widget>
-        <widget class="QDoubleSpinBox" name="doubleSpinBox_3">
+        <widget class="QDoubleSpinBox" name="modFreqSpinBox">
          <property name="geometry">
           <rect>
-           <x>180</x>
-           <y>29</y>
-           <width>101</width>
-           <height>21</height>
+           <x>220</x>
+           <y>30</y>
+           <width>100</width>
+           <height>25</height>
           </rect>
          </property>
+         <property name="decimals">
+          <number>7</number>
+         </property>
+         <property name="maximum">
+          <double>40.000000000000000</double>
+         </property>
         </widget>
-        <widget class="QDoubleSpinBox" name="doubleSpinBox_4">
+        <widget class="QDoubleSpinBox" name="modAmpSpinBox">
          <property name="geometry">
           <rect>
-           <x>180</x>
+           <x>220</x>
            <y>59</y>
-           <width>101</width>
-           <height>21</height>
+           <width>100</width>
+           <height>25</height>
           </rect>
+         </property>
+         <property name="decimals">
+          <number>7</number>
+         </property>
+         <property name="maximum">
+          <double>3.000000000000000</double>
+         </property>
+        </widget>
+        <widget class="QLabel" name="modFreqLabel">
+         <property name="geometry">
+          <rect>
+           <x>170</x>
+           <y>30</y>
+           <width>51</width>
+           <height>20</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>--</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+        <widget class="QLabel" name="modAmpLabel">
+         <property name="geometry">
+          <rect>
+           <x>170</x>
+           <y>60</y>
+           <width>51</width>
+           <height>20</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>--</string>
+         </property>
+         <property name="alignment">
+          <set>Qt::AlignCenter</set>
+         </property>
+        </widget>
+        <widget class="QRadioButton" name="sineWaveRadio">
+         <property name="geometry">
+          <rect>
+           <x>60</x>
+           <y>90</y>
+           <width>91</width>
+           <height>22</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>Sine Wave</string>
+         </property>
+        </widget>
+        <widget class="QRadioButton" name="squareWaveRadio">
+         <property name="geometry">
+          <rect>
+           <x>170</x>
+           <y>90</y>
+           <width>99</width>
+           <height>22</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>Square Wave</string>
+         </property>
+        </widget>
+        <widget class="QCheckBox" name="toggleExtModOnOff">
+         <property name="geometry">
+          <rect>
+           <x>10</x>
+           <y>150</y>
+           <width>180</width>
+           <height>22</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>External Modulation On/Off</string>
          </property>
         </widget>
        </widget>
@@ -1114,6 +1238,9 @@
            <width>180</width>
            <height>31</height>
           </rect>
+         </property>
+         <property name="text">
+          <string>169.254.195.237</string>
          </property>
          <property name="placeholderText">
           <string>Microwave Source IP Address</string>
