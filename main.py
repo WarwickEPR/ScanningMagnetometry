@@ -486,39 +486,26 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         self.setODMRButton.clicked.connect(self.send_to_scan_table)
         self.stopSweepButton.clicked.connect(self.stop_odmr_sweep)
 
-        # data = np.loadtxt("example_data\example_odmr_data.csv", delimiter=",")
-        # x_values = data[:, 0]
-        # y = data[:, 1]
-        # x_values = np.linspace(0, 10, 1000)  # dummy x values
-        # y = (self.lorentzian_derivative(x_values, 2, 0.5, 1) + self.lorentzian_derivative(x_values, 4, 0.5, 1) +
-        #      self.lorentzian_derivative(x_values, 6, 0.5, 1) + self.lorentzian_derivative(x_values, 8, 0.5, 1))
-        # dummy y data
-        # np.random.seed(0)  # For reproducibility
-        # noise = np.random.normal(0, 0.05, len(x_values))  # Gaussian noise with mean and standard deviation
-        # y += noise  # add noise
-        # self.dummy_data(x_values,y)  # plot dummy odmr data
 
-        # self.fit_linear_region(x_values, y)  # find linear region of data for fitting
+        self.thread_function(self.execute_this_function,fin_fn=self.print_this, prg_fn=self.progress_fn,
+                             progress_callback = None)
 
-        self.thing_happend()
-
-    def thing_happend(self):
-        """
-        what should happen when ODMR is started, thread is created and function is passed to worker
-         to start data collection.
-        :return:
-        """
-        self.worker = Worker(self.execute_this_function)
+    def thread_function(self, fn, *args, **kwargs):
+        self.worker = Worker(fn, args, kwargs)
         """connect up the results signal to print the result it emits when triggered"""
-        self.worker.signals.results.connect(self.print_this)
-        self.worker.signals.progress.connect(self.progress_fn)
+        if 'fin_fn' in kwargs:
+            self.worker.signals.results.connect(kwargs['fin_fn'])
+        if 'prg_fn' in kwargs:
+            self.worker.signals.progress.connect(kwargs['prg_fn'])
+            # self.worker.signals.progress.connect(self.progress_fn)
+        if 'err_fn' in kwargs:
+            self.worker.signals.error.connect(kwargs['err_fn'])
         window.threadpool.start(self.worker)
 
-    def execute_this_function(self, progress_callback):
+    def execute_this_function(self, *args, **kwargs):
         """this function then theoretically will trigger the LIA to start data collection when the MW sweep is started
         then once the sweep is stopped, the trigger will stop LIA aquisition and then this function collects the data and
         passes the data back to be plotted using signals and slots...haven't worked that out yet ._."""
-
         self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
         data = np.loadtxt("example_data\example_odmr_data.csv", delimiter=",")
         self.x = data[:, 0]
@@ -529,26 +516,26 @@ class ODMRGraphWindow(QtWidgets.QWidget):
             for i in range(len(self.x)):
                 datax.append(self.x[i])
                 datay.append(self.y[i])
-                # print('hello')
-                # time.sleep(0.1)
-                # progress_callback.emit((i/len(self.x))*100)
+                time.sleep(0.0001)
+                if (i % 3 == 0):
+                    self.worker.signals.progress.emit([(i/len(self.x))*100, datax, datay])
                 if self.worker_running == False:
                     break
             self.worker_running = False
         return datax, datay
 
-    def progress_fn(self, perc_comp):
+    def progress_fn(self, results):
         "update progress bar of odmr sweep"
-        window.ODMRProgressBar.setValue(int(perc_comp*2))
-        window.ODMRProgressBar.setFormat("%.02f %%" % perc_comp)
+        self.dummy_data(results[1], results[2])
+        window.ODMRProgressBar.setValue(int(results[0])*4)
+        window.ODMRProgressBar.setFormat("%.02f %%" % results[0])
         window.ODMRProgressBar.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        # self.odmr_plot = self.graphWidget.plot(x, y)
 
-    def print_this(self, x, y):
+    def print_this(self, results):
         """this then prints the result emitted from the results signal, that is returned by the function 
         'execute_this_function'"""
         self.worker_running = False
-        self.dummy_data(x, y)
+        self.dummy_data(results[0], results[1])
         window.takeODMRButton.setEnabled(True)
         
     def closeEvent(self, event):
@@ -566,7 +553,6 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         ## incorrectly while views had different shapes.
         ## (probably this should be handled in ViewBox.resizeEvent)
         self.p2.linkedViewChanged(self.p1.vb, self.p2.XAxis)
-
 
     def dummy_data(self, x, y):
         try:
