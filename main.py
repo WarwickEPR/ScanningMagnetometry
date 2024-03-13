@@ -196,21 +196,25 @@ class RfControl:
         self.inst.chunk_size = 102400
         self.inst.write("*CLS")  # clear error bank
         self.inst.baud_rate = 115200
-        print('here')
+
         #turn power and modulation off by default
-        self.inst.write('OUTP OFF') # sets RF output to off by default, green LED should be off
         power = self.inst.query("OUTP?")
-        print(power)
-        self.mw_power_on = False
-        self.inst.write('FM:STAT OFF') #This is not the output on the front, this is the internal fm on/off
-        self.inst.write('OUTP:MOD:STAT OFF') #this is the output on the front panel, green LED should go off
-        self.mod_on = False
-        #set trigger to output when sweep start
-        self.inst.write(':TRIG:SEQ:SOUR SWEep')
-        self.inst.write(':TRIG:SEQ:STAT ON')
-        #set trigger to output when sweep stops
-        self.inst.write(':TRIG:SEQ2:SOUR SWEep')
-        self.inst.write(':TRIG:SEQ2:STAT ON')
+        if power == 0:
+            self.mw_power_on = False
+            window.togglePwrChk.setChecked(False)
+        elif power == 1:
+            self.mw_power_on = True
+            window.togglePwrChk.setChecked(True)
+
+        mod_on = self.inst.write('OUTP:MOD:STAT?') #this is the output on the front panel, green LED should go off
+        if mod_on == 0:
+            self.mod_on = False
+            window.toggleModOnOff.setChecked(False)
+            self.inst.write('FM:STAT OFF')  # This is not the output on the front, this is the internal fm on/off
+        elif mod_on == 1:
+            self.mod_off = True
+            window.toggleModOnOff.setChecked(True)
+            self.inst.write('FM:STAT ON')  # This is not the output on the front, this is the internal fm on/off
 
         # msg = QtWidgets.QMessageBox(window)
         # msg.setText("Connected Successful to: " + str(ip_address))
@@ -281,6 +285,13 @@ class RfControl:
         num_points = args[0][2]  # Number of frequency points
         dwell_time = args[0][3] / 100
         sweep_step = args[0][4]
+
+        #set trigger to output when sweep start
+        window.rfController.inst.write(':TRIG:SEQ:SOUR SWEep')
+        window.rfController.inst.write(':TRIG:SEQ:STAT ON')
+        #set trigger to output when sweep stops
+        window.rfController.inst.write(':TRIG:SEQ2:SOUR SWEep')
+        window.rfController.inst.write(':TRIG:SEQ2:STAT ON')
 
         window.rfController.inst.write(f':SOURce:FREQuency:STARt {start_freq}')
         window.rfController.inst.write(f':SOURce:FREQuency:STOP {stop_freq}')
