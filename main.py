@@ -44,7 +44,12 @@ class MainUI(QtWidgets.QMainWindow):
         self.takeODMRButton.clicked.connect(self.stageController.open_odmr_graph)
         self.startScanButton.clicked.connect(self.stageController.open_scan_window)
 
-        self.connectMWSourceButton.clicked.connect(lambda: self.rfController.connect_rf(self.MWSourceIPAddressBox.text()))
+        # self.connectMWSourceButton.clicked.connect(lambda: self.rfController.connect_rf(self.MWSourceIPAddressBox.text()))
+
+        self.connectMWSourceButton.clicked.connect(lambda: self.rfController.thread_function(self.rfController.connect_rf,
+                                                                                           self.MWSourceIPAddressBox.text(),
+                                                                                             err_fn=self.show_error_message))
+
         self.togglePwrChk.stateChanged.connect(lambda: self.rfController.power_on_off(self.togglePwrChk.isChecked()))
         self.toggleModOnOff.stateChanged.connect(lambda: self.rfController.mod_on_off(self.toggleModOnOff.isChecked()))
         self.setFreqBtn.clicked.connect(self.rfController.set_freq)
@@ -77,7 +82,7 @@ class MainUI(QtWidgets.QMainWindow):
 
     def show_error_message(self, text):
         error_dialog = QtWidgets.QErrorMessage(self)
-        error_dialog.showMessage(text)
+        error_dialog.showMessage(str(text[1]))
         return
 
 
@@ -164,29 +169,41 @@ class RfControl:
         self.mw_power_on = False
         self.mod_on = False
 
+    def thread_function(self, fn, *args, **kwargs):
+        self.worker = Worker(fn, args, kwargs)
+        print(args, kwargs)
+        """connect up the results signal to print the result it emits when triggered"""
+        if 'fin_fn' in kwargs:
+            pass
+            # self.worker.signals.results.connect(self.print_this)
+        if 'prg_fn' in kwargs:
+            pass
+            # self.worker.signals.progress.connect(self.progress_fn)
+        if 'err_fn' in kwargs:
+            self.worker.signals.error.connect(kwargs['err_fn'])
+        window.threadpool.start(self.worker)
 
-    def connect_rf(self, ip_address):
-        try:
-            self.rm = pyvisa.ResourceManager()
-            ip_address = "TCPIP::" + ip_address + "::INSTR"
-            self.inst = self.rm.open_resource(ip_address)
-            self.inst.chunk_size = 102400
-            self.inst.write("*CLS")  # clear error bank
-            self.inst.baud_rate = 115200
 
-            #turn power and modulation off by default
-            self.inst.write('OUTP OFF') # sets RF output to off by default, green LED should be off
-            self.mw_power_on = False
-            self.inst.write('FM:STAT OFF') #This is not the output on the front, this is the internal fm on/off
-            self.inst.write('OUTP:MOD:STAT OFF') #this is the output on the front panel, green LED should go off
-            self.mod_on = False
+    def connect_rf(self, *args, **kwargs):
+        ip_address = args[0][0]
+        print(args, ip_address)
+        self.rm = pyvisa.ResourceManager()
+        ip_address = "TCPIP::" + ip_address + "::INSTR"
+        self.inst = self.rm.open_resource(ip_address)
+        self.inst.chunk_size = 102400
+        self.inst.write("*CLS")  # clear error bank
+        self.inst.baud_rate = 115200
 
-            msg = QtWidgets.QMessageBox(window)
-            msg.setText("Connected Successful to: " + str(ip_address))
-            msg.exec()
-            # self.RFconnected = True
-        except Exception as error:
-            window.show_error_message('Could not connect to RF Source', error)
+        #turn power and modulation off by default
+        self.inst.write('OUTP OFF') # sets RF output to off by default, green LED should be off
+        self.mw_power_on = False
+        self.inst.write('FM:STAT OFF') #This is not the output on the front, this is the internal fm on/off
+        self.inst.write('OUTP:MOD:STAT OFF') #this is the output on the front panel, green LED should go off
+        self.mod_on = False
+
+        msg = QtWidgets.QMessageBox(window)
+        msg.setText("Connected Successful to: " + str(ip_address))
+        msg.exec()
         return
 
     def power_on_off(self, state):
@@ -367,7 +384,6 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         uic.loadUi('ODMRGraphWindow.ui', self)  # Load the .ui file
         self.show()
 
-
         #configure two y axis plot
 
         self.p1 = self.graphWidget.plotItem
@@ -493,15 +509,9 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         :return:
         """
         self.worker = Worker(self.execute_this_function)
-
-
         """connect up the results signal to print the result it emits when triggered"""
         self.worker.signals.results.connect(self.print_this)
-
-
         self.worker.signals.progress.connect(self.progress_fn)
-
-
         window.threadpool.start(self.worker)
 
     def execute_this_function(self, progress_callback):
@@ -709,9 +719,9 @@ class Worker(QtCore.QRunnable):
         self.args = args
         self.kwargs = kwargs
         self.signals = WorkerSignals()
-
+        print()
         #add callback to kwargs
-        self.kwargs['progress_callback'] = self.signals.progress
+        # self.kwargs['progress_callback'] = self.signals.progress
     @QtCore.pyqtSlot()
     def run(self):
         try:
@@ -721,14 +731,14 @@ class Worker(QtCore.QRunnable):
             exctype, value = sys.exc_info()[:2]
             self.signals.error.emit((exctype, value, traceback.format_exc()))
         else:
-            self.signals.results.emit(result[0], result[1])
+            self.signals.results.emit(result)
         finally:
             self.signals.finished.emit()
 
 class WorkerSignals(QtCore.QObject):
     finished = QtCore.pyqtSignal()
     error = QtCore.pyqtSignal(tuple)
-    results = QtCore.pyqtSignal(object, object)
+    results = QtCore.pyqtSignal(object)
     progress = QtCore.pyqtSignal(object)
 
 app = QtWidgets.QApplication(sys.argv)  # Create an instance of QtWidgets.QApplication
