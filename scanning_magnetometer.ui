@@ -720,6 +720,9 @@
          <property name="maximum">
           <double>6.000000000000000</double>
          </property>
+         <property name="value">
+          <double>2.750000000000000</double>
+         </property>
         </widget>
         <widget class="QDoubleSpinBox" name="pwrBox">
          <property name="geometry">
@@ -738,6 +741,9 @@
          </property>
          <property name="maximum">
           <double>19.000000000000000</double>
+         </property>
+         <property name="value">
+          <double>-30.000000000000000</double>
          </property>
         </widget>
         <widget class="QPushButton" name="setFreqBtn">
@@ -861,6 +867,12 @@
          <property name="decimals">
           <number>5</number>
          </property>
+         <property name="maximum">
+          <double>6.000000000000000</double>
+         </property>
+         <property name="value">
+          <double>2.750000000000000</double>
+         </property>
         </widget>
         <widget class="QLabel" name="label_6">
          <property name="geometry">
@@ -906,6 +918,12 @@
          <property name="decimals">
           <number>5</number>
          </property>
+         <property name="maximum">
+          <double>6.000000000000000</double>
+         </property>
+         <property name="value">
+          <double>3.000000000000000</double>
+         </property>
         </widget>
         <widget class="QDoubleSpinBox" name="stepSizeBox">
          <property name="geometry">
@@ -918,6 +936,9 @@
          </property>
          <property name="maximum">
           <double>10000.000000000000000</double>
+         </property>
+         <property name="value">
+          <double>250.000000000000000</double>
          </property>
         </widget>
         <widget class="QLabel" name="label_8">
@@ -962,7 +983,10 @@
           </rect>
          </property>
          <property name="maximum">
-          <number>3000</number>
+          <number>62000</number>
+         </property>
+         <property name="value">
+          <number>1000</number>
          </property>
         </widget>
         <widget class="QComboBox" name="sweepDefBox">
@@ -996,6 +1020,9 @@
          </property>
          <property name="maximum">
           <double>1000.000000000000000</double>
+         </property>
+         <property name="value">
+          <double>3.000000000000000</double>
          </property>
         </widget>
         <widget class="QLabel" name="label_10">
@@ -1135,6 +1162,9 @@
          <property name="maximum">
           <double>40.000000000000000</double>
          </property>
+         <property name="value">
+          <double>3.050000000000000</double>
+         </property>
         </widget>
         <widget class="QDoubleSpinBox" name="modAmpSpinBox">
          <property name="geometry">
@@ -1150,6 +1180,9 @@
          </property>
          <property name="maximum">
           <double>3.000000000000000</double>
+         </property>
+         <property name="value">
+          <double>2.800000000000000</double>
          </property>
         </widget>
         <widget class="QLabel" name="modFreqLabel">
