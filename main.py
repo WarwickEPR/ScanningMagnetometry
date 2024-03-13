@@ -174,7 +174,6 @@ class RfControl:
 
     def thread_function(self, fn, *args, **kwargs):
         self.worker = Worker(fn, args, kwargs)
-        print(args, kwargs)
         """connect up the results signal to print the result it emits when triggered"""
         if 'fin_fn' in kwargs:
             pass
@@ -189,14 +188,15 @@ class RfControl:
 
     def connect_rf(self, *args, **kwargs):
         ip_address = args[0][0]
-        print(args, ip_address)
+        print(ip_address)
         self.rm = pyvisa.ResourceManager()
+        print(ip_address)
         ip_address = "TCPIP::" + ip_address + "::INSTR"
         self.inst = self.rm.open_resource(ip_address)
         self.inst.chunk_size = 102400
         self.inst.write("*CLS")  # clear error bank
         self.inst.baud_rate = 115200
-
+        print('here')
         #turn power and modulation off by default
         self.inst.write('OUTP OFF') # sets RF output to off by default, green LED should be off
         self.mw_power_on = False
@@ -210,9 +210,9 @@ class RfControl:
         self.inst.write(':TRIG:SEQ2:SOUR SWEep')
         self.inst.write(':TRIG:SEQ2:STAT ON')
 
-        msg = QtWidgets.QMessageBox(window)
-        msg.setText("Connected Successful to: " + str(ip_address))
-        msg.exec()
+        # msg = QtWidgets.QMessageBox(window)
+        # msg.setText("Connected Successful to: " + str(ip_address))
+        # msg.exec()
         return
 
     def power_on_off(self, state):
@@ -250,14 +250,14 @@ class RfControl:
 
     def set_mod_params(self):
         self.inst.write(f'FM {float(window.modAmpSpinBox.value())} MHz')
-        self.inst.write(f'FM:FREQ {float(window.modFreqSpinBox.value())} kHz')
+        self.inst.write(f'FM:INT:FREQ {float(window.modFreqSpinBox.value())} kHz')
         mod_freq, mod_amp = self.get_mod_params()
         window.modAmpLabel.setText(str(round(float(mod_amp)/1e6, 3)))
         window.modFreqLabel.setText(str(round(float(mod_freq)/1e3, 3)))
         return
 
     def get_mod_params(self):
-        return self.inst.query('FM:FREQ?'), self.inst.query('FM?')
+        return self.inst.query('FM:INT:FREQ?'), self.inst.query('FM?')
 
     def change_mod_type(self):
         if window.squareWaveRadio.isChecked():
@@ -517,7 +517,6 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         then once the sweep is stopped, the trigger will stop LIA aquisition and then this function collects the data and
         passes the data back to be plotted using signals and slots...haven't worked that out yet ._."""
         self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
-        print(args[0][0])
         start_freq = args[0][0]  # Start frequency in Hz (e.g., 1 GHz)
         stop_freq = args[0][1]  # Stop frequency in Hz (e.g., 2 GHz)
         num_points = args[0][2]  # Number of frequency points
@@ -560,18 +559,18 @@ class ODMRGraphWindow(QtWidgets.QWidget):
 
     def progress_fn(self, results):
         "update progress bar of odmr sweep"
-        self.dummy_data(results[1], results[2])
-        window.ODMRProgressBar.setValue(int(results[0])*4)
-        window.ODMRProgressBar.setFormat("%.02f %%" % results[0])
-        window.ODMRProgressBar.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        # self.dummy_data(results[1], results[2])
+        # window.ODMRProgressBar.setValue(int(results[0])*4)
+        # window.ODMRProgressBar.setFormat("%.02f %%" % results[0])
+        # window.ODMRProgressBar.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
 
     def print_this(self, results):
         """this then prints the result emitted from the results signal, that is returned by the function 
         'execute_this_function'"""
         self.worker_running = False
-        window.rfController.inst.write("TSWeep")
-        self.dummy_data(results[0], results[1])
-        window.takeODMRButton.setEnabled(True)
+        # window.rfController.inst.write("TSWeep")
+        # self.dummy_data(results[0], results[1])
+        # window.takeODMRButton.setEnabled(True)
         
     def closeEvent(self, event):
         """this function executes when the ODMR graph window closes, used to stop thread but can be used for anything
