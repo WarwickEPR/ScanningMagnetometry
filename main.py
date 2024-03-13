@@ -199,6 +199,8 @@ class RfControl:
         print('here')
         #turn power and modulation off by default
         self.inst.write('OUTP OFF') # sets RF output to off by default, green LED should be off
+        power = self.inst.query("OUTP?")
+        print(power)
         self.mw_power_on = False
         self.inst.write('FM:STAT OFF') #This is not the output on the front, this is the internal fm on/off
         self.inst.write('OUTP:MOD:STAT OFF') #this is the output on the front panel, green LED should go off
@@ -270,6 +272,34 @@ class RfControl:
             self.inst.write(':FM:SOUR EXT')
         elif not state:
             self.inst.write(':FM:SOUR INT')
+        return
+
+    def setup_sweep(self, *args, **kwargs):
+        self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
+        start_freq = args[0][0]  # Start frequency in Hz (e.g., 1 GHz)
+        stop_freq = args[0][1]  # Stop frequency in Hz (e.g., 2 GHz)
+        num_points = args[0][2]  # Number of frequency points
+        dwell_time = args[0][3] / 100
+        sweep_step = args[0][4]
+
+        window.rfController.inst.write(f':SOURce:FREQuency:STARt {start_freq}')
+        window.rfController.inst.write(f':SOURce:FREQuency:STOP {stop_freq}')
+
+        window.rfController.inst.write(':SOURce:FREQuency:MODE LIST')
+        window.rfController.inst.write(f':SWE:DWELL {dwell_time}')
+        if window.sweepDefBox.currentText() == 'Points':
+            window.rfController.inst.write(f':SWE:POINTS {num_points}')
+        elif window.sweepDefBox.currentText() == 'Step Size':
+            window.rfController.inst.write(f':SWE:STEP {sweep_step} kHz')
+
+        # set trigger to output when sweep start
+        window.rfController.inst.write(':TRIG:SEQ:SOUR SWEep')
+        window.rfController.inst.write(':TRIG:SEQ:STAT ON')
+        # set trigger to output when sweep stops
+        window.rfController.inst.write(':TRIG:SEQ2:SOUR SWEep')
+        window.rfController.inst.write(':TRIG:SEQ2:STAT ON')
+        window.rfController.inst.write('TRIG:SOUR BUS')
+        window.rfController.inst.write(':SOURce:FREQuency:MODE SWEep')
         return
 
 
@@ -496,7 +526,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         self.stopSweepButton.clicked.connect(self.stop_odmr_sweep)
 
 
-        self.thread_function(self.execute_this_function, window.startFreqBox.value(), window.endFreqBox.value(),
+        self.thread_function(window.rfController.setup_sweep, window.startFreqBox.value(), window.endFreqBox.value(),
                              window.pointsBox.value(), window.dwellTimeBox.value(), window.stepSizeBox.value(),
                              fin_fn=self.print_this, prg_fn=self.progress_fn,
                              err_fn = window.show_error_message, progress_callback=None)
@@ -517,42 +547,12 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         """this function then theoretically will trigger the LIA to start data collection when the MW sweep is started
         then once the sweep is stopped, the trigger will stop LIA aquisition and then this function collects the data and
         passes the data back to be plotted using signals and slots...haven't worked that out yet ._."""
-        self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
-        start_freq = args[0][0]  # Start frequency in Hz (e.g., 1 GHz)
-        stop_freq = args[0][1]  # Stop frequency in Hz (e.g., 2 GHz)
-        num_points = args[0][2]  # Number of frequency points
-        dwell_time = args[0][3]/100
-        sweep_step = args[0][4]
-        freq_list = ' '.join(
-            [str(start_freq + i * (stop_freq - start_freq) / (num_points - 1)) for i in range(num_points)])
 
-        frequency_list = np.linspace(start_freq,stop_freq,num_points) # List of frequencies
-        frequency_string = ",".join(map(str, frequency_list))
-
-        window.rfController.inst.write(':SOURce:FREQuency:MODE LIST')
-        window.rfController.inst.write(f':SWE:DWELL {dwell_time}')
-
-        if window.sweepDefBox.currentText() == 'Points':
-            window.rfController.inst.write(f':SWE:POINTS {num_points}')
-        elif window.sweepDefBox.currentText() == 'Step Size':
-            window.rfController.inst.write(f':SWE:STEP {sweep_step} kHz')
-
-
-        # set trigger to output when sweep start
-        window.rfController.inst.write(':TRIG:SEQ:SOUR SWEep')
-        window.rfController.inst.write(':TRIG:SEQ:STAT ON')
-        # set trigger to output when sweep stops
-        window.rfController.inst.write(':TRIG:SEQ2:SOUR SWEep')
-        window.rfController.inst.write(':TRIG:SEQ2:STAT ON')
-        window.rfController.inst.write('TRIG:SOUR BUS')
-        window.rfController.inst.write(':SOURce:FREQuency:MODE SWEep')
         # window.rfController.inst.write(':SOURce:LIST:POINts {}'.format(num_points))
 
         window.rfController.inst.write('*TRG')
 
         # window.rfController.inst.write('TSWeep')
-
-        self.worker_running = False
 
         # data = np.loadtxt("example_data\example_odmr_data.csv", delimiter=",")
         # self.x = data[:, 0]
