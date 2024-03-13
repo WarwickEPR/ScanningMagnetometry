@@ -536,6 +536,8 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         window.rfController.inst.write('TRIG:SOUR BUS')
         window.rfController.inst.write(':SOURce:FREQuency:MODE SWEep')
 
+        window.rfController.inst.write('*TRG')
+
         # window.rfController.inst.write('TSWeep')
 
         self.worker_running = False
@@ -570,7 +572,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         self.worker_running = False
         # window.rfController.inst.write("TSWeep")
         # self.dummy_data(results[0], results[1])
-        # window.takeODMRButton.setEnabled(True)
+        window.takeODMRButton.setEnabled(True)
         
     def closeEvent(self, event):
         """this function executes when the ODMR graph window closes, used to stop thread but can be used for anything
