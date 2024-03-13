@@ -497,7 +497,8 @@ class ODMRGraphWindow(QtWidgets.QWidget):
 
 
         self.thread_function(self.execute_this_function, window.startFreqBox.value(), window.endFreqBox.value(),
-                             window.pointsBox.value(), fin_fn=self.print_this, prg_fn=self.progress_fn,
+                             window.pointsBox.value(), window.dwellTimeBox.value(), window.stepSizeBox.value(),
+                             fin_fn=self.print_this, prg_fn=self.progress_fn,
                              err_fn = window.show_error_message, progress_callback=None)
 
     def thread_function(self, fn, *args, **kwargs):
@@ -520,13 +521,23 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         start_freq = args[0][0]  # Start frequency in Hz (e.g., 1 GHz)
         stop_freq = args[0][1]  # Stop frequency in Hz (e.g., 2 GHz)
         num_points = args[0][2]  # Number of frequency points
+        dwell_time = args[0][3]/100
+        sweep_step = args[0][4]
         freq_list = ' '.join(
             [str(start_freq + i * (stop_freq - start_freq) / (num_points - 1)) for i in range(num_points)])
 
-
+        frequency_list = np.linspace(start_freq,stop_freq,num_points) # List of frequencies
+        frequency_string = ",".join(map(str, frequency_list))
 
         window.rfController.inst.write(':SOURce:FREQuency:MODE LIST')
-        window.rfController.inst.write(f':SOURce:FREQuency:LIST {freq_list}')
+        window.rfController.inst.write(f':SWE:DWELL {dwell_time}')
+
+        if window.sweepDefBox.currentText() == 'Points':
+            window.rfController.inst.write(f':SWE:POINTS {num_points}')
+        elif window.sweepDefBox.currentText() == 'Step Size':
+            window.rfController.inst.write(f':SWE:STEP {sweep_step} kHz')
+
+
         # set trigger to output when sweep start
         window.rfController.inst.write(':TRIG:SEQ:SOUR SWEep')
         window.rfController.inst.write(':TRIG:SEQ:STAT ON')
@@ -535,6 +546,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         window.rfController.inst.write(':TRIG:SEQ2:STAT ON')
         window.rfController.inst.write('TRIG:SOUR BUS')
         window.rfController.inst.write(':SOURce:FREQuency:MODE SWEep')
+        # window.rfController.inst.write(':SOURce:LIST:POINts {}'.format(num_points))
 
         window.rfController.inst.write('*TRG')
 
