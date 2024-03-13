@@ -40,16 +40,19 @@ class MainUI(QtWidgets.QMainWindow):
         self.getStagePositionButton.clicked.connect(self.stageController.get_stage_pos)
         self.actionChange_Max_Position_Values.triggered.connect(self.stageController.set_max_stage_position)
 
-        self.takeFFTButton.clicked.connect(self.stageController.open_fft_graph)
-        self.takeODMRButton.clicked.connect(self.stageController.open_odmr_graph)
         self.startScanButton.clicked.connect(self.stageController.open_scan_window)
 
-        # self.connectMWSourceButton.clicked.connect(lambda: self.rfController.connect_rf(self.MWSourceIPAddressBox.text()))
+        self.takeFFTButton.clicked.connect(self.stageController.open_fft_graph)
+
+
+        self.takeODMRButton.clicked.connect(self.stageController.open_odmr_graph)
+
+
+
 
         self.connectMWSourceButton.clicked.connect(lambda: self.rfController.thread_function(self.rfController.connect_rf,
                                                                                            self.MWSourceIPAddressBox.text(),
                                                                                              err_fn=self.show_error_message))
-
         self.togglePwrChk.stateChanged.connect(lambda: self.rfController.power_on_off(self.togglePwrChk.isChecked()))
         self.toggleModOnOff.stateChanged.connect(lambda: self.rfController.mod_on_off(self.toggleModOnOff.isChecked()))
         self.setFreqBtn.clicked.connect(self.rfController.set_freq)
@@ -200,6 +203,12 @@ class RfControl:
         self.inst.write('FM:STAT OFF') #This is not the output on the front, this is the internal fm on/off
         self.inst.write('OUTP:MOD:STAT OFF') #this is the output on the front panel, green LED should go off
         self.mod_on = False
+        #set trigger to output when sweep start
+        self.inst.write(':TRIG:SEQ:SOUR SWEep')
+        self.inst.write(':TRIG:SEQ:STAT ON')
+        #set trigger to output when sweep stops
+        self.inst.write(':TRIG:SEQ2:SOUR SWEep')
+        self.inst.write(':TRIG:SEQ2:STAT ON')
 
         msg = QtWidgets.QMessageBox(window)
         msg.setText("Connected Successful to: " + str(ip_address))
@@ -487,8 +496,9 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         self.stopSweepButton.clicked.connect(self.stop_odmr_sweep)
 
 
-        self.thread_function(self.execute_this_function,fin_fn=self.print_this, prg_fn=self.progress_fn,
-                             progress_callback = None)
+        self.thread_function(self.execute_this_function, window.startFreqBox.value(), window.endFreqBox.value(),
+                             window.pointsBox.value(), fin_fn=self.print_this, prg_fn=self.progress_fn,
+                             err_fn = window.show_error_message, progress_callback=None)
 
     def thread_function(self, fn, *args, **kwargs):
         self.worker = Worker(fn, args, kwargs)
@@ -507,22 +517,46 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         then once the sweep is stopped, the trigger will stop LIA aquisition and then this function collects the data and
         passes the data back to be plotted using signals and slots...haven't worked that out yet ._."""
         self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
-        data = np.loadtxt("example_data\example_odmr_data.csv", delimiter=",")
-        self.x = data[:, 0]
-        self.y = data[:, 1]
-        datax = []
-        datay = []
-        while self.worker_running:
-            for i in range(len(self.x)):
-                datax.append(self.x[i])
-                datay.append(self.y[i])
-                time.sleep(0.0001)
-                if (i % 3 == 0):
-                    self.worker.signals.progress.emit([(i/len(self.x))*100, datax, datay])
-                if self.worker_running == False:
-                    break
-            self.worker_running = False
-        return datax, datay
+        print(args[0][0])
+        start_freq = args[0][0]  # Start frequency in Hz (e.g., 1 GHz)
+        stop_freq = args[0][1]  # Stop frequency in Hz (e.g., 2 GHz)
+        num_points = args[0][2]  # Number of frequency points
+        freq_list = ' '.join(
+            [str(start_freq + i * (stop_freq - start_freq) / (num_points - 1)) for i in range(num_points)])
+
+
+
+        window.rfController.inst.write(':SOURce:FREQuency:MODE LIST')
+        window.rfController.inst.write(f':SOURce:FREQuency:LIST {freq_list}')
+        # set trigger to output when sweep start
+        window.rfController.inst.write(':TRIG:SEQ:SOUR SWEep')
+        window.rfController.inst.write(':TRIG:SEQ:STAT ON')
+        # set trigger to output when sweep stops
+        window.rfController.inst.write(':TRIG:SEQ2:SOUR SWEep')
+        window.rfController.inst.write(':TRIG:SEQ2:STAT ON')
+        window.rfController.inst.write('TRIG:SOUR BUS')
+        window.rfController.inst.write(':SOURce:FREQuency:MODE SWEep')
+
+        # window.rfController.inst.write('TSWeep')
+
+        self.worker_running = False
+
+        # data = np.loadtxt("example_data\example_odmr_data.csv", delimiter=",")
+        # self.x = data[:, 0]
+        # self.y = data[:, 1]
+        # datax = []
+        # datay = []
+        # while self.worker_running:
+        #     for i in range(len(self.x)):
+        #         datax.append(self.x[i])
+        #         datay.append(self.y[i])
+        #         time.sleep(0.0001)
+        #         if (i % 3 == 0):
+        #             self.worker.signals.progress.emit([(i/len(self.x))*100, datax, datay])
+        #         if self.worker_running == False:
+        #             break
+        #     self.worker_running = False
+        return
 
     def progress_fn(self, results):
         "update progress bar of odmr sweep"
@@ -535,6 +569,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         """this then prints the result emitted from the results signal, that is returned by the function 
         'execute_this_function'"""
         self.worker_running = False
+        window.rfController.inst.write("TSWeep")
         self.dummy_data(results[0], results[1])
         window.takeODMRButton.setEnabled(True)
         
