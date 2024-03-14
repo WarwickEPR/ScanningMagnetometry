@@ -640,43 +640,19 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         window.takeODMRButton.setEnabled(True)
         self.worker_running = False
         print('sweep stop')
-        y = window.rfController.samples
-        y = np.concatenate(y).ravel()
-        x = np.linspace(window.rfController.start_freq, window.rfController.stop_freq, len(y))
-        self.dummy_data(x,y)
-
-        # data = np.loadtxt("example_data\example_odmr_data.csv", delimiter=",")
-        # self.x = data[:, 0]
-        # self.y = data[:, 1]
-        # datax = []
-        # datay = []
-        # while self.worker_running:
-        #     for i in range(len(self.x)):
-        #         datax.append(self.x[i])
-        #         datay.append(self.y[i])
-        #         time.sleep(0.0001)
-        #         if (i % 3 == 0):
-        #             self.worker.signals.progress.emit([(i/len(self.x))*100, datax, datay])
-        #         if self.worker_running == False:
-        #             break
-        #     self.worker_running = False
+        self.y = window.rfController.samples
+        self.y = np.concatenate(self.y).ravel()
+        self.x = np.linspace(window.rfController.start_freq, window.rfController.stop_freq, len(self.y))
+        self.dummy_data(self.x,self.y)
         return
 
     def progress_fn(self, results):
-        print(results)
-        "update progress bar of odmr sweep"
-        # self.dummy_data(results[1], results[2])
-        # window.ODMRProgressBar.setValue(int(results[0])*4)
-        # window.ODMRProgressBar.setFormat("%.02f %%" % results[0])
-        # window.ODMRProgressBar.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        "update progress bar of odmr sweep?"
 
     def print_this(self, results):
         """this then prints the result emitted from the results signal, that is returned by the function 
         'execute_this_function'"""
-        print(window.rfController.inst.query(':STATus:OPERation:CONDition?'))
         self.worker_running = False
-        # window.rfController.inst.write("TSWeep")
-        # self.dummy_data(results[0], results[1])
         window.takeODMRButton.setEnabled(True)
         
     def closeEvent(self, event):
