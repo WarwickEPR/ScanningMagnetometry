@@ -10,6 +10,7 @@ import traceback
 import pyvisa
 from sklearn.linear_model import LinearRegression
 from scipy.signal import savgol_filter, find_peaks
+import zhinst.utils as utils
 
 uiclass, baseclass = pg.Qt.loadUiType("scanning_magnetometer.ui")
 
@@ -29,7 +30,9 @@ class MainUI(QtWidgets.QMainWindow):
 
         self.stageController = stageControl()  # stage controller class instance
         self.rfController = RfControl()
+        self.LIAController = LIAControl()
 
+        #  stage ui controls
         self.connectStageButton.clicked.connect(
             lambda: self.stageController.connect_stage(self.comPortBox.currentText()))
         self.homeStageButton.clicked.connect(self.stageController.home_stage)
@@ -42,14 +45,11 @@ class MainUI(QtWidgets.QMainWindow):
 
         self.startScanButton.clicked.connect(self.stageController.open_scan_window)
 
+        #  LIA ui controls
         self.takeFFTButton.clicked.connect(self.stageController.open_fft_graph)
 
-
+        #  RF ui controls
         self.takeODMRButton.clicked.connect(self.stageController.open_odmr_graph)
-
-
-
-
         self.connectMWSourceButton.clicked.connect(lambda: self.rfController.thread_function(self.rfController.connect_rf,
                                                                                            self.MWSourceIPAddressBox.text(),
                                                                                              err_fn=self.show_error_message))
@@ -68,8 +68,6 @@ class MainUI(QtWidgets.QMainWindow):
         self.threadpool = QtCore.QThreadPool()
         print('max %d threads' % self.threadpool.maxThreadCount())
 
-        # self.graphWidget.plot([1,2,3,4,5], [1,2,3,4,5]) #dummy data for now
-
         try:
             ports = serial.tools.list_ports.comports()
             available_ports = []
@@ -87,7 +85,6 @@ class MainUI(QtWidgets.QMainWindow):
         error_dialog = QtWidgets.QErrorMessage(self)
         error_dialog.showMessage(str(text[1]))
         return
-
 
 class stageControl:
     def __init__(self):
@@ -188,17 +185,21 @@ class RfControl:
 
     def connect_rf(self, *args, **kwargs):
         ip_address = args[0][0]
-        print(ip_address)
         self.rm = pyvisa.ResourceManager()
-        print(ip_address)
         ip_address = "TCPIP::" + ip_address + "::INSTR"
         self.inst = self.rm.open_resource(ip_address)
         self.inst.chunk_size = 102400
         self.inst.write("*CLS")  # clear error bank
         self.inst.baud_rate = 115200
 
+        window.powerLabel.setText(str(round(float(self.inst.query('POW?')), 3)))
+        window.currentFreqLabel.setText(str(round(float(self.get_freq()) / 1e9, 3)))
+        mod_freq, mod_amp = self.get_mod_params()
+        window.modAmpLabel.setText(str(round(float(mod_amp) / 1e6, 3)))
+        window.modFreqLabel.setText(str(round(float(mod_freq) / 1e3, 3)))
+
         #turn power and modulation off by default
-        power = self.inst.query("OUTP?")
+        power = int(self.inst.query("OUTP?"))
         if power == 0:
             self.mw_power_on = False
             window.togglePwrChk.setChecked(False)
@@ -206,19 +207,9 @@ class RfControl:
             self.mw_power_on = True
             window.togglePwrChk.setChecked(True)
 
-        mod_on = self.inst.write('OUTP:MOD:STAT?') #this is the output on the front panel, green LED should go off
-        if mod_on == 0:
-            self.mod_on = False
-            window.toggleModOnOff.setChecked(False)
-            self.inst.write('FM:STAT OFF')  # This is not the output on the front, this is the internal fm on/off
-        elif mod_on == 1:
-            self.mod_off = True
-            window.toggleModOnOff.setChecked(True)
-            self.inst.write('FM:STAT ON')  # This is not the output on the front, this is the internal fm on/off
-
-        # msg = QtWidgets.QMessageBox(window)
-        # msg.setText("Connected Successful to: " + str(ip_address))
-        # msg.exec()
+        self.inst.write('FM:STAT ON')
+        self.inst.write('OUTP:MOD:STAT ON')
+        window.toggleModOnOff.setChecked(True)
         return
 
     def power_on_off(self, state):
@@ -283,36 +274,37 @@ class RfControl:
         start_freq = args[0][0]  # Start frequency in Hz (e.g., 1 GHz)
         stop_freq = args[0][1]  # Stop frequency in Hz (e.g., 2 GHz)
         num_points = args[0][2]  # Number of frequency points
-        dwell_time = args[0][3] / 100
+        dwell_time = args[0][3] / 1000
         sweep_step = args[0][4]
 
         #set trigger to output when sweep start
-        window.rfController.inst.write(':TRIG:SEQ:SOUR SWEep')
-        window.rfController.inst.write(':TRIG:SEQ:STAT ON')
-        #set trigger to output when sweep stops
-        window.rfController.inst.write(':TRIG:SEQ2:SOUR SWEep')
-        window.rfController.inst.write(':TRIG:SEQ2:STAT ON')
+        window.rfController.inst.write(':TRIG:SEQ:SOUR BUS')  # sets sweep to trigger on *TRG command
+        window.rfController.inst.write('ROUT:CONN:TRIG:OUTP SFDone')  # sets trig out 1 on Keysight to emit pulse when sweep finishes, used to trigger LIA
 
-        window.rfController.inst.write(f':SOURce:FREQuency:STARt {start_freq}')
-        window.rfController.inst.write(f':SOURce:FREQuency:STOP {stop_freq}')
-
-        window.rfController.inst.write(':SOURce:FREQuency:MODE LIST')
-        window.rfController.inst.write(f':SWE:DWELL {dwell_time}')
-        if window.sweepDefBox.currentText() == 'Points':
+        window.rfController.inst.write(':SOURce:FREQuency:MODE LIST')  # set frequency mode from CW to list sweep
+        window.rfController.inst.write(f':SWE:DWELL {dwell_time}')  # set dwell time
+        if window.sweepDefBox.currentText() == 'Points':  # if points are used, set points
+            print(num_points)
             window.rfController.inst.write(f':SWE:POINTS {num_points}')
-        elif window.sweepDefBox.currentText() == 'Step Size':
+        elif window.sweepDefBox.currentText() == 'Step Size':  # if step size used, set step size
             window.rfController.inst.write(f':SWE:STEP {sweep_step} kHz')
 
-        # set trigger to output when sweep start
-        window.rfController.inst.write(':TRIG:SEQ:SOUR SWEep')
-        window.rfController.inst.write(':TRIG:SEQ:STAT ON')
-        # set trigger to output when sweep stops
-        window.rfController.inst.write(':TRIG:SEQ2:SOUR SWEep')
-        window.rfController.inst.write(':TRIG:SEQ2:STAT ON')
-        window.rfController.inst.write('TRIG:SOUR BUS')
-        window.rfController.inst.write(':SOURce:FREQuency:MODE SWEep')
+        window.rfController.inst.write(f':SOURce:FREQuency:STARt {start_freq} GHz')  # set start and end sweep freq
+        window.rfController.inst.write(f':SOURce:FREQuency:STOP {stop_freq} GHz')
+
+        window.rfController.inst.write('TSWeep')  # Prime the sweep, start sweep with *TRG command
         return
 
+class LIAControl:
+    def __init__(self):
+        super(LIAControl, self).__init__()
+        return
+
+    def connect_lia(self, *args, **kwargs):
+        device_id = kwargs['device_id']
+        api_level = 6
+        (self.daq, self.device, self.props) = utils.create_api_session(device_id, api_level)
+        self.daq.subscribe('/%s/demods/0/sample' % self.device)
 
 class stage_options(QtWidgets.QWidget):
     def __init__(self):
@@ -539,7 +531,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
 
         self.thread_function(window.rfController.setup_sweep, window.startFreqBox.value(), window.endFreqBox.value(),
                              window.pointsBox.value(), window.dwellTimeBox.value(), window.stepSizeBox.value(),
-                             fin_fn=self.print_this, prg_fn=self.progress_fn,
+                             fin_fn=self.execute_this_function, prg_fn=self.progress_fn,
                              err_fn = window.show_error_message, progress_callback=None)
 
     def thread_function(self, fn, *args, **kwargs):
@@ -559,9 +551,10 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         then once the sweep is stopped, the trigger will stop LIA aquisition and then this function collects the data and
         passes the data back to be plotted using signals and slots...haven't worked that out yet ._."""
 
-        # window.rfController.inst.write(':SOURce:LIST:POINts {}'.format(num_points))
-
         window.rfController.inst.write('*TRG')
+        window.takeODMRButton.setEnabled(True)
+        self.worker_running = False
+
 
         # window.rfController.inst.write('TSWeep')
 
