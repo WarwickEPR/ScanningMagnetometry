@@ -11,6 +11,8 @@ import pyvisa
 from sklearn.linear_model import LinearRegression
 from scipy.signal import savgol_filter, find_peaks
 import zhinst.utils as utils
+import zhinst.core
+from zhinst.toolkit import Session
 
 uiclass, baseclass = pg.Qt.loadUiType("scanning_magnetometer.ui")
 
@@ -46,6 +48,9 @@ class MainUI(QtWidgets.QMainWindow):
         self.startScanButton.clicked.connect(self.stageController.open_scan_window)
 
         #  LIA ui controls
+        self.connectLIAButton.clicked.connect(lambda: self.LIAController.thread_function(self.LIAController.connect_lia,
+                                                                                         device_id=self.LIANameBox.text(),
+                                                                                         err_fn=self.show_error_message))
         self.takeFFTButton.clicked.connect(self.stageController.open_fft_graph)
 
         #  RF ui controls
@@ -182,7 +187,6 @@ class RfControl:
             self.worker.signals.error.connect(kwargs['err_fn'])
         window.threadpool.start(self.worker)
 
-
     def connect_rf(self, *args, **kwargs):
         ip_address = args[0][0]
         self.rm = pyvisa.ResourceManager()
@@ -271,28 +275,59 @@ class RfControl:
 
     def setup_sweep(self, *args, **kwargs):
         self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
-        start_freq = args[0][0]  # Start frequency in Hz (e.g., 1 GHz)
-        stop_freq = args[0][1]  # Stop frequency in Hz (e.g., 2 GHz)
+        self.start_freq = args[0][0]  # Start frequency in Hz (e.g., 1 GHz)
+        self.stop_freq = args[0][1]  # Stop frequency in Hz (e.g., 2 GHz)
         num_points = args[0][2]  # Number of frequency points
         dwell_time = args[0][3] / 1000
         sweep_step = args[0][4]
 
         #set trigger to output when sweep start
         window.rfController.inst.write(':TRIG:SEQ:SOUR BUS')  # sets sweep to trigger on *TRG command
-        window.rfController.inst.write('ROUT:CONN:TRIG:OUTP SFDone')  # sets trig out 1 on Keysight to emit pulse when sweep finishes, used to trigger LIA
-
+        window.rfController.inst.write('ROUT:CONN:TRIG:OUTP SRun')  # sets trig out 1 on Keysight to emit pulse when sweep starts, used to trigger LIA
         window.rfController.inst.write(':SOURce:FREQuency:MODE LIST')  # set frequency mode from CW to list sweep
         window.rfController.inst.write(f':SWE:DWELL {dwell_time}')  # set dwell time
         if window.sweepDefBox.currentText() == 'Points':  # if points are used, set points
-            print(num_points)
             window.rfController.inst.write(f':SWE:POINTS {num_points}')
         elif window.sweepDefBox.currentText() == 'Step Size':  # if step size used, set step size
             window.rfController.inst.write(f':SWE:STEP {sweep_step} kHz')
-
-        window.rfController.inst.write(f':SOURce:FREQuency:STARt {start_freq} GHz')  # set start and end sweep freq
-        window.rfController.inst.write(f':SOURce:FREQuency:STOP {stop_freq} GHz')
-
+        window.rfController.inst.write(f':SOURce:FREQuency:STARt {self.start_freq} GHz')  # set start and end sweep freq
+        window.rfController.inst.write(f':SOURce:FREQuency:STOP {self.stop_freq} GHz')
         window.rfController.inst.write('TSWeep')  # Prime the sweep, start sweep with *TRG command
+        window.LIAController.setup_sweep() #setup LIA for data aquisition
+        window.rfController.inst.write('*TRG')  # trigger sweep to start
+
+        sweeping = True
+        read_count = 0
+        window.LIAController.daq_module.execute()
+        # Record data in a loop with timeout.
+        self.samples = []
+        temp_x = []
+        while sweeping == True:
+            data_read = window.LIAController.daq_module.read(True)
+            returned_signal_paths = [
+                signal_path.lower() for signal_path in data_read.keys()
+            ]
+            progress = window.LIAController.daq_module.progress()[0]
+            for signal_path in window.LIAController.signal_paths:
+                if signal_path.lower() in returned_signal_paths:
+                    # Loop over all the bursts for the subscribed signal. More than
+                    # one burst may be returned at a time, in particular if we call
+                    # read() less frequently than the burst_duration.
+                    for index, signal_burst in enumerate(data_read[signal_path.lower()]):
+                        self.samples.append(signal_burst['value'][0])
+                        window.LIAController.data[signal_path].append(signal_burst)
+                else:
+                    # Note: If we read before the next burst has finished, there may be no new data.
+                    # No action required.
+                    pass
+            if (int(window.rfController.inst.query(':STATus:OPERation:CONDition?')) & 8) == 8:  # trigger sweep to start
+                # time.sleep(0.01)
+                pass
+            else:
+                sweeping = False
+        #stop aquisition and unsub from module
+        window.LIAController.daq_module.finish()
+        window.LIAController.daq_module.unsubscribe('*')
         return
 
 class LIAControl:
@@ -300,11 +335,62 @@ class LIAControl:
         super(LIAControl, self).__init__()
         return
 
+    def thread_function(self, fn, *args, **kwargs):
+        self.worker = Worker(fn, args, kwargs)
+        """connect up the results signal to print the result it emits when triggered"""
+        if 'fin_fn' in kwargs:
+            pass
+            # self.worker.signals.results.connect(self.print_this)
+        if 'prg_fn' in kwargs:
+            pass
+            # self.worker.signals.progress.connect(self.progress_fn)
+        if 'err_fn' in kwargs:
+            self.worker.signals.error.connect(kwargs['err_fn'])
+        window.threadpool.start(self.worker)
+
     def connect_lia(self, *args, **kwargs):
-        device_id = kwargs['device_id']
+        self.server_host: str = "192.168.70.166"
+        self.device_id = args[1]['device_id']
+        server_port = 8004
         api_level = 6
-        (self.daq, self.device, self.props) = utils.create_api_session(device_id, api_level)
-        self.daq.subscribe('/%s/demods/0/sample' % self.device)
+        (self.daq, self.device, _) = zhinst.utils.create_api_session(
+            self.device_id, api_level, server_host=self.server_host, server_port=server_port
+        )
+        zhinst.utils.api_server_version_check(self.daq)
+        self.daq.set(f"/{self.device}/demods/0/enable", 1)
+
+        self.demod_path = f"/{self.device}/demods/0/sample"
+        self.signal_paths = []
+        self.signal_paths.append(self.demod_path + ".x")  # The demodulator X output.
+        # self.signal_paths.append(self.demod_path + ".y")
+
+    def setup_sweep(self):
+        #set up sweep parameters to get data from Data Aquisition module
+        self.total_duration = 10
+        self.module_sampling_rate = 1000  # Number of points/second
+        self.burst_duration = 0.01  # Time in seconds for each data burst/segment.
+        self.num_cols = int(np.ceil(self.module_sampling_rate * self.burst_duration))
+        self.num_bursts = int(np.ceil(self.total_duration /self.burst_duration))
+        # Create an instance of the Data Acquisition Module.
+        self.daq_module = self.daq.dataAcquisitionModule()
+        # Configure the Data Acquisition Module.
+        # Set the device that will be used for the trigger - this parameter must be set.
+        self.daq_module.set("device", self.device)
+        # Specify continuous acquisition (type=0).
+        self.daq_module.set("type", 0)
+        self.daq_module.set("grid/mode", 2)
+        self.daq_module.set("count", self.num_bursts)
+        self.daq_module.set("duration", self.burst_duration)
+        self.daq_module.set("grid/cols", self.num_cols)
+
+        self.data = {}
+        # A dictionary to store all the acquired data.
+        for signal_path in self.signal_paths:
+            print("Subscribing to ", signal_path)
+            self.daq_module.subscribe(signal_path)
+            self.data[signal_path] = []
+        self.clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
+        return
 
 class stage_options(QtWidgets.QWidget):
     def __init__(self):
@@ -541,7 +627,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
             self.worker.signals.results.connect(kwargs['fin_fn'])
         if 'prg_fn' in kwargs:
             self.worker.signals.progress.connect(kwargs['prg_fn'])
-            # self.worker.signals.progress.connect(self.progress_fn)
+            self.worker.signals.progress.connect(self.progress_fn)
         if 'err_fn' in kwargs:
             self.worker.signals.error.connect(kwargs['err_fn'])
         window.threadpool.start(self.worker)
@@ -551,12 +637,13 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         then once the sweep is stopped, the trigger will stop LIA aquisition and then this function collects the data and
         passes the data back to be plotted using signals and slots...haven't worked that out yet ._."""
 
-        window.rfController.inst.write('*TRG')
         window.takeODMRButton.setEnabled(True)
         self.worker_running = False
-
-
-        # window.rfController.inst.write('TSWeep')
+        print('sweep stop')
+        y = window.rfController.samples
+        y = np.concatenate(y).ravel()
+        x = np.linspace(window.rfController.start_freq, window.rfController.stop_freq, len(y))
+        self.dummy_data(x,y)
 
         # data = np.loadtxt("example_data\example_odmr_data.csv", delimiter=",")
         # self.x = data[:, 0]
@@ -576,6 +663,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         return
 
     def progress_fn(self, results):
+        print(results)
         "update progress bar of odmr sweep"
         # self.dummy_data(results[1], results[2])
         # window.ODMRProgressBar.setValue(int(results[0])*4)
@@ -585,6 +673,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
     def print_this(self, results):
         """this then prints the result emitted from the results signal, that is returned by the function 
         'execute_this_function'"""
+        print(window.rfController.inst.query(':STATus:OPERation:CONDition?'))
         self.worker_running = False
         # window.rfController.inst.write("TSWeep")
         # self.dummy_data(results[0], results[1])
