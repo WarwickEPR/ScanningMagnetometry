@@ -1621,6 +1621,12 @@
            <height>25</height>
           </rect>
          </property>
+         <property name="maximum">
+          <number>1000</number>
+         </property>
+         <property name="value">
+          <number>10</number>
+         </property>
         </widget>
         <widget class="QLabel" name="label_49">
          <property name="geometry">
@@ -1635,7 +1641,7 @@
           <string>Sample Rate</string>
          </property>
         </widget>
-        <widget class="QSpinBox" name="odmrAqBurstDurBox">
+        <widget class="QDoubleSpinBox" name="odmrAqBurstDurBox">
          <property name="geometry">
           <rect>
            <x>140</x>
@@ -1643,6 +1649,15 @@
            <width>93</width>
            <height>25</height>
           </rect>
+         </property>
+         <property name="decimals">
+          <number>3</number>
+         </property>
+         <property name="maximum">
+          <double>100.000000000000000</double>
+         </property>
+         <property name="value">
+          <double>0.010000000000000</double>
          </property>
         </widget>
         <widget class="QSpinBox" name="odmrAqSampleRateBox">
@@ -1653,6 +1668,12 @@
            <width>93</width>
            <height>25</height>
           </rect>
+         </property>
+         <property name="maximum">
+          <number>10000</number>
+         </property>
+         <property name="value">
+          <number>1000</number>
          </property>
         </widget>
        </widget>
@@ -1667,7 +1688,7 @@
      <x>0</x>
      <y>0</y>
      <width>844</width>
-     <height>21</height>
+     <height>22</height>
     </rect>
    </property>
    <widget class="QMenu" name="menu1">

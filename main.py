@@ -366,9 +366,9 @@ class LIAControl:
 
     def setup_sweep(self):
         #set up sweep parameters to get data from Data Aquisition module
-        self.total_duration = 10
-        self.module_sampling_rate = 1000  # Number of points/second
-        self.burst_duration = 0.01  # Time in seconds for each data burst/segment.
+        self.total_duration = window.odmrAqDurBox.value()
+        self.module_sampling_rate =  window.odmrAqSampleRateBox.value() # Number of points/second
+        self.burst_duration = window.odmrAqBurstDurBox.value()  # Time in seconds for each data burst/segment.
         self.num_cols = int(np.ceil(self.module_sampling_rate * self.burst_duration))
         self.num_bursts = int(np.ceil(self.total_duration /self.burst_duration))
         # Create an instance of the Data Acquisition Module.
