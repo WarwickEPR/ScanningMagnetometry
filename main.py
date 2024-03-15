@@ -462,9 +462,8 @@ class FFTGraphWindow(QtWidgets.QWidget):
         self.addFreqButton.clicked.connect(
             lambda: self.add_ignore_freq(self.freqStartSpinBox.value(), self.freqEndSpinBox.value()))
 
-        self.thread_function(self.take_fft, window.fftPointsBox.value(), window.fftTimeBox.value(),
-                            fin_fn=self.execute_this_function, prg_fn=self.progress_fn,
-                            err_fn=window.show_error_message, progress_callback=None)
+        self.thread_function(self.take_fft,
+                             progress_callback=None)
 
         # self.odmrGradientSpinBox.valueChanged.connect(lambda: self.dummy_data("example_data\example_data_fft_dbu.csv", units="dBu",
         #                        calib_const=self.odmrGradientSpinBox.value()))
@@ -488,7 +487,31 @@ class FFTGraphWindow(QtWidgets.QWidget):
             self.worker.signals.error.connect(kwargs['err_fn'])
         window.threadpool.start(self.worker)
 
-    def take_fft(self):
+    def take_fft(self, *args, **kwargs):
+        self.worker_running = True
+        window.LIAController.setup_fft()
+        window.LIAController.daq_module.execute()
+        self.samples = []
+        while not window.LIAController.daq_module.finished():
+            data_read = window.LIAController.daq_module.read(True)
+            returned_signal_paths = [
+                signal_path.lower() for signal_path in data_read.keys()
+            ]
+            for signal_path in window.LIAController.signal_paths:
+                if signal_path.lower() in returned_signal_paths:
+                    # Loop over all the bursts for the subscribed signal. More than
+                    # one burst may be returned at a time, in particular if we call
+                    # read() less frequently than the burst_duration.
+                    for index, signal_burst in enumerate(data_read[signal_path.lower()]):
+                        self.samples.append(signal_burst['value'][0])
+                        window.LIAController.data[signal_path].append(signal_burst)
+                else:
+                    # Note: If we read before the next burst has finished, there may be no new data.
+                    # No action required.
+                    pass
+        window.LIAController.daq_module.finish()
+        window.LIAController.daq_module.unsubscribe('*')
+        print(self.samples)
         return
 
     def add_ignore_freq(self, freq_start, freq_end):
