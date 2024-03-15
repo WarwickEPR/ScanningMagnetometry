@@ -1513,12 +1513,12 @@
           <rect>
            <x>10</x>
            <y>123</y>
-           <width>69</width>
+           <width>74</width>
            <height>16</height>
           </rect>
          </property>
          <property name="text">
-          <string>FFT Averagse</string>
+          <string>FFT Averages</string>
          </property>
         </widget>
         <widget class="QSpinBox" name="FFTAverageBox">

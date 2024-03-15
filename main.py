@@ -359,18 +359,52 @@ class LIAControl:
         zhinst.utils.api_server_version_check(self.daq)
         self.daq.set(f"/{self.device}/demods/0/enable", 1)
 
-        self.demod_path = f"/{self.device}/demods/0/sample"
-        self.signal_paths = []
-        self.signal_paths.append(self.demod_path + ".x")  # The demodulator X output.
+        # self.demod_path = f"/{self.device}/demods/0/sample"
+        # self.signal_paths = []
+        # self.signal_paths.append(self.demod_path + ".x")  # The demodulator X output.
         # self.signal_paths.append(self.demod_path + ".y")
 
     def setup_sweep(self):
+        self.demod_path = f"/{self.device}/demods/0/sample"
+        self.signal_paths = []
+        self.signal_paths.append(self.demod_path + ".x")
         #set up sweep parameters to get data from Data Aquisition module
         self.total_duration = window.odmrAqDurBox.value()
         self.module_sampling_rate =  window.odmrAqSampleRateBox.value() # Number of points/second
         self.burst_duration = window.odmrAqBurstDurBox.value()  # Time in seconds for each data burst/segment.
         self.num_cols = int(np.ceil(self.module_sampling_rate * self.burst_duration))
         self.num_bursts = int(np.ceil(self.total_duration /self.burst_duration))
+        # Create an instance of the Data Acquisition Module.
+        self.daq_module = self.daq.dataAcquisitionModule()
+        # Configure the Data Acquisition Module.
+        # Set the device that will be used for the trigger - this parameter must be set.
+        self.daq_module.set("device", self.device)
+        # Specify continuous acquisition (type=0).
+        self.daq_module.set("type", 0)
+        self.daq_module.set("grid/mode", 2)
+        self.daq_module.set("count", self.num_bursts)
+        self.daq_module.set("duration", self.burst_duration)
+        self.daq_module.set("grid/cols", self.num_cols)
+
+        self.data = {}
+        # A dictionary to store all the acquired data.
+        for signal_path in self.signal_paths:
+            print("Subscribing to ", signal_path)
+            self.daq_module.subscribe(signal_path)
+            self.data[signal_path] = []
+        self.clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
+        return
+
+    def setup_fft(self):
+        self.demod_path = f"/{self.device}/demods/0/sample"
+        self.signal_paths = []
+        self.signal_paths.append(self.demod_path + ".freq.fft.abs.pwr")
+    
+        self.total_duration = window.fftTimeBox.value()
+        self.module_sampling_rate = window.fftPointsBox.value()  # Number of points/second
+        self.burst_duration = window.fftBurstDurBox.value()  # Time in seconds for each data burst/segment.
+        self.num_cols = int(np.ceil(self.module_sampling_rate * self.burst_duration))
+        self.num_bursts = int(np.ceil(self.total_duration / self.burst_duration))
         # Create an instance of the Data Acquisition Module.
         self.daq_module = self.daq.dataAcquisitionModule()
         # Configure the Data Acquisition Module.
@@ -428,13 +462,33 @@ class FFTGraphWindow(QtWidgets.QWidget):
         self.addFreqButton.clicked.connect(
             lambda: self.add_ignore_freq(self.freqStartSpinBox.value(), self.freqEndSpinBox.value()))
 
-        self.odmrGradientSpinBox.valueChanged.connect(lambda: self.dummy_data("example_data\example_data_fft_dbu.csv", units="dBu",
-                               calib_const=self.odmrGradientSpinBox.value()))
+        self.thread_function(self.take_fft, window.fftPointsBox.value(), window.fftTimeBox.value(),
+                            fin_fn=self.execute_this_function, prg_fn=self.progress_fn,
+                            err_fn=window.show_error_message, progress_callback=None)
 
-        self.dummy_data("example_data\example_data_fft_dbu.csv", units="dBu",
-                               calib_const=self.odmrGradientSpinBox.value())  # plot dummy fft data
-        self.calc_sens(freq_start=self.minFreqSpinBox.value(), freq_end=self.maxFreqSpinBox.value(),
-                       ignore_freqs=self.ignoreListFreqCheckBox.isChecked())
+        # self.odmrGradientSpinBox.valueChanged.connect(lambda: self.dummy_data("example_data\example_data_fft_dbu.csv", units="dBu",
+        #                        calib_const=self.odmrGradientSpinBox.value()))
+        #
+        # self.dummy_data("example_data\example_data_fft_dbu.csv", units="dBu",
+        #                        calib_const=self.odmrGradientSpinBox.value())  # plot dummy fft data
+        # self.calc_sens(freq_start=self.minFreqSpinBox.value(), freq_end=self.maxFreqSpinBox.value(),
+        #                ignore_freqs=self.ignoreListFreqCheckBox.isChecked())
+        return
+
+    def thread_function(self, fn, *args, **kwargs):
+        self.worker = Worker(fn, args, kwargs)
+        """connect up the results signal to print the result it emits when triggered"""
+        if 'fin_fn' in kwargs:
+            pass
+            # self.worker.signals.results.connect(self.print_this)
+        if 'prg_fn' in kwargs:
+            pass
+            # self.worker.signals.progress.connect(self.progress_fn)
+        if 'err_fn' in kwargs:
+            self.worker.signals.error.connect(kwargs['err_fn'])
+        window.threadpool.start(self.worker)
+
+    def take_fft(self):
         return
 
     def add_ignore_freq(self, freq_start, freq_end):
