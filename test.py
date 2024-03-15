@@ -278,3 +278,33 @@
 #     # cli_utils.run_commandline(run_example, __doc__)
 #     # sys.path.remove(str(cli_util_path))
 
+import numpy as np
+import zhinst.utils
+
+# Connect to the device
+daq = zhinst.utils.auto_connect()
+
+# Configure settings for the Lock-in Amplifier
+device_id = 'dev1234'  # Replace 'dev1234' with the actual device ID
+exp_setting = [
+    ('/%s/demods/0/enable' % device_id, 1),
+    ('/%s/demods/0/rate' % device_id, 1000),  # Set demodulator rate to 1 kHz
+    ('/%s/demods/0/trigger' % device_id, 0),  # Disable trigger
+    ('/%s/demods/0/oscselect' % device_id, 0),  # Select oscillator 0
+    ('/%s/demods/0/fft/enable' % device_id, 1),  # Enable FFT
+    ('/%s/demods/0/fft/length' % device_id, 2048),  # Set FFT length
+]
+
+daq.set(exp_setting)
+
+# Initialize variables
+num_ffts = 10
+fft_data = np.zeros((num_ffts, 2048), dtype=np.complex128)
+
+# Perform 10 FFTs and store the results
+for i in range(num_ffts):
+    data = daq.poll('/%s/demods/0/sample' % device_id)
+    fft_data[i] = data['x'] + 1j * data['y']
+
+# Take the average of the FFT data
+average_fft = np.mean(fft_data, axis=0)
