@@ -398,11 +398,11 @@ class LIAControl:
     def setup_fft(self):
         self.demod_path = f"/{self.device}/demods/0/sample"
         self.signal_paths = []
-        self.signal_paths.append(self.demod_path + ".freq.fft.abs.pwr")
-    
-        self.total_duration = window.fftTimeBox.value()
-        self.module_sampling_rate = window.fftPointsBox.value()  # Number of points/second
-        self.burst_duration = window.fftBurstDurBox.value()  # Time in seconds for each data burst/segment.
+        self.signal_paths.append(self.demod_path + ".x")
+        # set up sweep parameters to get data from Data Aquisition module
+        self.total_duration = window.odmrAqDurBox.value()
+        self.module_sampling_rate = window.odmrAqSampleRateBox.value()  # Number of points/second
+        self.burst_duration = window.odmrAqBurstDurBox.value()  # Time in seconds for each data burst/segment.
         self.num_cols = int(np.ceil(self.module_sampling_rate * self.burst_duration))
         self.num_bursts = int(np.ceil(self.total_duration / self.burst_duration))
         # Create an instance of the Data Acquisition Module.
@@ -488,15 +488,17 @@ class FFTGraphWindow(QtWidgets.QWidget):
         window.threadpool.start(self.worker)
 
     def take_fft(self, *args, **kwargs):
-        self.worker_running = True
-        window.LIAController.setup_fft()
+        self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
+        sweeping = True
         window.LIAController.daq_module.execute()
+        # Record data in a loop with timeout.
         self.samples = []
-        while not window.LIAController.daq_module.finished():
+        while sweeping == True:
             data_read = window.LIAController.daq_module.read(True)
             returned_signal_paths = [
                 signal_path.lower() for signal_path in data_read.keys()
             ]
+            progress = window.LIAController.daq_module.progress()[0]
             for signal_path in window.LIAController.signal_paths:
                 if signal_path.lower() in returned_signal_paths:
                     # Loop over all the bursts for the subscribed signal. More than
@@ -509,9 +511,14 @@ class FFTGraphWindow(QtWidgets.QWidget):
                     # Note: If we read before the next burst has finished, there may be no new data.
                     # No action required.
                     pass
+            if (int(window.rfController.inst.query(':STATus:OPERation:CONDition?')) & 8) == 8:  # trigger sweep to start
+                # time.sleep(0.01)
+                pass
+            else:
+                sweeping = False
+        # stop aquisition and unsub from module
         window.LIAController.daq_module.finish()
         window.LIAController.daq_module.unsubscribe('*')
-        print(self.samples)
         return
 
     def add_ignore_freq(self, freq_start, freq_end):
