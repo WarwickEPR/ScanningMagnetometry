@@ -1494,6 +1494,15 @@
            <height>25</height>
           </rect>
          </property>
+         <property name="minimum">
+          <double>0.010000000000000</double>
+         </property>
+         <property name="singleStep">
+          <double>0.010000000000000</double>
+         </property>
+         <property name="value">
+          <double>0.010000000000000</double>
+         </property>
         </widget>
         <widget class="QLabel" name="label_47">
          <property name="geometry">
@@ -1513,12 +1522,12 @@
           <rect>
            <x>10</x>
            <y>123</y>
-           <width>69</width>
+           <width>74</width>
            <height>16</height>
           </rect>
          </property>
          <property name="text">
-          <string>FFT Averagse</string>
+          <string>FFT Averages</string>
          </property>
         </widget>
         <widget class="QSpinBox" name="FFTAverageBox">
@@ -1545,6 +1554,15 @@
            <width>100</width>
            <height>25</height>
           </rect>
+         </property>
+         <property name="minimum">
+          <number>1</number>
+         </property>
+         <property name="maximum">
+          <number>100000</number>
+         </property>
+         <property name="value">
+          <number>1000</number>
          </property>
         </widget>
        </widget>
@@ -1662,7 +1680,7 @@
      <x>0</x>
      <y>0</y>
      <width>844</width>
-     <height>22</height>
+     <height>21</height>
     </rect>
    </property>
    <widget class="QMenu" name="menu1">
