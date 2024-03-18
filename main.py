@@ -9,7 +9,8 @@ import time
 import traceback
 import pyvisa
 from sklearn.linear_model import LinearRegression
-from scipy.signal import savgol_filter, find_peaks
+from scipy.signal import savgol_filter, find_peaks, welch
+from scipy.fftpack import rfft, fftfreq
 import zhinst.utils as utils
 import zhinst.core
 from zhinst.toolkit import Session
@@ -358,6 +359,7 @@ class LIAControl:
         )
         zhinst.utils.api_server_version_check(self.daq)
         self.daq.set(f"/{self.device}/demods/0/enable", 1)
+        self.clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
 
         # self.demod_path = f"/{self.device}/demods/0/sample"
         # self.signal_paths = []
@@ -392,30 +394,49 @@ class LIAControl:
             print("Subscribing to ", signal_path)
             self.daq_module.subscribe(signal_path)
             self.data[signal_path] = []
-        self.clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
+
         return
 
     def setup_fft(self):
-        self.demod_path = f"/{self.device}/demods/0/sample"
+        in_channel = 0
+        demod_index = 1
+        demod_rate = 10e3
+        time_constant = 600e-6  # ~80hz
+        exp_setting = [
+            ["/%s/sigins/%d/ac" % (self.device, in_channel), 1],  # ac coupling on/off
+            ["/%s/sigins/%d/imp50" % (self.device, in_channel), 0],  # 50 ohm impednecne on/off
+            ["/%s/sigins/%d/range" % (self.device, in_channel), 3],  # set signal in range
+            ["/%s/demods/%d/enable" % (self.device, demod_index), 1],  # enable data transfer
+            ["/%s/demods/%d/rate" % (self.device, demod_index), demod_rate],
+            # set data transfer rate from demod to data server
+            ["/%s/demods/%d/adcselect" % (self.device, 0), 0],  # set demodulator 1's input to signal in 1
+            ["/%s/demods/%d/adcselect" % (self.device, 1), 8],
+            # select the input channel #select auxin1 as demodulator 2's input
+            ["/%s/demods/%d/order" % (self.device, demod_index), 8],  # set filter order to 8th order
+            ["/%s/demods/%d/timeconstant" % (self.device, demod_index), time_constant],
+            # sets low pass filter timeconstant ~ 3db filter freq.
+            ["/%s/demods/%d/harmonic" % (self.device, demod_index), 1],  # set mod harmonic to be 1st harmonic
+            ["/%s/extrefs/%d/enable" % (self.device, in_channel), 1],  # sets ext ref to be aux in 1
+            ["/%s/auxouts/%d/outputselect" % (self.device, 0), 0],  # set output to be demod x (0) or demod y (1)
+        ]
+        self.daq.set(exp_setting)
+        self.daq.set(f"/{self.device}/demods/0/enable", 1)
+        self.daq.set(f"/{self.device}/demods/1/enable", 1)
+        self.daq.set("/%s/auxouts/%d/scale" % (self.device, 0), 750),
+        clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
+
+        demod_path = f"/{self.device}/demods/0/sample"
         self.signal_paths = []
-        self.signal_paths.append(self.demod_path + ".x")
-        # set up sweep parameters to get data from Data Aquisition module
-        self.total_duration = window.odmrAqDurBox.value()
-        self.module_sampling_rate = window.odmrAqSampleRateBox.value()  # Number of points/second
-        self.burst_duration = window.odmrAqBurstDurBox.value()  # Time in seconds for each data burst/segment.
-        self.num_cols = int(np.ceil(self.module_sampling_rate * self.burst_duration))
-        self.num_bursts = int(np.ceil(self.total_duration / self.burst_duration))
-        # Create an instance of the Data Acquisition Module.
+        self.signal_paths.append(demod_path + ".x.fft.abs.avg")
+
         self.daq_module = self.daq.dataAcquisitionModule()
-        # Configure the Data Acquisition Module.
-        # Set the device that will be used for the trigger - this parameter must be set.
         self.daq_module.set("device", self.device)
         # Specify continuous acquisition (type=0).
         self.daq_module.set("type", 0)
         self.daq_module.set("grid/mode", 2)
-        self.daq_module.set("count", self.num_bursts)
-        self.daq_module.set("duration", self.burst_duration)
-        self.daq_module.set("grid/cols", self.num_cols)
+        self.daq_module.set("count", 10)
+        self.daq_module.set("duration", 1)
+        self.daq_module.set("grid/cols", 2048)
 
         self.data = {}
         # A dictionary to store all the acquired data.
@@ -423,7 +444,6 @@ class LIAControl:
             print("Subscribing to ", signal_path)
             self.daq_module.subscribe(signal_path)
             self.data[signal_path] = []
-        self.clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
         return
 
 class stage_options(QtWidgets.QWidget):
@@ -454,6 +474,8 @@ class FFTGraphWindow(QtWidgets.QWidget):
         self.fft_plot = None
         self.x = None
         self.y = None
+        self.scaled_y = None
+        self.calb_const = 1
 
         self.calcSensButton.clicked.connect(lambda: self.calc_sens(freq_start=self.minFreqSpinBox.value(),
                                                                    freq_end=self.maxFreqSpinBox.value(),
@@ -462,16 +484,13 @@ class FFTGraphWindow(QtWidgets.QWidget):
         self.addFreqButton.clicked.connect(
             lambda: self.add_ignore_freq(self.freqStartSpinBox.value(), self.freqEndSpinBox.value()))
 
+        self.odmrGradientSpinBox.valueChanged.connect(lambda: self.dummy_data(
+            calib_const=self.odmrGradientSpinBox.value()))
+
         self.thread_function(self.take_fft,
                              progress_callback=None)
 
-        # self.odmrGradientSpinBox.valueChanged.connect(lambda: self.dummy_data("example_data\example_data_fft_dbu.csv", units="dBu",
-        #                        calib_const=self.odmrGradientSpinBox.value()))
-        #
-        # self.dummy_data("example_data\example_data_fft_dbu.csv", units="dBu",
-        #                        calib_const=self.odmrGradientSpinBox.value())  # plot dummy fft data
-        # self.calc_sens(freq_start=self.minFreqSpinBox.value(), freq_end=self.maxFreqSpinBox.value(),
-        #                ignore_freqs=self.ignoreListFreqCheckBox.isChecked())
+
         return
 
     def thread_function(self, fn, *args, **kwargs):
@@ -489,16 +508,14 @@ class FFTGraphWindow(QtWidgets.QWidget):
 
     def take_fft(self, *args, **kwargs):
         self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
-        sweeping = True
+        window.LIAController.setup_fft()
         window.LIAController.daq_module.execute()
-        # Record data in a loop with timeout.
         self.samples = []
-        while sweeping == True:
+        while not window.LIAController.daq_module.finished():
             data_read = window.LIAController.daq_module.read(True)
             returned_signal_paths = [
                 signal_path.lower() for signal_path in data_read.keys()
             ]
-            progress = window.LIAController.daq_module.progress()[0]
             for signal_path in window.LIAController.signal_paths:
                 if signal_path.lower() in returned_signal_paths:
                     # Loop over all the bursts for the subscribed signal. More than
@@ -506,19 +523,24 @@ class FFTGraphWindow(QtWidgets.QWidget):
                     # read() less frequently than the burst_duration.
                     for index, signal_burst in enumerate(data_read[signal_path.lower()]):
                         self.samples.append(signal_burst['value'][0])
+                        bin_resolution = signal_burst['header']['gridcoldelta']
                         window.LIAController.data[signal_path].append(signal_burst)
                 else:
                     # Note: If we read before the next burst has finished, there may be no new data.
                     # No action required.
                     pass
-            if (int(window.rfController.inst.query(':STATus:OPERation:CONDition?')) & 8) == 8:  # trigger sweep to start
-                # time.sleep(0.01)
-                pass
-            else:
-                sweeping = False
-        # stop aquisition and unsub from module
         window.LIAController.daq_module.finish()
         window.LIAController.daq_module.unsubscribe('*')
+
+        self.worker_running = False
+        avg_sample = ((np.sum(self.samples, axis=0)) / 10) * 750
+        bin_count = len(avg_sample)
+        frequencies = np.arange(0, bin_count)
+        amplitude_spectral_density = (avg_sample * np.sqrt(1)) * (1/(28e-6 * 0.6))
+        self.y = amplitude_spectral_density
+        self.scaled_y = self.y
+        self.x = frequencies
+        self.dummy_data(calib_const=self.calb_const)
         return
 
     def add_ignore_freq(self, freq_start, freq_end):
@@ -530,8 +552,8 @@ class FFTGraphWindow(QtWidgets.QWidget):
 
     def calc_sens(self, freq_start=10, freq_end=100, ignore_freqs=False):
         if ignore_freqs == True:
-            freq_start = freq_start / 1e3  # convert khz to hz
-            freq_end = freq_end / 1e3  # convert khz to hz
+            freq_start = freq_start  # convert khz to hz
+            freq_end = freq_end # convert khz to hz
             ignore_freqs_range_idxs = []
 
             # clip frequency data to the selected range
@@ -544,8 +566,8 @@ class FFTGraphWindow(QtWidgets.QWidget):
             tail_end = np.arange(idx_max_end + 1, len(self.x), 1, dtype=int)
             for row in range(self.ignoreFrequencyList.rowCount()):
                 try:
-                    ignore_min_freq = (int(self.ignoreFrequencyList.item(row, 0).text())) / 1e3
-                    ignore_max_freq = (int(self.ignoreFrequencyList.item(row, 1).text())) / 1e3
+                    ignore_min_freq = (int(self.ignoreFrequencyList.item(row, 0).text()))
+                    ignore_max_freq = (int(self.ignoreFrequencyList.item(row, 1).text()))
                     idx_min = np.abs(self.x - ignore_min_freq).argmin()
                     idx_max = (np.abs(self.x - ignore_max_freq)).argmin()
                     idx_range = np.arange(idx_min, idx_max + 1, 1, dtype=int)
@@ -560,29 +582,22 @@ class FFTGraphWindow(QtWidgets.QWidget):
 
             mask = np.ones_like(self.x, dtype=bool)
             mask[ignore_freqs_range_idxs] = False
-            mean_sens = round(np.mean(self.y[mask]), 4)
+            mean_sens = round(np.mean(self.scaled_y[mask]), 4)
 
             self.meanSensLabel.setText(str(mean_sens))
         else:
-            mean_sens = round(np.mean(self.y), 4)
+            mean_sens = round(np.mean(self.scaled_y), 4)
             self.meanSensLabel.setText(str(mean_sens))
         # print(mean_sens) # mean sens value
 
-    def dummy_data(self, file_path, units="nT", calib_const=1, x_col=0, y_col=1):
+    def dummy_data(self, calib_const=1):
         calib_const = float(calib_const)
-        """plots dummy FFT data for demonstrating/debugging/feature testing"""
-        arr = np.loadtxt(file_path, delimiter=',')
-        self.x = arr[:, x_col]
-        self.y = arr[:, y_col]
-        if units == "dBu":
-            # converts dBu to nT/sqrt(Hz)
-            self.y = 0.775 * 10 ** (self.y / 20)
-            self.y = self.y / (23e-6 * calib_const)  # convert using calib_const (assumes units of V/MHz)
+        self.scaled_y = self.y
         try:
             self.fft_plot.clear()
         except:
             pass
-        self.fft_plot = self.graphWidget.plot(self.x, self.y)
+        self.fft_plot = self.graphWidget.plot(self.x, self.scaled_y)
         self.graphWidget.setLogMode(True, True)
         return
 

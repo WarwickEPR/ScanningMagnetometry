@@ -1,310 +1,131 @@
-# # Copyright 2018 Zurich Instruments AG
-#
-# """
-# Zurich Instruments LabOne Python API Example
-#
-# Python API Example for the Data Acquisition Module. This example demonstrates
-# how to record data from an instrument continuously (without triggering).
-# Record data continuously in 0.2 s chunks for 5 seconds using the Data Acquisition Module.
-#
-# Note:
-# This example does not perform any device configuration. If the streaming
-# nodes corresponding to the signal_paths are not enabled, no data will be
-# recorded.
-#
-# Requirements:
-#     * LabOne Version >= 20.02
-#     * Instruments:
-#         1 x Instrument with demodulators
-#     * feedback cable between Signal Output 1 and Signal Input 1
-#
-# Usage:
-#     example_data_acquisition_continuous.py [options] <device_id>
-#     example_data_acquisition_continuous.py -h | --help
-#
-# Arguments:
-#     <device_id>  The ID of the device [device_type: .*LI|.*IA|.*IS]
-#
-# Options:
-#     -h --help              Show this screen.
-#     -s --server_host IP    Hostname or IP address of the dataserver [default: localhost]
-#     -p --server_port PORT  Port number of the data server [default: None]
-#     --hf2                  Flag if the used device is an HF2 instrument. (Since the HF2 uses
-#                            a different data server and support only API level 1
-#                            it requires minor tweaking) [default = False]
-#     -a --filename FILE     If specified, additionally save the data to a directory
-#                            structure/filename specified by filename. [default: None]
-#     --no-plot              Hide plot of the recorded data.
-#
-# Raises:
-#     Exception     If the specified devices do not match the requirements.
-#     RuntimeError  If the devices is not "discoverable" from the API.
-#
-# See the LabOne Programming Manual for further help:
-# https://docs.zhinst.com/labone_programming_manual/
-# """
-#
-# import time
-# import numpy as np
-# import zhinst.utils
-# from zhinst.core import ziListEnum
-# # import matplotlib.pyplot as plt
-#
-#
-# def run_example(
-#     device_id: str,
-#     server_host: str = "192.168.70.166",
-#     server_port: int = None,
-#     hf2: bool = False,
-#     plot: bool = False,
-#     filename: str = "",
-# ):
-#     """run the example."""
-#
-#     apilevel_example = 1 if hf2 else 6  # The API level supported by this example.
-#     if not server_port:
-#         server_port = 8005 if hf2 else 8004
-#     # Call a zhinst utility function that returns:
-#     # - an API session `daq` in order to communicate with devices via the data server.
-#     # - the device ID string that specifies the device branch in the server's node hierarchy.
-#     # - the device's discovery properties.
-#     (daq, device, _) = zhinst.utils.create_api_session(
-#         device_id, apilevel_example, server_host=server_host, server_port=server_port
-#     )
-#     zhinst.utils.api_server_version_check(daq)
-#
-#     daq.set(f"/{device}/demods/0/enable", 1)
-#
-#     # The list of signal paths that we would like to record in the module.
-#     demod_path = f"/{device}/demods/0/sample"
-#     signal_paths = []
-#     signal_paths.append(demod_path + ".x")  # The demodulator X output.
-#     signal_paths.append(demod_path + ".y")  # The demodulator Y output.
-#     # It's also possible to add signals from other node paths:
-#     # signal_paths.append('/%s/demods/1/sample.r' % (device))
-#
-#     # Check the device has demodulators.
-#     flags = ziListEnum.recursive | ziListEnum.absolute | ziListEnum.streamingonly
-#     streaming_nodes = daq.listNodes(f"/{device}", flags)
-#     if demod_path not in (node.lower() for node in streaming_nodes):
-#         print(
-#             f"Device {device} does not have demodulators. Please modify the example to specify",
-#             "a valid signal_path based on one or more of the following streaming nodes: ",
-#             "\n".join(streaming_nodes),
-#         )
-#         raise Exception(
-#             "Demodulator streaming nodes unavailable - see the message above for more information."
-#         )
-#
-#     # Defined the total time we would like to record data for and its sampling rate.
-#     # total_duration: Time in seconds: This examples stores all the acquired data in the `data`
-#     # dict - remove this continuous storing in read_data_update_plot before increasing the size
-#     # of total_duration!
-#     total_duration = 5
-#     module_sampling_rate = 4026  # Number of points/second
-#     burst_duration = 0.2  # Time in seconds for each data burst/segment.
-#     num_cols = int(np.ceil(module_sampling_rate * burst_duration))
-#     num_bursts = int(np.ceil(total_duration / burst_duration))
-#
-#     # Create an instance of the Data Acquisition Module.
-#     daq_module = daq.dataAcquisitionModule()
-#
-#     # Configure the Data Acquisition Module.
-#     # Set the device that will be used for the trigger - this parameter must be set.
-#     daq_module.set("device", device)
-#
-#     # Specify continuous acquisition (type=0).
-#     daq_module.set("type", 6)
-#
-#     # 'grid/mode' - Specify the interpolation method of
-#     #   the returned data samples.
-#     #
-#     # 1 = Nearest. If the interval between samples on the grid does not match
-#     #     the interval between samples sent from the device exactly, the nearest
-#     #     sample (in time) is taken.
-#     #
-#     # 2 = Linear interpolation. If the interval between samples on the grid does
-#     #     not match the interval between samples sent from the device exactly,
-#     #     linear interpolation is performed between the two neighbouring
-#     #     samples.
-#     #
-#     # 4 = Exact. The subscribed signal with the highest sampling rate (as sent
-#     #     from the device) defines the interval between samples on the DAQ
-#     #     Module's grid. If multiple signals are subscribed, these are
-#     #     interpolated onto the grid (defined by the signal with the highest
-#     #     rate, "highest_rate"). In this mode, duration is
-#     #     read-only and is defined as num_cols/highest_rate.
-#     daq_module.set("grid/mode", 2)
-#     # 'count' - Specify the number of bursts of data the
-#     #   module should return (if endless=0). The
-#     #   total duration of data returned by the module will be
-#     #   count*duration.
-#     daq_module.set("count", num_bursts)
-#
-#     daq_module.set('triggernode', '/dev4521/demods/0/sample.TrigIn1')
-#     # 'duration' - Burst duration in seconds.
-#     #   If the data is interpolated linearly or using nearest neighbout, specify
-#     #   the duration of each burst of data that is returned by the DAQ Module.
-#     daq_module.set("duration", burst_duration)
-#     # 'grid/cols' - The number of points within each duration.
-#     #   This parameter specifies the number of points to return within each
-#     #   burst (duration seconds worth of data) that is
-#     #   returned by the DAQ Module.
-#     daq_module.set("grid/cols", num_cols)
-#
-#     if filename:
-#         # 'save/fileformat' - The file format to use for the saved data.
-#         #    0 - Matlab
-#         #    1 - CSV
-#         daq_module.set("save/fileformat", 1)
-#         # 'save/filename' - Each file will be saved to a
-#         # new directory in the Zurich Instruments user directory with the name
-#         # filename_NNN/filename_NNN/
-#         daq_module.set("save/filename", filename)
-#         # 'save/saveonread' - Automatically save the data
-#         # to file each time read() is called.
-#         daq_module.set("save/saveonread", 1)
-#
-#     data = {}
-#     # A dictionary to store all the acquired data.
-#     for signal_path in signal_paths:
-#         print("Subscribing to ", signal_path)
-#         daq_module.subscribe(signal_path)
-#         data[signal_path] = []
-#
-#     clockbase = float(daq.getInt(f"/{device}/clockbase"))
-#     if plot:
-#         fig, axis = plt.subplots()
-#         axis.set_xlabel("Time ($s$)")
-#         axis.set_ylabel("Subscribed signals")
-#         axis.set_xlim([0, total_duration])
-#         plt.ion()
-#
-#     ts0 = np.nan
-#     read_count = 0
-#
-#     def read_data_update_plot(data, timestamp0):
-#         """
-#         Read the acquired data out from the module and plot it. Raise an
-#         AssertionError if no data is returned.
-#         """
-#         data_read = daq_module.read(True)
-#         returned_signal_paths = [
-#             signal_path.lower() for signal_path in data_read.keys()
-#         ]
-#         progress = daq_module.progress()[0]
-#         # Loop over all the subscribed signals:
-#         for signal_path in signal_paths:
-#             if signal_path.lower() in returned_signal_paths:
-#                 # Loop over all the bursts for the subscribed signal. More than
-#                 # one burst may be returned at a time, in particular if we call
-#                 # read() less frequently than the burst_duration.
-#                 for index, signal_burst in enumerate(data_read[signal_path.lower()]):
-#                     if np.any(np.isnan(timestamp0)):
-#                         # Set our first timestamp to the first timestamp we obtain.
-#                         timestamp0 = signal_burst["timestamp"][0, 0]
-#                     # Convert from device ticks to time in seconds.
-#                     t = (signal_burst["timestamp"][0, :] - timestamp0) / clockbase
-#                     value = signal_burst["value"][0, :]
-#                     if plot:
-#                         axis.plot(t, value)
-#                     num_samples = len(signal_burst["value"][0, :])
-#                     dt = (
-#                         signal_burst["timestamp"][0, -1]
-#                         - signal_burst["timestamp"][0, 0]
-#                     ) / clockbase
-#                     data[signal_path].append(signal_burst)
-#                     print(
-#                         f"Read: {read_count}, progress: {100 * progress:.2f}%.",
-#                         f"Burst {index}: {signal_path} contains {num_samples} spanning {dt:.2f} s.",
-#                     )
-#             else:
-#                 # Note: If we read before the next burst has finished, there may be no new data.
-#                 # No action required.
-#                 pass
-#
-#         # Update the plot.
-#         if plot:
-#             axis.set_title(f"Progress of data acquisition: {100 * progress:.2f}%.")
-#             plt.pause(0.01)
-#             fig.canvas.draw()
-#         return data, timestamp0
-#
-#     # Start recording data.
-#     daq_module.execute()
-#
-#     # Record data in a loop with timeout.
-#     timeout = 1.5 * total_duration
-#     t0_measurement = time.time()
-#     # The maximum time to wait before reading out new data.
-#     t_update = 0.9 * burst_duration
-#     while not daq_module.finished():
-#         t0_loop = time.time()
-#         if time.time() - t0_measurement > timeout:
-#             raise Exception(
-#                 f"Timeout after {timeout} s - recording not complete."
-#                 "Are the streaming nodes enabled?"
-#                 "Has a valid signal_path been specified?"
-#             )
-#         data, ts0 = read_data_update_plot(data, ts0)
-#         read_count += 1
-#         # We don't need to update too quickly.
-#         time.sleep(max(0, t_update - (time.time() - t0_loop)))
-#
-#     # There may be new data between the last read() and calling finished().
-#     data, _ = read_data_update_plot(data, ts0)
-#
-#     # Before exiting, make sure that saving to file is complete (it's done in the background)
-#     # by testing the 'save/save' parameter.
-#     timeout = 1.5 * total_duration
-#     t0 = time.time()
-#     while daq_module.getInt("save/save") != 0:
-#         time.sleep(0.1)
-#         if time.time() - t0 > timeout:
-#             raise Exception(f"Timeout after {timeout} s before data save completed.")
-#
-#     if not plot:
-#         print("Please run with `plot` to see dynamic plotting of the acquired signals.")
-#
-#
-# if __name__ == "__main__":
-#     import sys
-#     from pathlib import Path
-#     run_example("dev4521")
-#     #
-#     # cli_util_path = Path(__file__).resolve().parent / "../../utils/python"
-#     # sys.path.insert(0, str(cli_util_path))
-#     # cli_utils = __import__("cli_utils")
-#     # cli_utils.run_commandline(run_example, __doc__)
-#     # sys.path.remove(str(cli_util_path))
-
 import numpy as np
-import zhinst.utils
+import time
+import zhinst.core
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+mpl.use('TkAgg')
 
-# Connect to the device
-daq = zhinst.utils.auto_connect()
+device_id = "dev4521" # Device serial number available on its rear panel.
+# interface = "1GbE" # For Ethernet connection or when MFLI/MFIA is connected to a remote Data Server.
+#interface = "USB" # For all instruments connected to the host computer via USB except MFLI/MFIA.
+interface = "PCIe" # For MFLI/MFIA devices in case the Data Server runs on the device.
 
-# Configure settings for the Lock-in Amplifier
-device_id = 'dev1234'  # Replace 'dev1234' with the actual device ID
-exp_setting = [
-    ('/%s/demods/0/enable' % device_id, 1),
-    ('/%s/demods/0/rate' % device_id, 1000),  # Set demodulator rate to 1 kHz
-    ('/%s/demods/0/trigger' % device_id, 0),  # Disable trigger
-    ('/%s/demods/0/oscselect' % device_id, 0),  # Select oscillator 0
-    ('/%s/demods/0/fft/enable' % device_id, 1),  # Enable FFT
-    ('/%s/demods/0/fft/length' % device_id, 2048),  # Set FFT length
-]
+server_host = "192.168.70.166"
+server_port = 8004
+#server_port = 8005 # Default port for HF2LI.
+api_level = 6 # Maximum API level supported for all instruments except HF2LI.
+#api_level = 1 # Maximum API level supported for HF2LI.
 
-daq.set(exp_setting)
+# Create an API session to the Data Server.
+daq = zhinst.core.ziDAQServer(server_host, server_port, api_level)
+# Establish a connection between Data Server and Device.
+daq.connectDevice(device_id, interface)
 
-# Initialize variables
-num_ffts = 10
-fft_data = np.zeros((num_ffts, 2048), dtype=np.complex128)
 
-# Perform 10 FFTs and store the results
-for i in range(num_ffts):
-    data = daq.poll('/%s/demods/0/sample' % device_id)
-    fft_data[i] = data['x'] + 1j * data['y']
+daq.set(f"/{device_id}/demods/0/enable", 1)
 
-# Take the average of the FFT data
-average_fft = np.mean(fft_data, axis=0)
+
+
+demod_path = f"/{device_id}/demods/0/sample"
+signal_paths = []
+signal_paths.append(demod_path + ".x.fft.abs")  # The demodulator X output.
+
+total_duration = 5  # Time in seconds for the aquisition.
+module_sampling_rate = 30000  # Number of points/second.
+burst_duration = 0.2  # Time in seconds for each data burst/segment.
+num_cols = int(np.ceil(module_sampling_rate * burst_duration))
+num_bursts = int(np.ceil(total_duration / burst_duration))
+
+daq_module = daq.dataAcquisitionModule()
+daq_module.set("device", device_id)
+
+# Specify continuous acquisition. (continuous = 0)
+daq_module.set("type", "continuous")
+# 'grid/mode' - Specify the interpolation method of the returned data samples.
+# (use ``daq_module.help("grid/mode")`` to se the available options)
+# (linear = 2)
+daq_module.set("grid/mode", "linear")
+# 'count' - Specify the number of bursts of data the
+#   module should return (if endless=0). The
+#   total duration of data returned by the module will be
+#   count*duration.
+daq_module.set("count", num_bursts)
+# 'duration' - Burst duration in seconds.
+#   If the data is interpolated linearly or using nearest neighbor, specify
+#   the duration of each burst of data that is returned by the DAQ Module.
+daq_module.set("duration", burst_duration)
+# 'grid/cols' - The number of points within each duration.
+#   This parameter specifies the number of points to return within each
+#   burst (duration seconds worth of data) that is
+#   returned by the DAQ Module.
+daq_module.set("grid/cols", num_cols)
+
+
+data = {}
+for signal_path in signal_paths:
+    print("Subscribing to ", signal_path)
+    daq_module.subscribe(signal_path)
+    data[signal_path] = []
+
+do_plot = True
+
+clockbase = float(daq.getInt(f"/{device_id}/clockbase"))
+if do_plot:
+    timestamp0 = None
+    max_value = None
+    min_value = None
+    fig, axis = plt.subplots()
+    axis.set_xlabel("Time (s)")
+    axis.set_ylabel("Subscribed signals")
+    axis.set_xlim([0, total_duration])
+    lines = [axis.plot([], [], label=path)[0] for path in signal_paths]
+    axis.legend()
+    axis.set_title("Continuous Data Acquisition")
+    plt.ion()
+
+
+def process_data(raw_data):
+    global timestamp0, lines, max_value, min_value
+    for i, signal_path in enumerate(signal_paths):
+        # Loop over all the bursts for the subscribed signal. More than
+        # one burst may be returned at a time, in particular if we call
+        # read() less frequently than the burst_duration.
+        for signal_burst in raw_data.get(signal_path.lower(), []):
+            # Convert from device ticks to time in seconds.
+            value = signal_burst["value"][0, :]
+            data[signal_path].append(value)
+            if do_plot:
+                max_value = max(max_value, max(value)) if max_value else max(value)
+                min_value = min(min_value, min(value)) if min_value else min(value)
+                axis.set_ylim(min_value, max_value)
+                timestamp0 = (
+                    timestamp0 if timestamp0 else signal_burst["timestamp"][0, 0]
+                )
+                t = (signal_burst["timestamp"][0, :] - timestamp0) / clockbase
+                lines[i].set_data(
+                    np.concatenate((lines[i].get_xdata(), t), axis=0),
+                    np.concatenate((lines[i].get_ydata(), value), axis=0),
+                )
+    if do_plot:
+        fig.canvas.draw()
+
+# Start recording data.
+daq_module.execute()
+# Record data in a loop with timeout.
+timeout = 1.5 * total_duration
+start = time.time()
+
+while not daq_module.finished():
+    t0_loop = time.time()
+    if time.time() - start > timeout:
+        raise Exception(
+            f"Timeout after {timeout} s - recording not complete."
+            "Are the streaming nodes enabled?"
+            "Has a valid signal_path been specified?"
+        )
+    raw_data = daq_module.read(True)
+    process_data(raw_data)
+    time.sleep(max(0, burst_duration - (time.time() - t0_loop)))
+# There may be new data between the last read() and calling finished().
+raw_data = daq_module.read(True)
+process_data(raw_data)
