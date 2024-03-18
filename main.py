@@ -398,45 +398,52 @@ class LIAControl:
         return
 
     def setup_fft(self):
+        self.scaling_Factor = int(window.scalingFactorSpinBox.value())
+        demod_select = 0
+        range = int(window.rangeSelect.currentText())
+        imp_fifty = int(window.fiftyOhmCheck.isChecked())
+        ac_coupled = int(window.acCoupleCheck.isChecked())
         in_channel = 0
         demod_index = 1
-        demod_rate = 10e3
-        time_constant = 600e-6  # ~80hz
+        harmonic_order = int(window.harmonicOrderSelect.currentText())
+        time_constant = float(window.timeConstantSpinBox.value())  # ~80hz
         exp_setting = [
-            ["/%s/sigins/%d/ac" % (self.device, in_channel), 1],  # ac coupling on/off
-            ["/%s/sigins/%d/imp50" % (self.device, in_channel), 0],  # 50 ohm impednecne on/off
-            ["/%s/sigins/%d/range" % (self.device, in_channel), 3],  # set signal in range
+            ["/%s/sigins/%d/ac" % (self.device, in_channel), ac_coupled],  # ac coupling on/off
+            ["/%s/sigins/%d/imp50" % (self.device, in_channel), imp_fifty],  # 50 ohm impednecne on/off
+            ["/%s/sigins/%d/range" % (self.device, in_channel), range],  # set signal in range
             ["/%s/demods/%d/enable" % (self.device, demod_index), 1],  # enable data transfer
-            ["/%s/demods/%d/rate" % (self.device, demod_index), demod_rate],
             # set data transfer rate from demod to data server
             ["/%s/demods/%d/adcselect" % (self.device, 0), 0],  # set demodulator 1's input to signal in 1
-            ["/%s/demods/%d/adcselect" % (self.device, 1), 8],
-            # select the input channel #select auxin1 as demodulator 2's input
-            ["/%s/demods/%d/order" % (self.device, demod_index), 8],  # set filter order to 8th order
+            ["/%s/demods/%d/adcselect" % (self.device, 1), 8], #select auxin1 as demodulator 2's input
+            ["/%s/demods/%d/order" % (self.device, demod_index), harmonic_order],  # set filter order to 8th order
             ["/%s/demods/%d/timeconstant" % (self.device, demod_index), time_constant],
             # sets low pass filter timeconstant ~ 3db filter freq.
             ["/%s/demods/%d/harmonic" % (self.device, demod_index), 1],  # set mod harmonic to be 1st harmonic
             ["/%s/extrefs/%d/enable" % (self.device, in_channel), 1],  # sets ext ref to be aux in 1
-            ["/%s/auxouts/%d/outputselect" % (self.device, 0), 0],  # set output to be demod x (0) or demod y (1)
+            ["/%s/auxouts/%d/outputselect" % (self.device, 0), demod_select],  # set output to be demod x (0) or demod y (1)
         ]
         self.daq.set(exp_setting)
         self.daq.set(f"/{self.device}/demods/0/enable", 1)
         self.daq.set(f"/{self.device}/demods/1/enable", 1)
-        self.daq.set("/%s/auxouts/%d/scale" % (self.device, 0), 750),
+        self.daq.set("/%s/auxouts/%d/scale" % (self.device, 0), self.scaling_Factor),
         clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
 
         demod_path = f"/{self.device}/demods/0/sample"
         self.signal_paths = []
         self.signal_paths.append(demod_path + ".x.fft.abs.avg")
 
+        count = int(window.fftAverageSpinBox.value())
+        self.fft_duration = int(window.fftDurationSpinBox.value())
+        cols = int(window.sampleRateSpinBox.value())
+
         self.daq_module = self.daq.dataAcquisitionModule()
         self.daq_module.set("device", self.device)
         # Specify continuous acquisition (type=0).
         self.daq_module.set("type", 0)
         self.daq_module.set("grid/mode", 2)
-        self.daq_module.set("count", 10)
-        self.daq_module.set("duration", 1)
-        self.daq_module.set("grid/cols", 2048)
+        self.daq_module.set("count", count)
+        self.daq_module.set("duration", self.fft_duration)
+        self.daq_module.set("grid/cols", cols)
 
         self.data = {}
         # A dictionary to store all the acquired data.
@@ -475,7 +482,7 @@ class FFTGraphWindow(QtWidgets.QWidget):
         self.x = None
         self.y = None
         self.scaled_y = None
-        self.calb_const = 1
+        self.calib_const = 1
 
         self.calcSensButton.clicked.connect(lambda: self.calc_sens(freq_start=self.minFreqSpinBox.value(),
                                                                    freq_end=self.maxFreqSpinBox.value(),
@@ -533,14 +540,14 @@ class FFTGraphWindow(QtWidgets.QWidget):
         window.LIAController.daq_module.unsubscribe('*')
 
         self.worker_running = False
-        avg_sample = ((np.sum(self.samples, axis=0)) / 10) * 750
+        avg_sample = ((np.sum(self.samples, axis=0)) / 10) * window.LIAController.scaling_Factor
         bin_count = len(avg_sample)
         frequencies = np.arange(0, bin_count)
-        amplitude_spectral_density = (avg_sample * np.sqrt(1)) * (1/(28e-6 * 0.6))
+        amplitude_spectral_density = (avg_sample * np.sqrt(window.LIAController.fft_duration)) * (1/(28e-6 * self.calib_const))
         self.y = amplitude_spectral_density
         self.scaled_y = self.y
         self.x = frequencies
-        self.dummy_data(calib_const=self.calb_const)
+        self.dummy_data(calib_const=self.calib_const)
         return
 
     def add_ignore_freq(self, freq_start, freq_end):
@@ -591,7 +598,6 @@ class FFTGraphWindow(QtWidgets.QWidget):
         # print(mean_sens) # mean sens value
 
     def dummy_data(self, calib_const=1):
-        calib_const = float(calib_const)
         self.scaled_y = self.y
         try:
             self.fft_plot.clear()
