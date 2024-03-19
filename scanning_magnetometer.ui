@@ -29,7 +29,7 @@
        <enum>QTabWidget::Rounded</enum>
       </property>
       <property name="currentIndex">
-       <number>2</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="stage_control">
        <attribute name="title">
@@ -132,8 +132,11 @@
            <height>22</height>
           </rect>
          </property>
+         <property name="minimum">
+          <double>80.000000000000000</double>
+         </property>
          <property name="maximum">
-          <double>250.000000000000000</double>
+          <double>200.000000000000000</double>
          </property>
         </widget>
         <widget class="QLabel" name="label_12">
@@ -158,8 +161,11 @@
            <height>22</height>
           </rect>
          </property>
+         <property name="minimum">
+          <double>30.000000000000000</double>
+         </property>
          <property name="maximum">
-          <double>250.000000000000000</double>
+          <double>200.000000000000000</double>
          </property>
         </widget>
         <widget class="QLabel" name="label">
@@ -1626,7 +1632,7 @@
           </rect>
          </property>
          <property name="text">
-          <string>Harmonic Order</string>
+          <string>Filter Order</string>
          </property>
         </widget>
         <widget class="QSpinBox" name="fftAverageSpinBox">
