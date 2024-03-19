@@ -366,7 +366,7 @@
           <string>Start Scan</string>
          </property>
         </widget>
-        <widget class="QDoubleSpinBox" name="doubleSpinBox">
+        <widget class="QDoubleSpinBox" name="xStartSpinBox">
          <property name="geometry">
           <rect>
            <x>60</x>
@@ -376,7 +376,7 @@
           </rect>
          </property>
         </widget>
-        <widget class="QDoubleSpinBox" name="doubleSpinBox_2">
+        <widget class="QDoubleSpinBox" name="yStartSpinBox">
          <property name="geometry">
           <rect>
            <x>190</x>
@@ -458,7 +458,7 @@
           <set>Qt::AlignCenter</set>
          </property>
         </widget>
-        <widget class="QDoubleSpinBox" name="doubleSpinBox_3">
+        <widget class="QDoubleSpinBox" name="xEndSpinBox">
          <property name="geometry">
           <rect>
            <x>60</x>
@@ -492,7 +492,7 @@
           <set>Qt::AlignCenter</set>
          </property>
         </widget>
-        <widget class="QDoubleSpinBox" name="doubleSpinBox_4">
+        <widget class="QDoubleSpinBox" name="yEndSpinBox">
          <property name="geometry">
           <rect>
            <x>190</x>
@@ -502,7 +502,7 @@
           </rect>
          </property>
         </widget>
-        <widget class="QDoubleSpinBox" name="doubleSpinBox_5">
+        <widget class="QDoubleSpinBox" name="yStepSpinBox">
          <property name="geometry">
           <rect>
            <x>190</x>
@@ -536,7 +536,7 @@
           <set>Qt::AlignCenter</set>
          </property>
         </widget>
-        <widget class="QDoubleSpinBox" name="doubleSpinBox_6">
+        <widget class="QDoubleSpinBox" name="xStepSpinBox">
          <property name="geometry">
           <rect>
            <x>60</x>
