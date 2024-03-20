@@ -712,7 +712,7 @@
           <string>Avg. Time (S)</string>
          </property>
         </widget>
-        <widget class="QDoubleSpinBox" name="doubleSpinBox">
+        <widget class="QDoubleSpinBox" name="scanAveragingTimeSpinBox">
          <property name="geometry">
           <rect>
            <x>100</x>
