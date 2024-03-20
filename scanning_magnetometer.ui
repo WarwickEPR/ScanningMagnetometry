@@ -676,9 +676,9 @@
         <widget class="QCheckBox" name="feedbackToggle">
          <property name="geometry">
           <rect>
-           <x>210</x>
-           <y>150</y>
-           <width>121</width>
+           <x>203</x>
+           <y>110</y>
+           <width>120</width>
            <height>22</height>
           </rect>
          </property>
@@ -689,14 +689,46 @@
         <widget class="QCheckBox" name="scanAveragingToggle">
          <property name="geometry">
           <rect>
-           <x>210</x>
-           <y>180</y>
+           <x>202</x>
+           <y>141</y>
            <width>121</width>
            <height>22</height>
           </rect>
          </property>
          <property name="text">
-          <string>Averaging</string>
+          <string>Averaging On/Off</string>
+         </property>
+        </widget>
+        <widget class="QLabel" name="label_28">
+         <property name="geometry">
+          <rect>
+           <x>18</x>
+           <y>142</y>
+           <width>81</width>
+           <height>20</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>Avg. Time (S)</string>
+         </property>
+        </widget>
+        <widget class="QDoubleSpinBox" name="doubleSpinBox">
+         <property name="geometry">
+          <rect>
+           <x>100</x>
+           <y>140</y>
+           <width>91</width>
+           <height>25</height>
+          </rect>
+         </property>
+         <property name="maximum">
+          <double>100.000000000000000</double>
+         </property>
+         <property name="singleStep">
+          <double>0.100000000000000</double>
+         </property>
+         <property name="value">
+          <double>0.100000000000000</double>
          </property>
         </widget>
        </widget>
