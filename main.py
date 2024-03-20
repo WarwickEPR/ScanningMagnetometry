@@ -922,6 +922,10 @@ class scanningImageWindow(QtWidgets.QWidget):
         self.feedback = window.feedbackToggle.isChecked()
         self.scan_averaging = window.scanAveragingToggle.isChecked()
 
+        if self.vector:
+            window.feedbackToggle.setChecked(True)
+            window.feedbackToggle.setCheckable(False)
+
         #check rf, lia and printer connections
         if not window.rfController.rf_connected or not window.LIAController.LIA_connected or not window.stageController.stage_connected:
             window.show_error_message_txt("Check RF, LIA and Printer connections")
@@ -931,8 +935,16 @@ class scanningImageWindow(QtWidgets.QWidget):
             window.show_error_message_txt("Wait for ODMR or FFT to finish before starting scan")
             return
 
+        def setup_scan():
+            if self.vector:
+                pass
+            if self.feedback:
+                pass
+            if self.scan_averaging:
+                pass
 
-    def
+
+
 
         # #this is just for testing purposes, do not use when plotting real data
         # self.dummy_data = np.loadtxt("example_data\example_2d_scan_data.csv", ndmin=2, delimiter=",")
