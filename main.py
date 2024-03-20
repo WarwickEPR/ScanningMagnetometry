@@ -97,6 +97,15 @@ class MainUI(QtWidgets.QMainWindow):
         error_dialog.showMessage(str(text))
         return
 
+    def show_message(self):
+        ret = QtWidgets.QMessageBox()
+        ret.setText("Has the printed finished homing?")
+        ret.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No)
+        reply = ret.exec()
+        if reply == QtWidgets.QMessageBox.StandardButton.Yes:
+            print('yes')
+        print('going')
+
 class stageControl:
     def __init__(self):
         super(stageControl, self).__init__()
@@ -149,9 +158,9 @@ class stageControl:
     def get_stage_pos(self):
         try:
             response = self.read_gcode('M114')
-
             response = response.decode("utf-8").split()  # response[0] = xPos in mm, [1] = yPos, [2] = zPos
             xPos, yPos, zPos = response[0], response[1], response[2]
+            print(xPos)
             window.currentXLabel.setText(xPos)
             window.currentYLabel.setText(yPos)
             window.currentHeightLabel.setText(zPos)
@@ -914,13 +923,20 @@ class scanningImageWindow(QtWidgets.QWidget):
         uic.loadUi('scanningWindow.ui', self)  # Load the .ui file
         self.show()
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
+        self.stageControl = window.stageController
 
 
         self.xCoords = np.arange(window.xStartSpinBox.value(), (window.xEndSpinBox.value() + window.xStepSpinBox.value()), window.xStepSpinBox.value())
         self.yCoords = np.arange(window.yStartSpinBox.value(), (window.yEndSpinBox.value() + window.xStepSpinBox.value()), window.yStepSpinBox.value())
+        self.xStep = window.xStepSpinBox.value()
+        self.yStep = window.yStepSpinBox.value()
         self.vector = window.vectorRadio.isChecked()
         self.feedback = window.feedbackToggle.isChecked()
         self.scan_averaging = window.scanAveragingToggle.isChecked()
+
+
+        # self.setup_scan()
+        self.thread_function(self.setup_scan, err_fn=window.show_error_message)
 
         if self.vector:
             window.feedbackToggle.setChecked(True)
@@ -935,13 +951,76 @@ class scanningImageWindow(QtWidgets.QWidget):
             window.show_error_message_txt("Wait for ODMR or FFT to finish before starting scan")
             return
 
-        def setup_scan():
-            if self.vector:
-                pass
-            if self.feedback:
-                pass
-            if self.scan_averaging:
-                pass
+    def thread_function(self, fn, *args, **kwargs):
+        self.worker = Worker(fn, args, kwargs)
+        """connect up the results signal to print the result it emits when triggered"""
+        if 'fin_fn' in kwargs:
+            pass
+            # self.worker.signals.results.connect(self.print_this)
+        if 'prg_fn' in kwargs:
+            pass
+            # self.worker.signals.progress.connect(self.progress_fn)
+        if 'err_fn' in kwargs:
+            self.worker.signals.error.connect(kwargs['err_fn'])
+        window.threadpool.start(self.worker)
+
+    def setup_scan(self, *args, **kwargs):
+
+        self.stageControl.execute_gcode('G28') #home stage
+        homing = True
+        while homing == True:
+        # self.stageControl.execute_gcode('M400')
+            response = self.stageControl.read_gcode('M114')
+            response = response.decode("utf-8").split()
+            if response[0] != 'echo:busy:':
+                homing = False
+        print('homing done')
+        return
+        # time.sleep(25)
+        # self.stageControl.set_stage_pos(window.xStartSpinBox.value(), window.yStartSpinBox.value())
+        # time.sleep(10)
+        # self.thread_function(self.scan_no_vector, scan_time = 1, err_fn=window.show_error_message)
+        # #if scalar
+        # if not self.vector:
+        #     pass
+        # #if scalar with feedback
+        # if not self.vector and self.feedback:
+        #     pass
+        # #if vector
+        # elif self.vector:
+        #     pass
+
+    def scan_no_vector(self, args, kwargs):
+        scan_time = kwargs['scan_time']
+        x_positions = self.xCoords
+        y_positions = self.yCoords
+        voltageArr = np.zeros([1, len(y_positions), len(x_positions)])
+        print('The Scan has started. If the printer is not ready,'
+              'exit program and increase the waiting time.')
+        j = 0  # xpos
+        totalSize = len(x_positions) * len(y_positions)
+        for idx, y_position in enumerate(y_positions, 2):
+            i = len(x_positions) - 1
+            for x_position in x_positions:
+                timeStart = time.time()
+                ts = time.time()
+                totalSize -= 1
+                print(f'\nx = {x_position} mm, y = {y_position} mm', i, j)
+                self.stageControl.set_stage_pos(x_position, y_position)
+                time.sleep(scan_time)
+                sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
+                voltageArr[0, j, i] = sample['x'][0] * 1000
+                self.imageWidget.setImage(voltageArr)
+                i = i - 1
+                te = time.time()
+                eta = (te - ts) * totalSize
+                print(time.ctime(int(timeStart + eta)))
+            j += 1
+            self.stageControl.set_stage_pos(x_positions[0], y_position)
+            time.sleep(3)
+        print('Scan completed. Resetting printer.')
+        time.sleep(1)
+        return 0, 0, voltageArr, 0
 
 
 
