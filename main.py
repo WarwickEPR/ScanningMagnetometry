@@ -87,15 +87,21 @@ class MainUI(QtWidgets.QMainWindow):
             error_dialog.exec()
         return
 
-    def show_error_message(self, text):
+    def show_error_message(self, error):
         error_dialog = QtWidgets.QErrorMessage(self)
-        error_dialog.showMessage(str(text[1]))
+        error_dialog.showMessage(str(error[1]))
+        return
+
+    def show_error_message_txt(self, text):
+        error_dialog = QtWidgets.QErrorMessage(self)
+        error_dialog.showMessage(str(text))
         return
 
 class stageControl:
     def __init__(self):
         super(stageControl, self).__init__()
         self.ser = None
+        self.stage_connected = False
         return
 
     def execute_gcode(self, command):
@@ -109,6 +115,7 @@ class stageControl:
             self.ser.write(f'{command}\r\n'.encode())
             response = self.ser.readline()
             self.ser.readline()  # clears next line
+
         except Exception as error:
             error_dialog = QtWidgets.QErrorMessage(window)
             error_dialog.showMessage(str(error))
@@ -121,9 +128,11 @@ class stageControl:
             msg = QtWidgets.QMessageBox(window)
             msg.setText("Connected Successful to: " + str(com_port))
             msg.exec()
+            self.stage_connected = True
         except Exception as error:
             error_dialog = QtWidgets.QErrorMessage(window)
             error_dialog.showMessage(str(error))
+            self.stage_connected = False
 
     def home_stage(self):
         self.execute_gcode('G28')  # home gcode
@@ -174,6 +183,7 @@ class RfControl:
         super(RfControl, self).__init__()
         self.mw_power_on = False
         self.mod_on = False
+        self.rf_connected = False
 
     def thread_function(self, fn, *args, **kwargs):
         self.worker = Worker(fn, args, kwargs)
@@ -215,6 +225,7 @@ class RfControl:
         self.inst.write('FM:STAT ON')
         self.inst.write('OUTP:MOD:STAT ON')
         window.toggleModOnOff.setChecked(True)
+        self.rf_connected = True
         return
 
     def power_on_off(self, state):
@@ -276,6 +287,7 @@ class RfControl:
 
     def setup_sweep(self, *args, **kwargs):
         self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
+        window.LIAController.odmr_sweep = True
         self.start_freq = args[0][0]  # Start frequency in Hz (e.g., 1 GHz)
         self.stop_freq = args[0][1]  # Stop frequency in Hz (e.g., 2 GHz)
         num_points = args[0][2]  # Number of frequency points
@@ -300,6 +312,7 @@ class RfControl:
         sweeping = True
         read_count = 0
         window.LIAController.daq_module.execute()
+
         # Record data in a loop with timeout.
         self.samples = []
         temp_x = []
@@ -329,11 +342,15 @@ class RfControl:
         #stop aquisition and unsub from module
         window.LIAController.daq_module.finish()
         window.LIAController.daq_module.unsubscribe('*')
+        window.LIAController.odmr_sweep = False
         return
 
 class LIAControl:
     def __init__(self):
         super(LIAControl, self).__init__()
+        self.LIA_connected = False
+        self.odmr_sweep = False
+        self.fft_sweep = False
         return
 
     def thread_function(self, fn, *args, **kwargs):
@@ -360,6 +377,8 @@ class LIAControl:
         zhinst.utils.api_server_version_check(self.daq)
         self.daq.set(f"/{self.device}/demods/0/enable", 1)
         self.clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
+
+        self.LIA_connected = True
 
         # self.demod_path = f"/{self.device}/demods/0/sample"
         # self.signal_paths = []
@@ -405,7 +424,7 @@ class LIAControl:
         ac_coupled = int(window.acCoupleCheck.isChecked())
         in_channel = 0
         demod_index = 1
-        harmonic_order = int(window.harmonicOrderSelect.currentText())
+        filter_order = int(window.harmonicOrderSelect.currentText())
         time_constant = float(window.timeConstantSpinBox.value())  # ~80hz
         exp_setting = [
             ["/%s/sigins/%d/ac" % (self.device, in_channel), ac_coupled],  # ac coupling on/off
@@ -415,7 +434,7 @@ class LIAControl:
             # set data transfer rate from demod to data server
             ["/%s/demods/%d/adcselect" % (self.device, 0), 0],  # set demodulator 1's input to signal in 1
             ["/%s/demods/%d/adcselect" % (self.device, 1), 8], #select auxin1 as demodulator 2's input
-            ["/%s/demods/%d/order" % (self.device, demod_index), harmonic_order],  # set filter order to 8th order
+            # set filter order to 8th order
             ["/%s/demods/%d/timeconstant" % (self.device, demod_index), time_constant],
             # sets low pass filter timeconstant ~ 3db filter freq.
             ["/%s/demods/%d/harmonic" % (self.device, demod_index), 1],  # set mod harmonic to be 1st harmonic
@@ -425,14 +444,16 @@ class LIAControl:
         self.daq.set(exp_setting)
         self.daq.set(f"/{self.device}/demods/0/enable", 1)
         self.daq.set(f"/{self.device}/demods/1/enable", 1)
-        self.daq.set("/%s/auxouts/%d/scale" % (self.device, 0), self.scaling_Factor),
+        self.daq.set("/%s/demods/%d/harmonic" % (self.device, demod_index), 1)
+        self.daq.set("/%s/auxouts/%d/scale" % (self.device, 0), self.scaling_Factor)
+        self.daq.set("/%s/demods/%d/order" % (self.device, demod_index), filter_order)
         clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
 
         demod_path = f"/{self.device}/demods/0/sample"
         self.signal_paths = []
         self.signal_paths.append(demod_path + ".x.fft.abs.avg")
 
-        count = int(window.fftAverageSpinBox.value())
+        self.count = int(window.fftAverageSpinBox.value())
         self.fft_duration = int(window.fftDurationSpinBox.value())
         cols = int(window.sampleRateSpinBox.value())
 
@@ -441,7 +462,7 @@ class LIAControl:
         # Specify continuous acquisition (type=0).
         self.daq_module.set("type", 0)
         self.daq_module.set("grid/mode", 2)
-        self.daq_module.set("count", count)
+        self.daq_module.set("count", self.count)
         self.daq_module.set("duration", self.fft_duration)
         self.daq_module.set("grid/cols", cols)
 
@@ -515,6 +536,7 @@ class FFTGraphWindow(QtWidgets.QWidget):
 
     def take_fft(self, *args, **kwargs):
         self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
+        window.LIAController.fft_sweep = True
         window.LIAController.setup_fft()
         window.LIAController.daq_module.execute()
         self.samples = []
@@ -540,7 +562,7 @@ class FFTGraphWindow(QtWidgets.QWidget):
         window.LIAController.daq_module.unsubscribe('*')
 
         self.worker_running = False
-        avg_sample = ((np.sum(self.samples, axis=0)) / 10) * window.LIAController.scaling_Factor
+        avg_sample = ((np.sum(self.samples, axis=0)) / window.LIAController.count) * window.LIAController.scaling_Factor
         bin_count = len(avg_sample)
         frequencies = np.arange(0, bin_count)
         amplitude_spectral_density = (avg_sample * np.sqrt(window.LIAController.fft_duration)) * (1/(28e-6 * self.calib_const))
@@ -548,6 +570,7 @@ class FFTGraphWindow(QtWidgets.QWidget):
         self.scaled_y = self.y
         self.x = frequencies
         self.dummy_data(calib_const=self.calib_const)
+        window.LIAController.fft_sweep = False
         return
 
     def add_ignore_freq(self, freq_start, freq_end):
@@ -558,6 +581,7 @@ class FFTGraphWindow(QtWidgets.QWidget):
         return
 
     def calc_sens(self, freq_start=10, freq_end=100, ignore_freqs=False):
+        self.calib_const = float(self.odmrGradientSpinBox.value())
         if ignore_freqs == True:
             freq_start = freq_start  # convert khz to hz
             freq_end = freq_end # convert khz to hz
@@ -891,17 +915,36 @@ class scanningImageWindow(QtWidgets.QWidget):
         self.show()
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
 
-        #this is just for testing purposes, do not use when plotting real data
-        self.dummy_data = np.loadtxt("example_data\example_2d_scan_data.csv", ndmin=2, delimiter=",")
-        self.data = np.zeros([np.size(self.dummy_data, 0), np.size(self.dummy_data, 1)])
-        self.i = 0
-        self.j = 0
+
+        self.xCoords = np.arange(window.xStartSpinBox.value(), (window.xEndSpinBox.value() + window.xStepSpinBox.value()), window.xStepSpinBox.value())
+        self.yCoords = np.arange(window.yStartSpinBox.value(), (window.yEndSpinBox.value() + window.xStepSpinBox.value()), window.yStepSpinBox.value())
+        self.vector = window.vectorRadio.isChecked()
+        self.feedback = window.feedbackToggle.isChecked()
+        self.scan_averaging = window.scanAveragingToggle.isChecked()
+
+        #check rf, lia and printer connections
+        if not window.rfController.rf_connected or not window.LIAController.LIA_connected or not window.stageController.stage_connected:
+            window.show_error_message_txt("Check RF, LIA and Printer connections")
+            return
+
+        if window.LIAController.fft_sweep or window.LIAController.odmr_sweep:
+            window.show_error_message_txt("Wait for ODMR or FFT to finish before starting scan")
+            return
+
+
+    def
+
+        # #this is just for testing purposes, do not use when plotting real data
+        # self.dummy_data = np.loadtxt("example_data\example_2d_scan_data.csv", ndmin=2, delimiter=",")
+        # self.data = np.zeros([np.size(self.dummy_data, 0), np.size(self.dummy_data, 1)])
+        # self.i = 0
+        # self.j = 0
 
         # self.dummy_data()
-        self.timer = QtCore.QTimer(self)  # time to trigger replot of image for testing purposes,
-        self.timer.setInterval(10)
-        self.timer.timeout.connect(lambda: self.update_plot(self.data))
-        self.timer.start()
+        # self.timer = QtCore.QTimer(self)  # time to trigger replot of image for testing purposes,
+        # self.timer.setInterval(10)
+        # self.timer.timeout.connect(lambda: self.update_plot(self.data))
+        # self.timer.start()
         #  in real life the replot will be triggered when the stage moves
         #  and takes a data point
 
