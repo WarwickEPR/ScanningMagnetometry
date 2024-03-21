@@ -967,19 +967,21 @@ class scanningImageWindow(QtWidgets.QWidget):
     def setup_scan(self, *args, **kwargs):
 
         self.stageControl.execute_gcode('G28') #home stage
-        homing = True
-        while homing == True:
-        # self.stageControl.execute_gcode('M400')
+        moving = True
+        while moving == True:
             response = self.stageControl.read_gcode('M114')
             response = response.decode("utf-8").split()
             if response[0] != 'echo:busy:':
-                homing = False
-        print('homing done')
+                moving = False
+                print('finished')
+
+        self.stageControl.set_stage_pos(window.xStartSpinBox.value(), window.yStartSpinBox.value())
+
         return
         # time.sleep(25)
-        # self.stageControl.set_stage_pos(window.xStartSpinBox.value(), window.yStartSpinBox.value())
+
         # time.sleep(10)
-        # self.thread_function(self.scan_no_vector, scan_time = 1, err_fn=window.show_error_message)
+        self.thread_function(self.scan_no_vector, scan_time = 1, err_fn=window.show_error_message)
         # #if scalar
         # if not self.vector:
         #     pass
@@ -1063,7 +1065,7 @@ class Worker(QtCore.QRunnable):
         self.signals = WorkerSignals()
         print()
         #add callback to kwargs
-        # self.kwargs['progress_callback'] = self.signals.progress
+        self.kwargs['progress_callback'] = self.signals.progress
     @QtCore.pyqtSlot()
     def run(self):
         try:
