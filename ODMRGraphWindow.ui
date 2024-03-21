@@ -173,7 +173,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QDoubleSpinBox" name="peakHeightDoubleSpinBox">
+          <widget class="QDoubleSpinBox" name="peakHeightSpinBox">
            <property name="font">
             <font>
              <bold>true</bold>
@@ -244,7 +244,7 @@
           </widget>
          </item>
          <item>
-          <widget class="QDoubleSpinBox" name="peakPromDoubleSpinBox">
+          <widget class="QDoubleSpinBox" name="peakPromSpinBox">
            <property name="font">
             <font>
              <bold>true</bold>
