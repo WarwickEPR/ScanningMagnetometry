@@ -458,6 +458,8 @@ class LIAControl:
         self.daq.set("/%s/demods/%d/order" % (self.device, demod_index), filter_order)
         clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
 
+
+
         demod_path = f"/{self.device}/demods/0/sample"
         self.signal_paths = []
         self.signal_paths.append(demod_path + ".x.fft.abs.avg")
@@ -920,27 +922,30 @@ class scanningImageWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         super(scanningImageWindow, self).__init__()  # Call the inherited classes __init__ method
+        self.res_grad = None
+        self.res_freq = None
+        self.dV = None
+        self.df = None
         uic.loadUi('scanningWindow.ui', self)  # Load the .ui file
         self.show()
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
         self.stageControl = window.stageController
 
 
-        self.xCoords = np.arange(window.xStartSpinBox.value(), (window.xEndSpinBox.value() + window.xStepSpinBox.value()), window.xStepSpinBox.value())
-        self.yCoords = np.arange(window.yStartSpinBox.value(), (window.yEndSpinBox.value() + window.xStepSpinBox.value()), window.yStepSpinBox.value())
+        self.xCoords = np.arange(window.xStartSpinBox.value(),
+                                 (window.xEndSpinBox.value() + window.xStepSpinBox.value()),
+                                 window.xStepSpinBox.value())
+        self.yCoords = np.arange(window.yStartSpinBox.value(),
+                                 (window.yEndSpinBox.value() + window.xStepSpinBox.value()),
+                                 window.yStepSpinBox.value())
         self.xStep = window.xStepSpinBox.value()
         self.yStep = window.yStepSpinBox.value()
         self.vector = window.vectorRadio.isChecked()
         self.feedback = window.feedbackToggle.isChecked()
         self.scan_averaging = window.scanAveragingToggle.isChecked()
+        self.scanning = False
 
-
-        # self.setup_scan()
-        self.thread_function(self.setup_scan, err_fn=window.show_error_message)
-
-        if self.vector:
-            window.feedbackToggle.setChecked(True)
-            window.feedbackToggle.setCheckable(False)
+         # keep it this value as a str for sending to the RF source
 
         #check rf, lia and printer connections
         if not window.rfController.rf_connected or not window.LIAController.LIA_connected or not window.stageController.stage_connected:
@@ -951,109 +956,108 @@ class scanningImageWindow(QtWidgets.QWidget):
             window.show_error_message_txt("Wait for ODMR or FFT to finish before starting scan")
             return
 
+
+        self.thread_function(self.setup_scan,
+                             err_fn=window.show_error_message,
+                             fin_fn = self.start_scan)
+
+        if self.vector:
+            window.feedbackToggle.setChecked(True)
+            window.feedbackToggle.setCheckable(False)
+
     def thread_function(self, fn, *args, **kwargs):
         self.worker = Worker(fn, args, kwargs)
         """connect up the results signal to print the result it emits when triggered"""
         if 'fin_fn' in kwargs:
-            pass
-            # self.worker.signals.results.connect(self.print_this)
+            self.worker.signals.results.connect(kwargs['fin_fn'])
         if 'prg_fn' in kwargs:
-            pass
-            # self.worker.signals.progress.connect(self.progress_fn)
+            self.worker.signals.progress.connect(kwargs['prg_fn'])
         if 'err_fn' in kwargs:
             self.worker.signals.error.connect(kwargs['err_fn'])
         window.threadpool.start(self.worker)
 
     def setup_scan(self, *args, **kwargs):
-
+        if self.feedback:
+            self.res_freq = window.scanODMRPropertiesTable.item(0, 0).text()  # keep as text for sending to RF source
+            self.res_grad = float(window.scanODMRPropertiesTable.item(0, 1).text()) #gradient used for feedback
         self.stageControl.execute_gcode('G28') #home stage
         moving = True
         while moving == True:
             response = self.stageControl.read_gcode('M114')
             response = response.decode("utf-8").split()
-            if response[0] != 'echo:busy:':
-                moving = False
-                print('finished')
-
+            print(response)
+            try:
+                if response[0] != 'echo:busy:':
+                    moving = False
+                    print('finished')
+            except:
+                continue
         self.stageControl.set_stage_pos(window.xStartSpinBox.value(), window.yStartSpinBox.value())
-
+        time.sleep(5)
         return
-        # time.sleep(25)
 
-        # time.sleep(10)
-        self.thread_function(self.scan_no_vector, scan_time = 1, err_fn=window.show_error_message)
-        # #if scalar
-        # if not self.vector:
-        #     pass
-        # #if scalar with feedback
-        # if not self.vector and self.feedback:
-        #     pass
-        # #if vector
-        # elif self.vector:
-        #     pass
-
-    def scan_no_vector(self, args, kwargs):
-        scan_time = kwargs['scan_time']
-        x_positions = self.xCoords
-        y_positions = self.yCoords
-        voltageArr = np.zeros([1, len(y_positions), len(x_positions)])
-        print('The Scan has started. If the printer is not ready,'
-              'exit program and increase the waiting time.')
-        j = 0  # xpos
-        totalSize = len(x_positions) * len(y_positions)
-        for idx, y_position in enumerate(y_positions, 2):
-            i = len(x_positions) - 1
-            for x_position in x_positions:
-                timeStart = time.time()
-                ts = time.time()
-                totalSize -= 1
-                print(f'\nx = {x_position} mm, y = {y_position} mm', i, j)
-                self.stageControl.set_stage_pos(x_position, y_position)
-                time.sleep(scan_time)
-                sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
-                voltageArr[0, j, i] = sample['x'][0] * 1000
-                self.imageWidget.setImage(voltageArr)
-                i = i - 1
-                te = time.time()
-                eta = (te - ts) * totalSize
-                print(time.ctime(int(timeStart + eta)))
-            j += 1
-            self.stageControl.set_stage_pos(x_positions[0], y_position)
-            time.sleep(3)
-        print('Scan completed. Resetting printer.')
-        time.sleep(1)
-        return 0, 0, voltageArr, 0
-
-
-
-
-        # #this is just for testing purposes, do not use when plotting real data
-        # self.dummy_data = np.loadtxt("example_data\example_2d_scan_data.csv", ndmin=2, delimiter=",")
-        # self.data = np.zeros([np.size(self.dummy_data, 0), np.size(self.dummy_data, 1)])
-        # self.i = 0
-        # self.j = 0
-
-        # self.dummy_data()
-        # self.timer = QtCore.QTimer(self)  # time to trigger replot of image for testing purposes,
-        # self.timer.setInterval(10)
-        # self.timer.timeout.connect(lambda: self.update_plot(self.data))
-        # self.timer.start()
-        #  in real life the replot will be triggered when the stage moves
-        #  and takes a data point
-
-    def update_plot(self, data):
-        self.data[self.i, self.j] = self.dummy_data[self.i, self.j]
-        self.imageWidget.setImage(data)
-
-        #  this is just to cylce through dummy data, not for real data use (not useful i think?)
-        if self.i == np.size(self.dummy_data, 0) - 1 and self.j == np.size(self.dummy_data, 1) - 1:
-            return
-        if self.i == np.size(self.dummy_data, 0) - 1:
-            self.i = 0
-            self.j += 1
-        else:
-            self.i += 1
+    def start_scan(self):
+        self.scanning = True
+        self.thread_function(self.scan_no_vector,
+                             scan_time=1,
+                             err_fn=window.show_error_message,
+                             prg_fn=self.update_plot,
+                             )
+        if self.feedback:
+            self.thread_function(self.initialise_feedback, err_fn=window.show_error_message)
         return
+
+    def initialise_feedback(self):
+        window.rfController.inst.write('FREQ ' + str(round(float(self.res_freq) * 1e9, 12)))
+        sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
+        ini_voltage = sample['x'][0]
+        while self.scanning:
+            sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
+            voltage_now = sample['x'][0]
+            self.dV = voltage_now - ini_voltage
+            self.df = (1 / self.res_grad) * (-self.dV)
+            self.res_freq = self.res_freq + self.df
+            window.rfController.inst.write('FREQ ' + str(round(float(self.res_freq) * 1e9, 12)))
+        return
+
+    def scan_no_vector(self, *args, **kwargs):
+        if self.feedback:
+            pass
+        elif not self.feedback:
+            scan_time = args[1]['scan_time']
+            x_positions = self.xCoords
+            y_positions = self.yCoords
+            voltageArr = np.zeros([1, len(y_positions), len(x_positions)])
+            print('The Scan has started. If the printer is not ready,'
+                  'exit program and increase the waiting time.')
+            j = 0  # xpos
+            totalSize = len(x_positions) * len(y_positions)
+            for idx, y_position in enumerate(y_positions, 2):
+                i = len(x_positions) - 1
+                for x_position in x_positions:
+                    timeStart = time.time()
+                    ts = time.time()
+                    totalSize -= 1
+                    print(f'\nx = {x_position} mm, y = {y_position} mm', i, j)
+                    self.stageControl.set_stage_pos(x_position, y_position)
+                    time.sleep(scan_time)
+                    sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
+                    voltageArr[0, j, i] = sample['x'][0]
+                    kwargs['progress_callback'].emit(voltageArr)
+                    i = i - 1
+                    te = time.time()
+                    eta = (te - ts) * totalSize
+                    print(time.ctime(int(timeStart + eta)))
+                j += 1
+                self.stageControl.set_stage_pos(x_positions[0], y_position)
+                time.sleep(3)
+            print('Scan completed. Resetting printer.')
+            time.sleep(1)
+        self.scanning = False
+        return
+
+    def update_plot(self, voltageArr):
+        self.imageWidget.setImage(voltageArr)
 
 class Worker(QtCore.QRunnable):
     """"worker thread"""
