@@ -922,6 +922,7 @@ class scanningImageWindow(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
         super(scanningImageWindow, self).__init__()  # Call the inherited classes __init__ method
+        self.feedback_started = None
         self.res_grad = None
         self.res_freq = None
         self.dV = None
@@ -948,13 +949,13 @@ class scanningImageWindow(QtWidgets.QWidget):
          # keep it this value as a str for sending to the RF source
 
         #check rf, lia and printer connections
-        if not window.rfController.rf_connected or not window.LIAController.LIA_connected or not window.stageController.stage_connected:
-            window.show_error_message_txt("Check RF, LIA and Printer connections")
-            return
-
-        if window.LIAController.fft_sweep or window.LIAController.odmr_sweep:
-            window.show_error_message_txt("Wait for ODMR or FFT to finish before starting scan")
-            return
+        # if not window.rfController.rf_connected or not window.LIAController.LIA_connected or not window.stageController.stage_connected:
+        #     window.show_error_message_txt("Check RF, LIA and Printer connections")
+        #     return
+        #
+        # if window.LIAController.fft_sweep or window.LIAController.odmr_sweep:
+        #     window.show_error_message_txt("Wait for ODMR or FFT to finish before starting scan")
+        #     return
 
 
         self.thread_function(self.setup_scan,
@@ -978,86 +979,99 @@ class scanningImageWindow(QtWidgets.QWidget):
 
     def setup_scan(self, *args, **kwargs):
         if self.feedback:
-            self.res_freq = window.scanODMRPropertiesTable.item(0, 0).text()  # keep as text for sending to RF source
+            self.res_freq = float(window.scanODMRPropertiesTable.item(0, 0).text())
             self.res_grad = float(window.scanODMRPropertiesTable.item(0, 1).text()) #gradient used for feedback
-        self.stageControl.execute_gcode('G28') #home stage
-        moving = True
-        while moving == True:
-            response = self.stageControl.read_gcode('M114')
-            response = response.decode("utf-8").split()
-            print(response)
-            try:
-                if response[0] != 'echo:busy:':
-                    moving = False
-                    print('finished')
-            except:
-                continue
+        # self.stageControl.execute_gcode('G28') #home stage
+        # moving = True
+        # while moving == True:
+        #     response = self.stageControl.read_gcode('M114')
+        #     response = response.decode("utf-8").split()
+        #     print(response)
+        #     try:
+        #         if response[0] != 'echo:busy:':
+        #             moving = False
+        #             print('finished')
+        #     except:
+        #         continue
         self.stageControl.set_stage_pos(window.xStartSpinBox.value(), window.yStartSpinBox.value())
         time.sleep(5)
         return
 
     def start_scan(self):
         self.scanning = True
+        if self.feedback:
+            self.thread_function(self.initialise_feedback, err_fn=window.show_error_message)
+
+
         self.thread_function(self.scan_no_vector,
                              scan_time=1,
                              err_fn=window.show_error_message,
                              prg_fn=self.update_plot,
                              )
-        if self.feedback:
-            self.thread_function(self.initialise_feedback, err_fn=window.show_error_message)
         return
 
-    def initialise_feedback(self):
+    def initialise_feedback(self, *args, **kwargs):
         window.rfController.inst.write('FREQ ' + str(round(float(self.res_freq) * 1e9, 12)))
         sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
         ini_voltage = sample['x'][0]
+        self.feedback_started = True
         while self.scanning:
             sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
             voltage_now = sample['x'][0]
             self.dV = voltage_now - ini_voltage
             self.df = (1 / self.res_grad) * (-self.dV)
+
             self.res_freq = self.res_freq + self.df
+            print(self.res_freq, self.df, self.dV)
             window.rfController.inst.write('FREQ ' + str(round(float(self.res_freq) * 1e9, 12)))
         return
 
     def scan_no_vector(self, *args, **kwargs):
-        if self.feedback:
+        while self.feedback_started == False:
             pass
-        elif not self.feedback:
-            scan_time = args[1]['scan_time']
-            x_positions = self.xCoords
-            y_positions = self.yCoords
-            voltageArr = np.zeros([1, len(y_positions), len(x_positions)])
-            print('The Scan has started. If the printer is not ready,'
-                  'exit program and increase the waiting time.')
-            j = 0  # xpos
-            totalSize = len(x_positions) * len(y_positions)
-            for idx, y_position in enumerate(y_positions, 2):
-                i = len(x_positions) - 1
-                for x_position in x_positions:
-                    timeStart = time.time()
-                    ts = time.time()
-                    totalSize -= 1
-                    print(f'\nx = {x_position} mm, y = {y_position} mm', i, j)
-                    self.stageControl.set_stage_pos(x_position, y_position)
-                    time.sleep(scan_time)
+        scan_time = args[1]['scan_time']
+        x_positions = self.xCoords
+        y_positions = self.yCoords
+        voltageArr = np.zeros([1, len(y_positions), len(x_positions)])
+        df_arr = np.zeros([1, len(y_positions), len(x_positions)])
+        print('The Scan has started. If the printer is not ready,'
+              'exit program and increase the waiting time.')
+        j = 0  # xpos
+        totalSize = len(x_positions) * len(y_positions)
+        for idx, y_position in enumerate(y_positions, 2):
+            i = len(x_positions) - 1
+            for x_position in x_positions:
+                timeStart = time.time()
+                ts = time.time()
+                totalSize -= 1
+                print(f'\nx = {x_position} mm, y = {y_position} mm', i, j)
+                self.stageControl.set_stage_pos(x_position, y_position)
+                time.sleep(scan_time)
+
+                if self.feedback:
+                    #if feedback on, get res_freq shift and return that
+                    df_arr[0, j, i] = self.df
+                    kwargs['progress_callback'].emit(df_arr)
+                else:
+                    #else return current voltage instead
                     sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
                     voltageArr[0, j, i] = sample['x'][0]
                     kwargs['progress_callback'].emit(voltageArr)
-                    i = i - 1
-                    te = time.time()
-                    eta = (te - ts) * totalSize
-                    print(time.ctime(int(timeStart + eta)))
-                j += 1
-                self.stageControl.set_stage_pos(x_positions[0], y_position)
-                time.sleep(3)
-            print('Scan completed. Resetting printer.')
-            time.sleep(1)
+
+                i = i - 1
+                te = time.time()
+                eta = (te - ts) * totalSize
+                print(time.ctime(int(timeStart + eta)))
+            j += 1
+            self.stageControl.set_stage_pos(x_positions[0], y_position)
+            time.sleep(3)
+        print('Scan completed. Resetting printer.')
+        time.sleep(1)
         self.scanning = False
         return
 
     def update_plot(self, voltageArr):
-        self.imageWidget.setImage(voltageArr)
+        self.imageWidget.setData(voltageArr)
 
 class Worker(QtCore.QRunnable):
     """"worker thread"""
