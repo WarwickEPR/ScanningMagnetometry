@@ -1000,7 +1000,7 @@ class scanningImageWindow(QtWidgets.QWidget):
     def start_scan(self):
         self.scanning = True
         if self.feedback:
-            self.thread_function(self.initialise_feedback, err_fn=window.show_error_message)
+            self.thread_function(self.initialise_feedback, err_fn=window.show_error_message, prg_fn = self.debug_plot)
 
 
         self.thread_function(self.scan_no_vector,
@@ -1015,12 +1015,16 @@ class scanningImageWindow(QtWidgets.QWidget):
         sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
         ini_voltage = sample['x'][0]
         self.feedback_started = True
+        df_arr = []
+        dV_arr = []
         while self.scanning:
             sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
             voltage_now = sample['x'][0]
             self.dV = voltage_now - ini_voltage
             self.df = (1 / self.res_grad) * (-self.dV)
-
+            df_arr.append(self.df)
+            dV_arr.append(self.dV)
+            kwargs['process_callback'].emit(df_arr)
             self.res_freq = self.res_freq + self.df
             print(self.res_freq, self.df, self.dV)
             window.rfController.inst.write('FREQ ' + str(round(float(self.res_freq) * 1e9, 12)))
@@ -1034,6 +1038,7 @@ class scanningImageWindow(QtWidgets.QWidget):
         y_positions = self.yCoords
         voltageArr = np.zeros([1, len(y_positions), len(x_positions)])
         df_arr = np.zeros([1, len(y_positions), len(x_positions)])
+        dV_arr = []
         print('The Scan has started. If the printer is not ready,'
               'exit program and increase the waiting time.')
         j = 0  # xpos
@@ -1071,7 +1076,12 @@ class scanningImageWindow(QtWidgets.QWidget):
         return
 
     def update_plot(self, voltageArr):
-        self.imageWidget.setData(voltageArr)
+        self.imageWidget.setImage(voltageArr)
+
+    def debug_plot(self, df_arr):
+        self.graphWidget.setData(df_arr)
+        # self.graphWidget_2.setData(dV_arr)
+
 
 class Worker(QtCore.QRunnable):
     """"worker thread"""
