@@ -1000,7 +1000,7 @@ class scanningImageWindow(QtWidgets.QWidget):
     def start_scan(self):
         self.scanning = True
         if self.feedback:
-            self.thread_function(self.initialise_feedback, err_fn=window.show_error_message, prg_fn = self.debug_plot)
+            self.thread_function(self.initialise_feedback, err_fn=window.show_error_message, prg_fn=self.debug_plot)
 
 
         self.thread_function(self.scan_no_vector,
@@ -1017,16 +1017,18 @@ class scanningImageWindow(QtWidgets.QWidget):
         self.feedback_started = True
         df_arr = []
         dV_arr = []
+        i = 0
         while self.scanning:
+            i += 1
             sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
             voltage_now = sample['x'][0]
             self.dV = voltage_now - ini_voltage
             self.df = (1 / self.res_grad) * (-self.dV)
             df_arr.append(self.df)
             dV_arr.append(self.dV)
-            kwargs['process_callback'].emit(df_arr)
+            if i % 10 == 0:
+                kwargs['progress_callback'].emit([df_arr, dV_arr])
             self.res_freq = self.res_freq + self.df
-            print(self.res_freq, self.df, self.dV)
             window.rfController.inst.write('FREQ ' + str(round(float(self.res_freq) * 1e9, 12)))
         return
 
@@ -1078,9 +1080,18 @@ class scanningImageWindow(QtWidgets.QWidget):
     def update_plot(self, voltageArr):
         self.imageWidget.setImage(voltageArr)
 
-    def debug_plot(self, df_arr):
-        self.graphWidget.setData(df_arr)
-        # self.graphWidget_2.setData(dV_arr)
+    def debug_plot(self, arrs):
+        try:
+            self.graphWidget.clear()
+            self.graphWidget.plot(arrs[0])
+        except:
+            pass
+        try:
+            self.graphWidget_2.clear()
+            self.graphWidget_2.plot(arrs[0])
+        except:
+            pass
+
 
 
 class Worker(QtCore.QRunnable):
