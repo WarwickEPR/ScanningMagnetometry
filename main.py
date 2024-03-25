@@ -1032,6 +1032,7 @@ class scanningImageWindow(QtWidgets.QWidget):
             if len(df_arr) > 100:
                 df_arr.pop(0)
                 dV_arr.pop(0)
+                res_freq_arr.pop(0)
             df_arr.append(self.df)
             dV_arr.append(self.dV)
             time.sleep(0.1)
@@ -1064,7 +1065,7 @@ class scanningImageWindow(QtWidgets.QWidget):
 
                 if self.feedback:
                     #if feedback on, get res_freq shift and return that
-                    df_arr[0, j, i] = self.df
+                    df_arr[0, j, i] = self.res_freq
                     kwargs['progress_callback'].emit(df_arr)
                 else:
                     #else return current voltage instead
