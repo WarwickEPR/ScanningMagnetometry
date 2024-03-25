@@ -71,30 +71,6 @@
     <bool>false</bool>
    </property>
   </widget>
-  <widget class="PlotWidget" name="graphWidget_3" native="true">
-   <property name="geometry">
-    <rect>
-     <x>680</x>
-     <y>430</y>
-     <width>500</width>
-     <height>200</height>
-    </rect>
-   </property>
-   <property name="minimumSize">
-    <size>
-     <width>400</width>
-     <height>200</height>
-    </size>
-   </property>
-   <property name="font">
-    <font>
-     <bold>true</bold>
-    </font>
-   </property>
-   <property name="autoFillBackground">
-    <bool>false</bool>
-   </property>
-  </widget>
  </widget>
  <customwidgets>
   <customwidget>
