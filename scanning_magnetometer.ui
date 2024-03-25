@@ -630,6 +630,11 @@
            <height>191</height>
           </rect>
          </property>
+         <row>
+          <property name="text">
+           <string/>
+          </property>
+         </row>
          <column>
           <property name="text">
            <string>Peak Frequency</string>

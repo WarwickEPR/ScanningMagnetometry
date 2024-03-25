@@ -6,8 +6,8 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1333</width>
-    <height>653</height>
+    <width>1191</width>
+    <height>658</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -18,24 +18,24 @@
     <rect>
      <x>10</x>
      <y>10</y>
-     <width>761</width>
-     <height>191</height>
+     <width>651</width>
+     <height>631</height>
     </rect>
    </property>
   </widget>
   <widget class="PlotWidget" name="graphWidget" native="true">
    <property name="geometry">
     <rect>
-     <x>40</x>
-     <y>230</y>
+     <x>680</x>
+     <y>220</y>
      <width>500</width>
-     <height>400</height>
+     <height>200</height>
     </rect>
    </property>
    <property name="minimumSize">
     <size>
-     <width>500</width>
-     <height>400</height>
+     <width>400</width>
+     <height>200</height>
     </size>
    </property>
    <property name="font">
@@ -50,16 +50,40 @@
   <widget class="PlotWidget" name="graphWidget_2" native="true">
    <property name="geometry">
     <rect>
-     <x>560</x>
-     <y>230</y>
+     <x>680</x>
+     <y>10</y>
      <width>500</width>
-     <height>400</height>
+     <height>201</height>
     </rect>
    </property>
    <property name="minimumSize">
     <size>
      <width>500</width>
-     <height>400</height>
+     <height>200</height>
+    </size>
+   </property>
+   <property name="font">
+    <font>
+     <bold>true</bold>
+    </font>
+   </property>
+   <property name="autoFillBackground">
+    <bool>false</bool>
+   </property>
+  </widget>
+  <widget class="PlotWidget" name="graphWidget_3" native="true">
+   <property name="geometry">
+    <rect>
+     <x>680</x>
+     <y>430</y>
+     <width>500</width>
+     <height>200</height>
+    </rect>
+   </property>
+   <property name="minimumSize">
+    <size>
+     <width>400</width>
+     <height>200</height>
     </size>
    </property>
    <property name="font">
