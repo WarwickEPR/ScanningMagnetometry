@@ -931,6 +931,10 @@ class scanningImageWindow(QtWidgets.QWidget):
         self.show()
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
         self.stageControl = window.stageController
+        self.graphWidget.setLabel(axis='left', text='Voltage (V)')
+        self.graphWidget.setLabel(axis='bottom', text='Index')
+        self.graphWidget_2.setLabel(axis='left', text='RF Frequency (GHz)')
+        self.graphWidget_2.setLabel(axis='bottom', text='Index')
 
 
         self.xCoords = np.arange(window.xStartSpinBox.value(),
@@ -1048,7 +1052,7 @@ class scanningImageWindow(QtWidgets.QWidget):
         y_positions = self.yCoords
         voltageArr = np.zeros([1, len(y_positions), len(x_positions)])
         df_arr = np.zeros([1, len(y_positions), len(x_positions)])
-        dV_arr = []
+        self.update_plot(voltageArr)
         print('The Scan has started. If the printer is not ready,'
               'exit program and increase the waiting time.')
         j = 0  # xpos
@@ -1085,8 +1089,9 @@ class scanningImageWindow(QtWidgets.QWidget):
         self.scanning = False
         return
 
-    def update_plot(self, voltageArr):
-        self.imageWidget.setImage(voltageArr)
+    def update_plot(self, image_arr):
+        self.imageWidget.setImage(image_arr)
+        self.imageWidget.autoLevels()
 
     def debug_plot(self, arrs):
         try:
