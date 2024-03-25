@@ -1004,7 +1004,7 @@ class scanningImageWindow(QtWidgets.QWidget):
 
 
         self.thread_function(self.scan_no_vector,
-                             scan_time=1,
+                             scan_time=0.2,
                              err_fn=window.show_error_message,
                              prg_fn=self.update_plot,
                              )
@@ -1013,28 +1013,35 @@ class scanningImageWindow(QtWidgets.QWidget):
     def initialise_feedback(self, *args, **kwargs):
         window.rfController.inst.write('FREQ ' + str(round(float(self.res_freq) * 1e9, 12)))
         sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
+        time.sleep(1)
         ini_voltage = sample['x'][0]
         self.feedback_started = True
         df_arr = []
         dV_arr = []
+        res_freq_arr = []
         i = 0
         while self.scanning:
             i += 1
+            res_freq_arr.append(self.res_freq)
             sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
             voltage_now = sample['x'][0]
             self.dV = voltage_now - ini_voltage
             self.df = (1 / self.res_grad) * (-self.dV)
-            df_arr.append(self.df)
-            dV_arr.append(self.dV)
-            if i % 10 == 0:
-                kwargs['progress_callback'].emit([df_arr, dV_arr])
             self.res_freq = self.res_freq + self.df
             window.rfController.inst.write('FREQ ' + str(round(float(self.res_freq) * 1e9, 12)))
+            if len(df_arr) > 100:
+                df_arr.pop(0)
+                dV_arr.pop(0)
+            df_arr.append(self.df)
+            dV_arr.append(self.dV)
+            time.sleep(0.1)
+            kwargs['progress_callback'].emit([res_freq_arr, dV_arr])
         return
 
     def scan_no_vector(self, *args, **kwargs):
         while self.feedback_started == False:
-            pass
+            continue
+        time.sleep(3) #let feedback settle
         scan_time = args[1]['scan_time']
         x_positions = self.xCoords
         y_positions = self.yCoords
@@ -1088,7 +1095,7 @@ class scanningImageWindow(QtWidgets.QWidget):
             pass
         try:
             self.graphWidget_2.clear()
-            self.graphWidget_2.plot(arrs[0])
+            self.graphWidget_2.plot(arrs[1])
         except:
             pass
 
