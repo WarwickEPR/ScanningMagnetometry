@@ -927,12 +927,15 @@ class scanningImageWindow(QtWidgets.QWidget):
         self.show()
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
         self.stageControl = window.stageController
-        self.graphWidget_2.setLabel(axis='left', text='Voltage (V)')
-        self.graphWidget_2.setLabel(axis='bottom', text='Index')
-        self.graphWidget_2.setLabel(axis='top', text='Measured Voltage (V)')
+
+
         self.graphWidget.setLabel(axis='left', text='RF Frequency (GHz)')
         self.graphWidget.setLabel(axis='bottom', text='Index')
         self.graphWidget.setLabel(axis='top', text='RF Frequency Shift (GHz)')
+        self.graphWidget_2.setLabel(axis='left', text='Voltage (V)')
+        self.graphWidget_2.setLabel(axis='bottom', text='Index')
+        self.graphWidget_2.setLabel(axis='top', text='Measured Voltage (V)')
+
 
 
         self.xCoords = np.arange(window.xStartSpinBox.value(),
@@ -959,14 +962,22 @@ class scanningImageWindow(QtWidgets.QWidget):
         #     window.show_error_message_txt("Wait for ODMR or FFT to finish before starting scan")
         #     return
 
+        if self.vector:
+            window.feedbackToggle.setChecked(True)
+
+        self.vc1 = self.graphWidget.plot()
+        self.vc2 = self.graphWidget.plot()
+        self.vc3 = self.graphWidget.plot()
+        self.vc4 = self.graphWidget.plot()
+
+        self.fc1 = self.graphWidget_2.plot()
+        self.fc2 = self.graphWidget_2.plot()
+        self.fc3 = self.graphWidget_2.plot()
+        self.fc4 = self.graphWidget_2.plot()
 
         self.thread_function(self.setup_scan,
                              err_fn=window.show_error_message,
                              fin_fn=self.start_scan)
-
-        if self.vector:
-            window.feedbackToggle.setChecked(True)
-            window.feedbackToggle.setCheckable(False)
 
     def thread_function(self, fn, *args, **kwargs):
         self.worker = Worker(fn, args, kwargs)
@@ -984,9 +995,9 @@ class scanningImageWindow(QtWidgets.QWidget):
             if self.vector:
                 self.vector_freqs = []
                 self.vector_grads = []
-                for i in range(4):
-                    self.vector_freqs = float(window.scanODMRPropertiesTable.item(i, 0).text())
-                    self.vector_grads = float(window.scanODMRPropertiesTable.item(i, 1).text())  # gradient used for feedback with vector
+                for i in range(2):
+                    self.vector_freqs.append(float(window.scanODMRPropertiesTable.item(i, 0).text()))
+                    self.vector_grads.append(float(window.scanODMRPropertiesTable.item(i, 1).text()))  # gradient used for feedback with vector
 
             else:
                 self.res_freq = float(window.scanODMRPropertiesTable.item(0, 0).text())
@@ -1016,15 +1027,22 @@ class scanningImageWindow(QtWidgets.QWidget):
             else:
                 self.thread_function(self.initialise_feedback, err_fn=window.show_error_message, prg_fn=self.debug_plot)
 
-
-        self.thread_function(self.scan_no_vector,
-                             scan_time=0.2,
-                             err_fn=window.show_error_message,
-                             prg_fn=self.update_plot,
-                             )
+        if self.vector:
+            self.thread_function(self.scan_vector,
+                                 scan_time=0.2,
+                                 err_fn=window.show_error_message,
+                                 prg_fn=self.update_plot,
+                                 )
+        else:
+            self.thread_function(self.scan_no_vector,
+                                 scan_time=0.2,
+                                 err_fn=window.show_error_message,
+                                 prg_fn=self.update_plot,
+                                 )
         return
 
     def initialise_feedback(self, *args, **kwargs):
+        print("no vector feedback started")
         window.rfController.inst.write('FREQ ' + str(round(float(self.res_freq) * 1e9, 12)))
         time.sleep(1)
         sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
@@ -1064,25 +1082,25 @@ class scanningImageWindow(QtWidgets.QWidget):
         df_arr = [[], [], [], []]
         dV_arr = [[], [], [], []]
         res_freq_arr = [[], [], [], []]
-        i = 0
+        loop = 0
         while self.scanning:
-            i += 1
+            loop += 1
             for i in range(len(self.vector_freqs)):
-                res_freq_arr[i].append([self.vector_freqs[i]])
+                res_freq_arr[i].append(self.vector_freqs[i])
                 sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
                 voltage_now = sample['x'][0]
                 self.dV = voltage_now - ini_voltage[i]
                 self.df = (1 / self.vector_grads[i]) * (-self.dV)
                 self.vector_freqs[i] = self.vector_freqs[i] + self.df
                 window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
+                df_arr[i].append(self.df)
+                dV_arr[i].append(self.dV)
+
             if len(df_arr[0]) > 100:
                 for i in range(len(self.vector_freqs)):
                     df_arr[i].pop(0)
                     dV_arr[i].pop(0)
                     res_freq_arr[i].pop(0)
-            for i in range(len(self.vector_freqs)):
-                df_arr[i].append(self.df)
-                dV_arr[i].append(self.dV)
             time.sleep(0.1)
             kwargs['progress_callback'].emit([res_freq_arr, dV_arr])
         return
@@ -1096,7 +1114,6 @@ class scanningImageWindow(QtWidgets.QWidget):
         y_positions = self.yCoords
         voltageArr = np.zeros([1, len(y_positions), len(x_positions)])
         df_arr = np.zeros([1, len(y_positions), len(x_positions)])
-        self.update_plot(voltageArr)
         print('The Scan has started. If the printer is not ready,'
               'exit program and increase the waiting time.')
         j = 0  # xpos
@@ -1110,7 +1127,6 @@ class scanningImageWindow(QtWidgets.QWidget):
                 print(f'\nx = {x_position} mm, y = {y_position} mm', i, j)
                 self.stageControl.set_stage_pos(x_position, y_position)
                 time.sleep(scan_time)
-
                 if self.feedback:
                     #if feedback on, get res_freq shift and return that
                     df_arr[0, j, i] = self.res_freq
@@ -1120,7 +1136,6 @@ class scanningImageWindow(QtWidgets.QWidget):
                     sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
                     voltageArr[0, j, i] = sample['x'][0]
                     kwargs['progress_callback'].emit(voltageArr)
-
                 i = i - 1
                 te = time.time()
                 eta = (te - ts) * totalSize
@@ -1142,9 +1157,6 @@ class scanningImageWindow(QtWidgets.QWidget):
         y_positions = self.yCoords
         voltageArr = np.zeros([4, len(y_positions), len(x_positions)])
         df_arr = np.zeros([4, len(y_positions), len(x_positions)])
-        self.update_plot(voltageArr)
-        print('The Scan has started. If the printer is not ready,'
-              'exit program and increase the waiting time.')
         j = 0  # xpos
         totalSize = len(x_positions) * len(y_positions)
         for idx, y_position in enumerate(y_positions, 2):
@@ -1153,19 +1165,11 @@ class scanningImageWindow(QtWidgets.QWidget):
                 timeStart = time.time()
                 ts = time.time()
                 totalSize -= 1
-                print(f'\nx = {x_position} mm, y = {y_position} mm', i, j)
                 self.stageControl.set_stage_pos(x_position, y_position)
                 time.sleep(scan_time)
-                if self.feedback:
-                    #if feedback on, get res_freq shift and return that
-                    df_arr[0, j, i] = self.vector_freqs[0]
-                    kwargs['progress_callback'].emit(df_arr)
-                else:
-                    #else return current voltage instead
-                    sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
-                    voltageArr[0, j, i] = sample['x'][0]
-                    kwargs['progress_callback'].emit(voltageArr)
-
+                print(self.vector_freqs[0])
+                df_arr[0, j, i] = self.vector_freqs[0]
+                kwargs['progress_callback'].emit(df_arr)
                 i = i - 1
                 te = time.time()
                 eta = (te - ts) * totalSize
@@ -1179,27 +1183,26 @@ class scanningImageWindow(QtWidgets.QWidget):
         return
 
     def update_plot(self, image_arr):
-        self.imageWidget.setImage(image_arr)
-        self.imageWidget.autoLevels()
+        if self.vector:
+            print(image_arr[0])
+            self.imageWidget.setImage(image_arr[0])
+
+            # self.imageWidget.autoLevels()
+        else:
+            self.imageWidget.setImage(image_arr)
+            # self.imageWidget.autoLevels()
 
     def debug_plot(self, arrs):
         if self.vector:
-            try:
-                self.graphWidget.clear()
-                self.graphWidget.plot(arrs[0][0])
-                self.graphWidget.plot(arrs[0][1])
-                self.graphWidget.plot(arrs[0][2])
-                self.graphWidget.plot(arrs[0][3])
-            except:
-                pass
-            try:
-                self.graphWidget_2.clear()
-                self.graphWidget_2.plot(arrs[1][0])
-                self.graphWidget_2.plot(arrs[1][1])
-                self.graphWidget_2.plot(arrs[1][2])
-                self.graphWidget_2.plot(arrs[1][3])
-            except:
-                pass
+            self.vc1.setData(arrs[0][0], pen=pg.mkPen('b'))
+            self.vc2.setData(arrs[0][1], pen=pg.mkPen('g'))
+            self.vc3.setData(arrs[0][2], pen=pg.mkPen('r'))
+            self.vc4.setData(arrs[0][3], pen=pg.mkPen('y'))
+
+            self.fc1.setData(arrs[1][0], pen=pg.mkPen('b'))
+            self.fc2.setData(arrs[1][1], pen=pg.mkPen('g'))
+            self.fc3.setData(arrs[1][2], pen=pg.mkPen('r'))
+            self.fc4.setData(arrs[1][3], pen=pg.mkPen('y'))
         else:
             try:
                 self.graphWidget.clear()
