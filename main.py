@@ -931,10 +931,12 @@ class scanningImageWindow(QtWidgets.QWidget):
         self.show()
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
         self.stageControl = window.stageController
-        self.graphWidget.setLabel(axis='left', text='Voltage (V)')
-        self.graphWidget.setLabel(axis='bottom', text='Index')
-        self.graphWidget_2.setLabel(axis='left', text='RF Frequency (GHz)')
+        self.graphWidget_2.setLabel(axis='left', text='Voltage (V)')
         self.graphWidget_2.setLabel(axis='bottom', text='Index')
+        self.graphWidget_2.setLabel(axis='top', text='Measured Voltage (V)')
+        self.graphWidget.setLabel(axis='left', text='RF Frequency (GHz)')
+        self.graphWidget.setLabel(axis='bottom', text='Index')
+        self.graphWidget.setLabel(axis='top', text='RF Frequency Shift (GHz)')
 
 
         self.xCoords = np.arange(window.xStartSpinBox.value(),
