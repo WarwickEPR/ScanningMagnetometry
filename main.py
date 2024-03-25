@@ -1,5 +1,4 @@
-import scipy.signal
-from PyQt6 import QtCore, QtWidgets, uic, QtGui
+from PyQt6 import QtCore, QtWidgets, uic
 import pyqtgraph as pg
 import sys
 import serial
@@ -9,11 +8,9 @@ import time
 import traceback
 import pyvisa
 from sklearn.linear_model import LinearRegression
-from scipy.signal import savgol_filter, find_peaks, welch
-from scipy.fftpack import rfft, fftfreq
+from scipy.signal import savgol_filter, find_peaks
 import zhinst.utils as utils
 import zhinst.core
-from zhinst.toolkit import Session
 
 uiclass, baseclass = pg.Qt.loadUiType("scanning_magnetometer.ui")
 
@@ -914,7 +911,6 @@ class ODMRGraphWindow(QtWidgets.QWidget):
             window.scanODMRPropertiesTable.insertRow(row)
             window.scanODMRPropertiesTable.setItem(row, 0, QtWidgets.QTableWidgetItem(str(round(freqs[row], 3))))
             window.scanODMRPropertiesTable.setItem(row, 1, QtWidgets.QTableWidgetItem(str(round(grads[row], 3))))
-
         return
 
 
