@@ -29,7 +29,7 @@
        <enum>QTabWidget::Rounded</enum>
       </property>
       <property name="currentIndex">
-       <number>0</number>
+       <number>2</number>
       </property>
       <widget class="QWidget" name="stage_control">
        <attribute name="title">
@@ -1464,93 +1464,11 @@
          </property>
         </widget>
        </widget>
-       <widget class="QGroupBox" name="groupBox_3">
-        <property name="geometry">
-         <rect>
-          <x>10</x>
-          <y>10</y>
-          <width>251</width>
-          <height>131</height>
-         </rect>
-        </property>
-        <property name="title">
-         <string>Lock-in Output Settings</string>
-        </property>
-        <widget class="QComboBox" name="LowPassFilterOrderBox">
-         <property name="geometry">
-          <rect>
-           <x>140</x>
-           <y>91</y>
-           <width>93</width>
-           <height>24</height>
-          </rect>
-         </property>
-        </widget>
-        <widget class="QLabel" name="label_39">
-         <property name="geometry">
-          <rect>
-           <x>14</x>
-           <y>29</y>
-           <width>120</width>
-           <height>25</height>
-          </rect>
-         </property>
-         <property name="text">
-          <string>Output Scaling Factor</string>
-         </property>
-        </widget>
-        <widget class="QLabel" name="label_40">
-         <property name="geometry">
-          <rect>
-           <x>14</x>
-           <y>60</y>
-           <width>109</width>
-           <height>25</height>
-          </rect>
-         </property>
-         <property name="text">
-          <string>Low-Pass Filter (Hz)</string>
-         </property>
-        </widget>
-        <widget class="QSpinBox" name="scalingFactorBox">
-         <property name="geometry">
-          <rect>
-           <x>140</x>
-           <y>29</y>
-           <width>93</width>
-           <height>25</height>
-          </rect>
-         </property>
-        </widget>
-        <widget class="QLabel" name="label_41">
-         <property name="geometry">
-          <rect>
-           <x>14</x>
-           <y>91</y>
-           <width>119</width>
-           <height>24</height>
-          </rect>
-         </property>
-         <property name="text">
-          <string>Low-Pass Filter Order</string>
-         </property>
-        </widget>
-        <widget class="QSpinBox" name="lowPassFilterBox">
-         <property name="geometry">
-          <rect>
-           <x>140</x>
-           <y>60</y>
-           <width>93</width>
-           <height>25</height>
-          </rect>
-         </property>
-        </widget>
-       </widget>
        <widget class="QGroupBox" name="groupBox_4">
         <property name="geometry">
          <rect>
           <x>10</x>
-          <y>150</y>
+          <y>0</y>
           <width>401</width>
           <height>200</height>
          </rect>
@@ -1854,7 +1772,7 @@
        <widget class="QGroupBox" name="groupBox_6">
         <property name="geometry">
          <rect>
-          <x>280</x>
+          <x>420</x>
           <y>10</y>
           <width>251</width>
           <height>131</height>
@@ -1965,7 +1883,7 @@
      <x>0</x>
      <y>0</y>
      <width>856</width>
-     <height>21</height>
+     <height>22</height>
     </rect>
    </property>
    <widget class="QMenu" name="menu1">
