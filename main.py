@@ -513,6 +513,10 @@ class FFTGraphWindow(QtWidgets.QWidget):
         self.scaled_y = None
         self.calib_const = 1
 
+        self.graphWidget.setLabel(axis='left', text='Power Spectral Density nT/sqrt(Hz)')
+        self.graphWidget.setLabel(axis='bottom', text='Frequency Hz')
+
+
         self.calcSensButton.clicked.connect(lambda: self.calc_sens(freq_start=self.minFreqSpinBox.value(),
                                                                    freq_end=self.maxFreqSpinBox.value(),
                                                                    ignore_freqs=self.ignoreListFreqCheckBox.isChecked()))
@@ -636,6 +640,7 @@ class FFTGraphWindow(QtWidgets.QWidget):
         except:
             pass
         self.fft_plot = self.graphWidget.plot(self.x, self.scaled_y)
+
         self.graphWidget.setLogMode(True, True)
         return
 
