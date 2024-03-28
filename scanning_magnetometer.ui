@@ -29,7 +29,7 @@
        <enum>QTabWidget::Rounded</enum>
       </property>
       <property name="currentIndex">
-       <number>2</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="stage_control">
        <attribute name="title">
@@ -136,7 +136,7 @@
           <double>80.000000000000000</double>
          </property>
          <property name="maximum">
-          <double>220.000000000000000</double>
+          <double>240.000000000000000</double>
          </property>
         </widget>
         <widget class="QLabel" name="label_12">
@@ -165,7 +165,7 @@
           <double>30.000000000000000</double>
          </property>
          <property name="maximum">
-          <double>220.000000000000000</double>
+          <double>200.000000000000000</double>
          </property>
         </widget>
         <widget class="QLabel" name="label">
@@ -395,7 +395,7 @@
           <double>80.000000000000000</double>
          </property>
          <property name="maximum">
-          <double>200.000000000000000</double>
+          <double>240.000000000000000</double>
          </property>
         </widget>
         <widget class="QLabel" name="label_15">
@@ -526,7 +526,7 @@
           <double>80.000000000000000</double>
          </property>
          <property name="maximum">
-          <double>200.000000000000000</double>
+          <double>240.000000000000000</double>
          </property>
         </widget>
         <widget class="QDoubleSpinBox" name="yStepSpinBox">
@@ -1883,7 +1883,7 @@
      <x>0</x>
      <y>0</y>
      <width>856</width>
-     <height>22</height>
+     <height>21</height>
     </rect>
    </property>
    <widget class="QMenu" name="menu1">
