@@ -294,6 +294,7 @@ class RfControl:
     def setup_sweep(self, *args, **kwargs):
         self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
         window.LIAController.odmr_sweep = True
+        sweeping = True
         self.start_freq = args[0][0]  # Start frequency in Hz (e.g., 1 GHz)
         self.stop_freq = args[0][1]  # Stop frequency in Hz (e.g., 2 GHz)
         num_points = args[0][2]  # Number of frequency points
@@ -301,6 +302,12 @@ class RfControl:
         sweep_step = args[0][4]
 
         #set trigger to output when sweep start
+        if window.odmrSweepContinous.isChecked():
+            window.rfController.inst.write(':INIT:CONT ON') #set sweep to be continous
+        else:
+            window.rfController.inst.write(':INIT:CONT OFF') #set sweep to be single
+
+
         window.rfController.inst.write(':TRIG:SEQ:SOUR BUS')  # sets sweep to trigger on *TRG command
         window.rfController.inst.write('ROUT:CONN:TRIG:OUTP SRun')  # sets trig out 1 on Keysight to emit pulse when sweep starts, used to trigger LIA
         window.rfController.inst.write(':SOURce:FREQuency:MODE LIST')  # set frequency mode from CW to list sweep
@@ -315,7 +322,7 @@ class RfControl:
         window.LIAController.setup_sweep() #setup LIA for data aquisition
         window.rfController.inst.write('*TRG')  # trigger sweep to start
 
-        sweeping = True
+
         read_count = 0
         window.LIAController.daq_module.execute()
 
@@ -373,23 +380,26 @@ class LIAControl:
         window.threadpool.start(self.worker)
 
     def connect_lia(self, *args, **kwargs):
-        self.server_host: str = "192.168.70.166"
-        self.device_id = args[1]['device_id']
-        server_port = 8004
-        api_level = 6
-        (self.daq, self.device, _) = zhinst.utils.create_api_session(
-            self.device_id, api_level, server_host=self.server_host, server_port=server_port
-        )
-        zhinst.utils.api_server_version_check(self.daq)
-        self.daq.set(f"/{self.device}/demods/0/enable", 1)
-        self.clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
+        try:
+            self.server_host: str = "169.254.159.230"
+            self.device_id = args[1]['device_id']
+            server_port = 8004
+            api_level = 6
+            (self.daq, self.device, _) = zhinst.utils.create_api_session(
+                self.device_id, api_level, server_host=self.server_host, server_port=server_port
+            )
+            zhinst.utils.api_server_version_check(self.daq)
+            self.daq.set(f"/{self.device}/demods/0/enable", 1)
+            self.clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
 
-        self.LIA_connected = True
+            self.LIA_connected = True
 
-        # self.demod_path = f"/{self.device}/demods/0/sample"
-        # self.signal_paths = []
-        # self.signal_paths.append(self.demod_path + ".x")  # The demodulator X output.
-        # self.signal_paths.append(self.demod_path + ".y")
+            # self.demod_path = f"/{self.device}/demods/0/sample"
+            # self.signal_paths = []
+            # self.signal_paths.append(self.demod_path + ".x")  # The demodulator X output.
+            # self.signal_paths.append(self.demod_path + ".y")
+        except Exception as e:
+            print(e)
 
     def setup_sweep(self):
         self.demod_path = f"/{self.device}/demods/0/sample"
@@ -431,7 +441,7 @@ class LIAControl:
         in_channel = 0
         demod_index = 1
         filter_order = int(window.harmonicOrderSelect.currentText())
-        time_constant = float(window.timeConstantSpinBox.value())  # ~80hz
+        time_constant = (float(window.timeConstantSpinBox.value()))/1e6  # ~80hz
         exp_setting = [
             ["/%s/sigins/%d/ac" % (self.device, in_channel), ac_coupled],  # ac coupling on/off
             ["/%s/sigins/%d/imp50" % (self.device, in_channel), imp_fifty],  # 50 ohm impednecne on/off
@@ -671,6 +681,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
 
         self.odmr_plot = None
         self.odmr_deriv_plot = None
+        self.odmr_cont = None
         self.odmr_linear_region_plot = None
         self.linear_region_list = None
         self.MainWindow = window
@@ -758,7 +769,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
 
 
         self.thread_function(window.rfController.setup_sweep, window.startFreqBox.value(), window.endFreqBox.value(),
-                             window.pointsBox.value(), window.dwellTimeBox.value(), window.stepSizeBox.value(),
+                             window.pointsBox.value(), window.dwellTimeBox.value(), window.stepSizeBox.value(), window.odmrSweepContinous.isChecked(),
                              fin_fn=self.execute_this_function, prg_fn=self.progress_fn,
                              err_fn = window.show_error_message, progress_callback=None)
 
