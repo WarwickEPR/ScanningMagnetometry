@@ -1427,6 +1427,19 @@
          </property>
         </widget>
        </widget>
+       <widget class="QPushButton" name="vectorTestButton">
+        <property name="geometry">
+         <rect>
+          <x>680</x>
+          <y>40</y>
+          <width>75</width>
+          <height>24</height>
+         </rect>
+        </property>
+        <property name="text">
+         <string>Vector Test</string>
+        </property>
+       </widget>
       </widget>
       <widget class="QWidget" name="LIATab">
        <attribute name="title">
@@ -1896,7 +1909,7 @@
      <x>0</x>
      <y>0</y>
      <width>856</width>
-     <height>21</height>
+     <height>22</height>
     </rect>
    </property>
    <widget class="QMenu" name="menu1">
