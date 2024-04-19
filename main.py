@@ -117,6 +117,98 @@ class VectorTest(QtWidgets.QWidget):
         super(VectorTest, self).__init__()
         uic.loadUi('vectorTestWindow.ui', self)  # Load the .ui file
         self.show()
+        self.scanning = True
+
+        self.graphWidget.setLabel(axis='left', text='RF Frequency (GHz)')
+        self.graphWidget.setLabel(axis='bottom', text='Index')
+        self.graphWidget.setLabel(axis='top', text='RF Frequency Shift (GHz)')
+        self.graphWidget_2.setLabel(axis='left', text='Voltage (V)')
+        self.graphWidget_2.setLabel(axis='bottom', text='Index')
+        self.graphWidget_2.setLabel(axis='top', text='Measured Voltage (V)')
+
+        self.vc1 = self.graphWidget.plot()
+        self.vc2 = self.graphWidget.plot()
+        self.vc3 = self.graphWidget.plot()
+        self.vc4 = self.graphWidget.plot()
+
+        self.fc1 = self.graphWidget_2.plot()
+        self.fc2 = self.graphWidget_2.plot()
+        self.fc3 = self.graphWidget_2.plot()
+        self.fc4 = self.graphWidget_2.plot()
+
+        self.thread_function(self.initialise_vector_feedback, err_fn=window.show_error_message, prg_fn=self.debug_plot)
+
+        self.vector_freqs = [2.8484, 2.8523, 2.8572, 2.8779]
+        self.vector_grads = [0.4, 0.4, 0.4, 0.4]
+
+        return
+
+    def thread_function(self, fn, *args, **kwargs):
+        self.worker = Worker(fn, args, kwargs)
+        """connect up the results signal to print the result it emits when triggered"""
+        if 'fin_fn' in kwargs:
+            self.worker.signals.results.connect(kwargs['fin_fn'])
+        if 'prg_fn' in kwargs:
+            self.worker.signals.progress.connect(kwargs['prg_fn'])
+        if 'err_fn' in kwargs:
+            self.worker.signals.error.connect(kwargs['err_fn'])
+        window.threadpool.start(self.worker)
+
+    def initialise_vector_feedback(self, *args, **kwargs):
+        ini_voltage = []
+        for i in range(len(self.vector_freqs)):
+            window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
+            time.sleep(1)
+            sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
+            ini_voltage.append(sample['x'][0])
+        self.feedback_started = True
+        df_arr = [[], [], [], []]
+        dV_arr = [[], [], [], []]
+        res_freq_arr = [[], [], [], []]
+        loop = 0
+        while self.scanning:
+            loop += 1
+            for i in range(len(self.vector_freqs)):
+                res_freq_arr[i].append(self.vector_freqs[i])
+                sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
+                voltage_now = sample['x'][0]
+                self.dV = voltage_now - ini_voltage[i]
+                self.df = (1 / self.vector_grads[i]) * (-self.dV)
+                self.vector_freqs[i] = self.vector_freqs[i] + self.df
+                window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
+                df_arr[i].append(self.df)
+                dV_arr[i].append(self.dV)
+
+            if len(df_arr[0]) > 100:
+                for i in range(len(self.vector_freqs)):
+                    df_arr[i].pop(0)
+                    dV_arr[i].pop(0)
+                    res_freq_arr[i].pop(0)
+            time.sleep(0.1)
+            kwargs['progress_callback'].emit([res_freq_arr, dV_arr])
+        return
+
+    def debug_plot(self, arrs):
+        self.vc1.setData(arrs[0][0], pen=pg.mkPen('b'))
+        self.vc2.setData(arrs[0][1], pen=pg.mkPen('g'))
+        self.vc3.setData(arrs[0][2], pen=pg.mkPen('r'))
+        self.vc4.setData(arrs[0][3], pen=pg.mkPen('y'))
+
+        self.fc1.setData(arrs[1][0], pen=pg.mkPen('b'))
+        self.fc2.setData(arrs[1][1], pen=pg.mkPen('g'))
+        self.fc3.setData(arrs[1][2], pen=pg.mkPen('r'))
+        self.fc4.setData(arrs[1][3], pen=pg.mkPen('y'))
+        # else:
+        #     try:
+        #         self.graphWidget.clear()
+        #         self.graphWidget.plot(arrs[0])
+        #     except:
+        #         pass
+        #     try:
+        #         self.graphWidget_2.clear()
+        #         self.graphWidget_2.plot(arrs[1])
+        #     except:
+        #         pass
         return
 
 
@@ -1255,8 +1347,6 @@ class scanningImageWindow(QtWidgets.QWidget):
                 self.graphWidget_2.plot(arrs[1])
             except:
                 pass
-
-
 
 class Worker(QtCore.QRunnable):
     """"worker thread"""
