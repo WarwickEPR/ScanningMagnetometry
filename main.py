@@ -67,6 +67,11 @@ class MainUI(QtWidgets.QMainWindow):
         self.squareWaveRadio.toggled.connect(self.rfController.change_mod_type)
         self.toggleExtModOnOff.stateChanged.connect(lambda: self.rfController.ext_mod_on_off(self.toggleExtModOnOff.isChecked()))
 
+
+
+        #debug buttons
+        self.vectorTestButton.clicked.connect(self.vectorTest)
+
         # configure thread pool
         self.threadpool = QtCore.QThreadPool()
         print('max %d threads' % self.threadpool.maxThreadCount())
@@ -102,6 +107,18 @@ class MainUI(QtWidgets.QMainWindow):
         if reply == QtWidgets.QMessageBox.StandardButton.Yes:
             print('yes')
         print('going')
+
+    def vectorTest(self):
+        self.vector_test_window = VectorTest()
+        return
+
+class VectorTest:
+    def __init__(self):
+        super(VectorTest, self).__init__()
+        uic.loadUi('vectorTestWindow.ui', self)  # Load the .ui file
+        self.show()
+        return
+
 
 class stageControl:
     def __init__(self):
@@ -301,13 +318,7 @@ class RfControl:
         dwell_time = args[0][3] / 1000
         sweep_step = args[0][4]
 
-        #set trigger to output when sweep start
-        if window.odmrSweepContinous.isChecked():
-            window.rfController.inst.write(':INIT:CONT ON') #set sweep to be continous
-        else:
-            window.rfController.inst.write(':INIT:CONT OFF') #set sweep to be single
-
-
+        window.rfController.inst.write(':INIT:CONT OFF')  # set sweep to be continous
         window.rfController.inst.write(':TRIG:SEQ:SOUR BUS')  # sets sweep to trigger on *TRG command
         window.rfController.inst.write('ROUT:CONN:TRIG:OUTP SRun')  # sets trig out 1 on Keysight to emit pulse when sweep starts, used to trigger LIA
         window.rfController.inst.write(':SOURce:FREQuency:MODE LIST')  # set frequency mode from CW to list sweep
@@ -322,13 +333,11 @@ class RfControl:
         window.LIAController.setup_sweep() #setup LIA for data aquisition
         window.rfController.inst.write('*TRG')  # trigger sweep to start
 
-
         read_count = 0
         window.LIAController.daq_module.execute()
 
         # Record data in a loop with timeout.
         self.samples = []
-        temp_x = []
         while sweeping == True:
             data_read = window.LIAController.daq_module.read(True)
             returned_signal_paths = [
@@ -343,6 +352,7 @@ class RfControl:
                     for index, signal_burst in enumerate(data_read[signal_path.lower()]):
                         self.samples.append(signal_burst['value'][0])
                         window.LIAController.data[signal_path].append(signal_burst)
+                    kwargs['progress_callback'].emit(self.samples)
                 else:
                     # Note: If we read before the next burst has finished, there may be no new data.
                     # No action required.
@@ -351,7 +361,16 @@ class RfControl:
                 # time.sleep(0.01)
                 pass
             else:
-                sweeping = False
+                if window.odmrSweepContinous.isChecked():
+                    window.rfController.inst.write('TSWeep')
+                    window.LIAController.setup_sweep()  # setup LIA for data aquisition
+                    window.rfController.inst.write('*TRG')
+                    self.samples = []
+                    window.LIAController.daq_module.execute()
+                    pass
+                else:
+                    sweeping = False
+
         #stop aquisition and unsub from module
         window.LIAController.daq_module.finish()
         window.LIAController.daq_module.unsubscribe('*')
@@ -381,7 +400,7 @@ class LIAControl:
 
     def connect_lia(self, *args, **kwargs):
         try:
-            self.server_host: str = "169.254.159.230"
+            self.server_host: str = "192.168.70.166"
             self.device_id = args[1]['device_id']
             server_port = 8004
             api_level = 6
@@ -800,7 +819,12 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         return
 
     def progress_fn(self, results):
-        "update progress bar of odmr sweep?"
+        self.y = results
+        self.y = np.concatenate(self.y).ravel()
+        self.x = np.linspace(window.rfController.start_freq, window.rfController.stop_freq, len(self.y))
+        self.dummy_data(self.x, self.y)
+        # print('hello', results)
+        return
 
     def print_this(self, results):
         """this then prints the result emitted from the results signal, that is returned by the function 
