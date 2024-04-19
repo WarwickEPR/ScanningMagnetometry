@@ -6,20 +6,30 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>786</width>
-    <height>582</height>
+    <width>1191</width>
+    <height>658</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Form</string>
   </property>
-  <widget class="PlotWidget" name="graphWidget" native="true">
+  <widget class="ImageView" name="imageWidget" native="true">
    <property name="geometry">
     <rect>
      <x>10</x>
-     <y>290</y>
-     <width>761</width>
-     <height>271</height>
+     <y>10</y>
+     <width>651</width>
+     <height>631</height>
+    </rect>
+   </property>
+  </widget>
+  <widget class="PlotWidget" name="graphWidget" native="true">
+   <property name="geometry">
+    <rect>
+     <x>680</x>
+     <y>220</y>
+     <width>500</width>
+     <height>200</height>
     </rect>
    </property>
    <property name="minimumSize">
@@ -40,10 +50,10 @@
   <widget class="PlotWidget" name="graphWidget_2" native="true">
    <property name="geometry">
     <rect>
-     <x>10</x>
+     <x>680</x>
      <y>10</y>
-     <width>761</width>
-     <height>271</height>
+     <width>500</width>
+     <height>201</height>
     </rect>
    </property>
    <property name="minimumSize">
@@ -63,6 +73,12 @@
   </widget>
  </widget>
  <customwidgets>
+  <customwidget>
+   <class>ImageView</class>
+   <extends>QWidget</extends>
+   <header>pyqtgraph</header>
+   <container>1</container>
+  </customwidget>
   <customwidget>
    <class>PlotWidget</class>
    <extends>QWidget</extends>
