@@ -112,12 +112,13 @@ class MainUI(QtWidgets.QMainWindow):
         self.vector_test_window = VectorTest()
         return
 
-class VectorTest:
+class VectorTest(QtWidgets.QWidget):
     def __init__(self):
         super(VectorTest, self).__init__()
         uic.loadUi('vectorTestWindow.ui', self)  # Load the .ui file
         self.show()
         return
+
 
 
 class stageControl:
