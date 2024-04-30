@@ -138,8 +138,19 @@ class VectorTest(QtWidgets.QWidget):
 
         self.thread_function(self.initialise_vector_feedback, err_fn=window.show_error_message, prg_fn=self.debug_plot)
 
-        self.vector_freqs = [2.8484, 2.8523, 2.8572, 2.8779]
-        self.vector_grads = [0.4, 0.4, 0.4, 0.4]
+        f1 = 2.8339
+        f2 = 2.8562
+        f3 = 2.8803
+        f4 = 2.9014 #GHz
+
+        c1 = 2 #V/MHz
+        c2 = 0.4
+        c3 = 0.7
+        c4 = 0.4
+
+
+        self.vector_freqs = [f1]
+        self.vector_grads = [c1]
 
         return
 
@@ -154,13 +165,15 @@ class VectorTest(QtWidgets.QWidget):
             self.worker.signals.error.connect(kwargs['err_fn'])
         window.threadpool.start(self.worker)
 
+
     def initialise_vector_feedback(self, *args, **kwargs):
         ini_voltage = []
+        scale = 750
         for i in range(len(self.vector_freqs)):
             window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
             time.sleep(1)
             sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
-            ini_voltage.append(sample['x'][0])
+            ini_voltage.append(sample['x'][0]*scale)
         self.feedback_started = True
         df_arr = [[], [], [], []]
         dV_arr = [[], [], [], []]
@@ -169,15 +182,21 @@ class VectorTest(QtWidgets.QWidget):
         while self.scanning:
             loop += 1
             for i in range(len(self.vector_freqs)):
-                res_freq_arr[i].append(self.vector_freqs[i])
-                sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
-                voltage_now = sample['x'][0]
-                self.dV = voltage_now - ini_voltage[i]
-                self.df = (1 / self.vector_grads[i]) * (-self.dV)
-                self.vector_freqs[i] = self.vector_freqs[i] + self.df
                 window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
+
+                # time.sleep(0.04)
+                sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
+                voltage_now = sample['x'][0]*scale
+                self.dV = voltage_now - ini_voltage[i]
+                self.df = (1 / self.vector_grads[i]) * (-self.dV) #freq. shift in MHz
+                self.vector_freqs[i] = self.vector_freqs[i] + self.df/1e3
+
+
+                # window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
                 df_arr[i].append(self.df)
                 dV_arr[i].append(self.dV)
+                res_freq_arr[i].append(self.vector_freqs[i])
+
 
             if len(df_arr[0]) > 100:
                 for i in range(len(self.vector_freqs)):
