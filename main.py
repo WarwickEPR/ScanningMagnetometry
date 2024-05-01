@@ -138,19 +138,18 @@ class VectorTest(QtWidgets.QWidget):
 
         self.thread_function(self.initialise_vector_feedback, err_fn=window.show_error_message, prg_fn=self.debug_plot)
 
-        f1 = 2.8339
-        f2 = 2.8562
-        f3 = 2.8803
-        f4 = 2.9014 #GHz
+        f1 = 2.7735
+        f2 = 2.7954
+        f3 = 2.8054
+        f4 = 2.8267 #GHz
 
-        c1 = 2 #V/MHz
-        c2 = 0.4
-        c3 = 0.7
-        c4 = 0.4
+        c1 = 0.5 #V/MHz
+        c2 = 0.5
+        c3 = 0.5
+        c4 = 0.5
 
-
-        self.vector_freqs = [f1]
-        self.vector_grads = [c1]
+        self.vector_freqs = [f1,f2,f3,f4]
+        self.vector_grads = [c1,c2,c3,c4]
 
         return
 
@@ -184,13 +183,12 @@ class VectorTest(QtWidgets.QWidget):
             for i in range(len(self.vector_freqs)):
                 window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
 
-                # time.sleep(0.04)
+                time.sleep(0.04)
                 sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
                 voltage_now = sample['x'][0]*scale
                 self.dV = voltage_now - ini_voltage[i]
                 self.df = (1 / self.vector_grads[i]) * (-self.dV) #freq. shift in MHz
                 self.vector_freqs[i] = self.vector_freqs[i] + self.df/1e3
-
 
                 # window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
                 df_arr[i].append(self.df)
