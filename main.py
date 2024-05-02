@@ -215,17 +215,6 @@ class VectorTest(QtWidgets.QWidget):
         self.fc2.setData(arrs[1][1], pen=pg.mkPen('g'))
         self.fc3.setData(arrs[1][2], pen=pg.mkPen('r'))
         self.fc4.setData(arrs[1][3], pen=pg.mkPen('y'))
-        # else:
-        #     try:
-        #         self.graphWidget.clear()
-        #         self.graphWidget.plot(arrs[0])
-        #     except:
-        #         pass
-        #     try:
-        #         self.graphWidget_2.clear()
-        #         self.graphWidget_2.plot(arrs[1])
-        #     except:
-        #         pass
         return
 
     def closeEvent(self, event):
@@ -1024,8 +1013,8 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                 self.linear_region_list.append(self.odmr_linear_region_plot)
 
                 self.linearRegionTable.insertRow(i)
-                self.linearRegionTable.setItem(i, 0, QtWidgets.QTableWidgetItem(str(round(x_linear[i], 3))))
-                self.linearRegionTable.setItem(i, 1, QtWidgets.QTableWidgetItem(str(round(slope, 3))))
+                self.linearRegionTable.setItem(i, 0, QtWidgets.QTableWidgetItem(str(round(x_linear[i], 6))))
+                self.linearRegionTable.setItem(i, 1, QtWidgets.QTableWidgetItem(str(round(slope, 6))))
                 self.linearRegionTable.setCellWidget(i, 2, QtWidgets.QCheckBox())
 
             # if plot deriviate is true, plot it else, if false, clear deriv plot.
@@ -1107,17 +1096,6 @@ class scanningImageWindow(QtWidgets.QWidget):
         self.scan_averaging = window.scanAveragingToggle.isChecked()
         self.scanning = False
 
-         # keep it this value as a str for sending to the RF source
-
-        #check rf, lia and printer connections
-        # if not window.rfController.rf_connected or not window.LIAController.LIA_connected or not window.stageController.stage_connected:
-        #     window.show_error_message_txt("Check RF, LIA and Printer connections")
-        #     return
-        #
-        # if window.LIAController.fft_sweep or window.LIAController.odmr_sweep:
-        #     window.show_error_message_txt("Wait for ODMR or FFT to finish before starting scan")
-        #     return
-
         if self.vector:
             window.feedbackToggle.setChecked(True)
 
@@ -1151,26 +1129,14 @@ class scanningImageWindow(QtWidgets.QWidget):
             if self.vector:
                 self.vector_freqs = []
                 self.vector_grads = []
-                for i in range(2):
+                for i in range(4):
                     self.vector_freqs.append(float(window.scanODMRPropertiesTable.item(i, 0).text()))
                     self.vector_grads.append(float(window.scanODMRPropertiesTable.item(i, 1).text()))  # gradient used for feedback with vector
-
+                    # self.vector_grads.append(0.3)
             else:
                 self.res_freq = float(window.scanODMRPropertiesTable.item(0, 0).text())
                 self.res_grad = float(window.scanODMRPropertiesTable.item(0, 1).text()) #gradient used for feedback
 
-        # self.stageControl.execute_gcode('G28') #home stage
-        # moving = True
-        # while moving == True:
-        #     response = self.stageControl.read_gcode('M114')
-        #     response = response.decode("utf-8").split()
-        #     print(response)
-        #     try:
-        #         if response[0] != 'echo:busy:':
-        #             moving = False
-        #             print('finished')
-        #     except:
-        #         continue
         self.stageControl.set_stage_pos(window.xStartSpinBox.value(), window.yStartSpinBox.value())
         time.sleep(5)
         return
@@ -1179,9 +1145,13 @@ class scanningImageWindow(QtWidgets.QWidget):
         self.scanning = True
         if self.feedback:
             if self.vector:
-                self.thread_function(self.initialise_vector_feedback, err_fn=window.show_error_message, prg_fn=self.debug_plot)
+                self.thread_function(self.initialise_vector_feedback,
+                                     err_fn=window.show_error_message,
+                                     prg_fn=self.debug_plot)
             else:
-                self.thread_function(self.initialise_feedback, err_fn=window.show_error_message, prg_fn=self.debug_plot)
+                self.thread_function(self.initialise_feedback,
+                                     err_fn=window.show_error_message,
+                                     prg_fn=self.debug_plot)
 
         if self.vector:
             self.thread_function(self.scan_vector,
@@ -1229,28 +1199,31 @@ class scanningImageWindow(QtWidgets.QWidget):
 
     def initialise_vector_feedback(self, *args, **kwargs):
         ini_voltage = []
+        scale = 750
         for i in range(len(self.vector_freqs)):
             window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
             time.sleep(1)
             sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
-            ini_voltage.append(sample['x'][0])
-        self.feedback_started = True
+            ini_voltage.append(sample['x'][0]*scale)
         df_arr = [[], [], [], []]
         dV_arr = [[], [], [], []]
         res_freq_arr = [[], [], [], []]
         loop = 0
+        self.feedback_started = True
         while self.scanning:
             loop += 1
             for i in range(len(self.vector_freqs)):
-                res_freq_arr[i].append(self.vector_freqs[i])
+                window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
+                time.sleep(0.04)
                 sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
-                voltage_now = sample['x'][0]
+                voltage_now = sample['x'][0]*scale
                 self.dV = voltage_now - ini_voltage[i]
                 self.df = (1 / self.vector_grads[i]) * (-self.dV)
-                self.vector_freqs[i] = self.vector_freqs[i] + self.df
-                window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
+                self.vector_freqs[i] = self.vector_freqs[i] + self.df/1e3
+                # window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
                 df_arr[i].append(self.df)
                 dV_arr[i].append(self.dV)
+                res_freq_arr[i].append(self.vector_freqs[i])
 
             if len(df_arr[0]) > 100:
                 for i in range(len(self.vector_freqs)):
@@ -1359,17 +1332,6 @@ class scanningImageWindow(QtWidgets.QWidget):
             self.fc2.setData(arrs[1][1], pen=pg.mkPen('g'))
             self.fc3.setData(arrs[1][2], pen=pg.mkPen('r'))
             self.fc4.setData(arrs[1][3], pen=pg.mkPen('y'))
-        else:
-            try:
-                self.graphWidget.clear()
-                self.graphWidget.plot(arrs[0])
-            except:
-                pass
-            try:
-                self.graphWidget_2.clear()
-                self.graphWidget_2.plot(arrs[1])
-            except:
-                pass
 
 class Worker(QtCore.QRunnable):
     """"worker thread"""
