@@ -425,7 +425,7 @@ class RfControl:
     def setup_sweep(self, *args, **kwargs):
         self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
         window.LIAController.odmr_sweep = True
-        sweeping = True
+        self.sweeping = True
         self.start_freq = args[0][0]  # Start frequency in Hz (e.g., 1 GHz)
         self.stop_freq = args[0][1]  # Stop frequency in Hz (e.g., 2 GHz)
         num_points = args[0][2]  # Number of frequency points
@@ -452,7 +452,7 @@ class RfControl:
 
         # Record data in a loop with timeout.
         self.samples = []
-        while sweeping == True:
+        while self.sweeping == True:
             data_read = window.LIAController.daq_module.read(True)
             returned_signal_paths = [
                 signal_path.lower() for signal_path in data_read.keys()
@@ -483,7 +483,7 @@ class RfControl:
                     window.LIAController.daq_module.execute()
                     pass
                 else:
-                    sweeping = False
+                    self.sweeping = False
 
         #stop aquisition and unsub from module
         window.LIAController.daq_module.finish()
@@ -949,10 +949,12 @@ class ODMRGraphWindow(QtWidgets.QWidget):
     def closeEvent(self, event):
         """this function executes when the ODMR graph window closes, used to stop thread but can be used for anything
         else, such as printing or saving data, clearing graphs/memory etc."""
+        window.rfController.sweeping = False
         self.worker_running = False
 
     def stop_odmr_sweep(self):
         self.worker_running = False
+
     def updateViews(self):
         ## view has resized; update auxiliary views to match
         self.p2.setGeometry(self.p1.vb.sceneBoundingRect())
