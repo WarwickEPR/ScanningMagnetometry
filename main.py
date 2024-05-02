@@ -138,15 +138,15 @@ class VectorTest(QtWidgets.QWidget):
 
         self.thread_function(self.initialise_vector_feedback, err_fn=window.show_error_message, prg_fn=self.debug_plot)
 
-        f1 = 2.7735
-        f2 = 2.7954
-        f3 = 2.8054
-        f4 = 2.8267 #GHz
+        f1 = 2.7681
+        f2 = 2.7940
+        f3 = 2.8259
+        f4 = 2.8505 #GHz
 
-        c1 = 0.5 #V/MHz
-        c2 = 0.5
-        c3 = 0.5
-        c4 = 0.5
+        c1 = 0.3 #V/MHz
+        c2 = 0.3
+        c3 = 0.3
+        c4 = 0.3
 
         self.vector_freqs = [f1,f2,f3,f4]
         self.vector_grads = [c1,c2,c3,c4]
@@ -228,6 +228,10 @@ class VectorTest(QtWidgets.QWidget):
         #         pass
         return
 
+    def closeEvent(self, event):
+        """this function executes when the ODMR graph window closes, used to stop thread but can be used for anything
+        else, such as printing or saving data, clearing graphs/memory etc."""
+        self.scanning = False
 
 
 class stageControl:
