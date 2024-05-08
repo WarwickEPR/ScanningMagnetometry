@@ -435,27 +435,27 @@ class RfControl:
         window.rfController.inst.write(f':SOURce:FREQuency:STOP {self.stop_freq} GHz')
         window.rfController.inst.write('TSWeep')  # Prime the sweep, start sweep with *TRG command
         window.LIAController.setup_sweep() #setup LIA for data aquisition
-        window.rfController.inst.write('*TRG')  # trigger sweep to start
-        window.LIAController.daq_module.execute()
+        window.LIAController.daq_module.execute() #arm the aquistion (if triggering) or start aq. immediately if no trigger
+
+        buffer_size = window.LIAController.daq_module.getInt("buffersize")
+        time.sleep(1.2 * buffer_size)
         read_count = 0
 
-
-        # Record data in a loop with timeout.
+        # Record data in a loop with timeout. Setup variables before triggering sweep
         self.samples = []
         i = 0
         j = 0
+        window.rfController.inst.write('*TRG')  # trigger sweep to start
         while self.sweeping == True:
             data_read = window.LIAController.daq_module.read(True) #read data
-            returned_signal_paths = [
-                signal_path.lower() for signal_path in data_read.keys()
-            ]
+            returned_signal_paths = [ signal_path.lower() for signal_path in data_read.keys()]
             for signal_path in window.LIAController.signal_paths:
                 if signal_path.lower() in returned_signal_paths:
-                    i += 1
                     # Loop over all the bursts for the subscribed signal. More than
                     # one burst may be returned at a time, in particular if we call
                     # read() less frequently than the burst_duration.
                     for index, signal_burst in enumerate(data_read[signal_path.lower()]):
+                        i += 1
                         self.samples.append(np.mean(signal_burst['value'][0]))
                         window.LIAController.data[signal_path].append(signal_burst)
                     kwargs['progress_callback'].emit(self.samples)
@@ -466,7 +466,6 @@ class RfControl:
                     pass
             print(i,j)
             print(window.LIAController.daq_module.finished())
-            print(window.LIAController.daq_module.progress())
             if (int(window.rfController.inst.query(':STATus:OPERation:CONDition?')) & 8) == 8:  # trigger sweep to start
                 pass
             else:
@@ -577,7 +576,6 @@ class LIAControl:
             print("Subscribing to ", signal_path)
             self.daq_module.subscribe(signal_path)
             self.data[signal_path] = []
-
         return
 
     def setup_fft(self):
