@@ -138,7 +138,7 @@ class VectorTest(QtWidgets.QWidget):
 
         self.thread_function(self.initialise_vector_feedback, err_fn=window.show_error_message, prg_fn=self.debug_plot)
 
-        f1 = 2.7681
+        f1 = 2.7766
         f2 = 2.7940
         f3 = 2.8259
         f4 = 2.8505 #GHz
@@ -417,17 +417,18 @@ class RfControl:
         self.sweeping = True
         self.start_freq = args[0][0]  # Start frequency in Hz (e.g., 1 GHz)
         self.stop_freq = args[0][1]  # Stop frequency in Hz (e.g., 2 GHz)
-        num_points = args[0][2]  # Number of frequency points
+        self.num_points = args[0][2]  # Number of frequency points
         dwell_time = args[0][3] / 1000
         sweep_step = args[0][4]
 
         window.rfController.inst.write(':INIT:CONT OFF')  # set sweep to be continous
         window.rfController.inst.write(':TRIG:SEQ:SOUR BUS')  # sets sweep to trigger on *TRG command
-        window.rfController.inst.write('ROUT:CONN:TRIG:OUTP SRun')  # sets trig out 1 on Keysight to emit pulse when sweep starts, used to trigger LIA
+        window.rfController.inst.write('ROUT:CONN:TRIG1:OUTP SRun')  # sets trig out 1 on Keysight to emit pulse when sweep starts, used to trigger LIA
+        window.rfController.inst.write('ROUT:CONN:TRIG2:OUTP SETT')
         window.rfController.inst.write(':SOURce:FREQuency:MODE LIST')  # set frequency mode from CW to list sweep
         window.rfController.inst.write(f':SWE:DWELL {dwell_time}')  # set dwell time
         if window.sweepDefBox.currentText() == 'Points':  # if points are used, set points
-            window.rfController.inst.write(f':SWE:POINTS {num_points}')
+            window.rfController.inst.write(f':SWE:POINTS {self.num_points}')
         elif window.sweepDefBox.currentText() == 'Step Size':  # if step size used, set step size
             window.rfController.inst.write(f':SWE:STEP {sweep_step} kHz')
         window.rfController.inst.write(f':SOURce:FREQuency:STARt {self.start_freq} GHz')  # set start and end sweep freq
@@ -435,47 +436,57 @@ class RfControl:
         window.rfController.inst.write('TSWeep')  # Prime the sweep, start sweep with *TRG command
         window.LIAController.setup_sweep() #setup LIA for data aquisition
         window.rfController.inst.write('*TRG')  # trigger sweep to start
-
-        read_count = 0
         window.LIAController.daq_module.execute()
+        read_count = 0
+
 
         # Record data in a loop with timeout.
         self.samples = []
+        i = 0
+        j = 0
         while self.sweeping == True:
-            data_read = window.LIAController.daq_module.read(True)
+            data_read = window.LIAController.daq_module.read(True) #read data
             returned_signal_paths = [
                 signal_path.lower() for signal_path in data_read.keys()
             ]
-            progress = window.LIAController.daq_module.progress()[0]
             for signal_path in window.LIAController.signal_paths:
                 if signal_path.lower() in returned_signal_paths:
+                    i += 1
                     # Loop over all the bursts for the subscribed signal. More than
                     # one burst may be returned at a time, in particular if we call
                     # read() less frequently than the burst_duration.
                     for index, signal_burst in enumerate(data_read[signal_path.lower()]):
-                        self.samples.append(signal_burst['value'][0])
+                        self.samples.append(np.mean(signal_burst['value'][0]))
                         window.LIAController.data[signal_path].append(signal_burst)
                     kwargs['progress_callback'].emit(self.samples)
                 else:
+                    j += 1
                     # Note: If we read before the next burst has finished, there may be no new data.
                     # No action required.
                     pass
+            print(i,j)
+            print(window.LIAController.daq_module.finished())
+            print(window.LIAController.daq_module.progress())
             if (int(window.rfController.inst.query(':STATus:OPERation:CONDition?')) & 8) == 8:  # trigger sweep to start
-                # time.sleep(0.01)
                 pass
             else:
-                if window.odmrSweepContinous.isChecked():
-                    window.rfController.inst.write('TSWeep')
-                    window.LIAController.setup_sweep()  # setup LIA for data aquisition
-                    window.rfController.inst.write('*TRG')
-                    self.samples = []
-                    window.LIAController.daq_module.execute()
-                    pass
-                else:
-                    self.sweeping = False
+                window.LIAController.daq_module.finish()
+                self.sweeping = False
+            # else:
+            #     if window.odmrSweepContinous.isChecked():
+            #         window.rfController.inst.write('TSWeep')
+            #         window.LIAController.setup_sweep()  # setup LIA for data aquisition
+            #         window.rfController.inst.write('*TRG')
+            #         self.samples = []
+            #         window.LIAController.daq_module.execute()
+            #         pass
+            #     else:
+            #         window.LIAController.daq_module.finish()
+            #         self.sweeping = False
 
+        print(window.LIAController.daq_module.finished())
+        #when sweep is finished, read any left over data and plot
         #stop aquisition and unsub from module
-        window.LIAController.daq_module.finish()
         window.LIAController.daq_module.unsubscribe('*')
         window.LIAController.odmr_sweep = False
         return
@@ -533,17 +544,32 @@ class LIAControl:
         self.burst_duration = window.odmrAqBurstDurBox.value()  # Time in seconds for each data burst/segment.
         self.num_cols = int(np.ceil(self.module_sampling_rate * self.burst_duration))
         self.num_bursts = int(np.ceil(self.total_duration /self.burst_duration))
+        self.daq.sync()
         # Create an instance of the Data Acquisition Module.
         self.daq_module = self.daq.dataAcquisitionModule()
-        # Configure the Data Acquisition Module.
-        # Set the device that will be used for the trigger - this parameter must be set.
+        # Set the device that will be used for the trigger - this parameter must be set
+
         self.daq_module.set("device", self.device)
-        # Specify continuous acquisition (type=0).
-        self.daq_module.set("type", 0)
-        self.daq_module.set("grid/mode", 2)
-        self.daq_module.set("count", self.num_bursts)
-        self.daq_module.set("duration", self.burst_duration)
-        self.daq_module.set("grid/cols", self.num_cols)
+        # Configure the Data Acquisition Module.
+
+        trigger = True
+        if trigger == True:
+            self.daq_module.set("grid/mode", 4)
+            self.daq_module.set('type', 6)
+            self.daq_module.set('triggernode', self.demod_path + '.TrigIn1')  # set trigger input to be TrigIn1
+            self.daq_module.set("duration", self.burst_duration)
+            self.daq_module.set('edge', 0)
+            self.daq_module.set("count", window.pointsBox.value())
+            self.daq_module.set("grid/cols", self.module_sampling_rate)
+            self.daq_module.set('holdoff/time', 0.001)
+            self.daq_module.set('delay', 0)
+            self.daq_module.set('endless', 1)
+        elif trigger == False:            # Specify continuous acquisition (type=0).
+            self.daq_module.set("grid/mode", 2)
+            self.daq_module.set("type", 0) #type 0 = no trigger
+            self.daq_module.set("count", self.num_bursts)
+            self.daq_module.set("duration", self.burst_duration)
+            self.daq_module.set("grid/cols", self.num_cols)
 
         self.data = {}
         # A dictionary to store all the acquired data.
@@ -914,19 +940,24 @@ class ODMRGraphWindow(QtWidgets.QWidget):
 
         window.takeODMRButton.setEnabled(True)
         self.worker_running = False
-        print('sweep stop')
         self.y = window.rfController.samples
-        self.y = np.concatenate(self.y).ravel()
-        self.x = np.linspace(window.rfController.start_freq, window.rfController.stop_freq, len(self.y))
+        """
+        although the user defines 3000 point step, there maybe a mistmatch between the number of expected points.
+        To deal with this, once the sweep is done, check what the actual length of the data array is and then rematch
+        the length of this to fit between the desired freq. sweep range.
+        i.e if the user wants 3000 points but instead gets 2968 points, replot the data using a numpy range between
+        freq. start and freq. end using 2968 points rather than 3000 points. This should make plotting more accurate.
+        """
+        self.x = np.linspace(window.rfController.start_freq, window.rfController.stop_freq, window.rfController.num_points)
+        self.x = self.x[0:len(self.y)]
         self.dummy_data(self.x,self.y)
         return
 
     def progress_fn(self, results):
         self.y = results
-        self.y = np.concatenate(self.y).ravel()
-        self.x = np.linspace(window.rfController.start_freq, window.rfController.stop_freq, len(self.y))
+        self.x = np.linspace(window.rfController.start_freq, window.rfController.stop_freq, window.rfController.num_points)
+        self.x = self.x[0:len(self.y)]
         self.dummy_data(self.x, self.y)
-        # print('hello', results)
         return
 
     def print_this(self, results):
