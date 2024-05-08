@@ -53,9 +53,10 @@ class MainUI(QtWidgets.QMainWindow):
 
         #  RF ui controls
         self.takeODMRButton.clicked.connect(self.stageController.open_odmr_graph)
-        self.connectMWSourceButton.clicked.connect(lambda: self.rfController.thread_function(self.rfController.connect_rf,
-                                                                                           self.MWSourceIPAddressBox.text(),
-                                                                                             err_fn=self.show_error_message))
+        self.connectMWSourceButton.clicked.connect(
+            lambda: self.rfController.thread_function(self.rfController.connect_rf,
+                                                      self.MWSourceIPAddressBox.text(),
+                                                      err_fn=self.show_error_message))
         self.togglePwrChk.stateChanged.connect(lambda: self.rfController.power_on_off(self.togglePwrChk.isChecked()))
         self.toggleModOnOff.stateChanged.connect(lambda: self.rfController.mod_on_off(self.toggleModOnOff.isChecked()))
         self.setFreqBtn.clicked.connect(self.rfController.set_freq)
@@ -65,11 +66,10 @@ class MainUI(QtWidgets.QMainWindow):
         self.sineWaveRadio.toggled.connect(self.rfController.change_mod_type)
         self.squareWaveRadio.setChecked(False)
         self.squareWaveRadio.toggled.connect(self.rfController.change_mod_type)
-        self.toggleExtModOnOff.stateChanged.connect(lambda: self.rfController.ext_mod_on_off(self.toggleExtModOnOff.isChecked()))
+        self.toggleExtModOnOff.stateChanged.connect(
+            lambda: self.rfController.ext_mod_on_off(self.toggleExtModOnOff.isChecked()))
 
-
-
-        #debug buttons
+        # debug buttons
         self.vectorTestButton.clicked.connect(self.vectorTest)
 
         # configure thread pool
@@ -112,6 +112,7 @@ class MainUI(QtWidgets.QMainWindow):
         self.vector_test_window = VectorTest()
         return
 
+
 class VectorTest(QtWidgets.QWidget):
     def __init__(self):
         super(VectorTest, self).__init__()
@@ -141,15 +142,15 @@ class VectorTest(QtWidgets.QWidget):
         f1 = 2.7766
         f2 = 2.7940
         f3 = 2.8259
-        f4 = 2.8505 #GHz
+        f4 = 2.8505  # GHz
 
-        c1 = 0.3 #V/MHz
+        c1 = 0.3  # V/MHz
         c2 = 0.3
         c3 = 0.3
         c4 = 0.3
 
-        self.vector_freqs = [f1,f2,f3,f4]
-        self.vector_grads = [c1,c2,c3,c4]
+        self.vector_freqs = [f1, f2, f3, f4]
+        self.vector_grads = [c1, c2, c3, c4]
 
         return
 
@@ -164,7 +165,6 @@ class VectorTest(QtWidgets.QWidget):
             self.worker.signals.error.connect(kwargs['err_fn'])
         window.threadpool.start(self.worker)
 
-
     def initialise_vector_feedback(self, *args, **kwargs):
         ini_voltage = []
         scale = 750
@@ -172,7 +172,7 @@ class VectorTest(QtWidgets.QWidget):
             window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
             time.sleep(1)
             sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
-            ini_voltage.append(sample['x'][0]*scale)
+            ini_voltage.append(sample['x'][0] * scale)
         self.feedback_started = True
         df_arr = [[], [], [], []]
         dV_arr = [[], [], [], []]
@@ -185,16 +185,15 @@ class VectorTest(QtWidgets.QWidget):
 
                 time.sleep(0.04)
                 sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
-                voltage_now = sample['x'][0]*scale
+                voltage_now = sample['x'][0] * scale
                 self.dV = voltage_now - ini_voltage[i]
-                self.df = (1 / self.vector_grads[i]) * (-self.dV) #freq. shift in MHz
-                self.vector_freqs[i] = self.vector_freqs[i] + self.df/1e3
+                self.df = (1 / self.vector_grads[i]) * (-self.dV)  # freq. shift in MHz
+                self.vector_freqs[i] = self.vector_freqs[i] + self.df / 1e3
 
                 # window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
                 df_arr[i].append(self.df)
                 dV_arr[i].append(self.dV)
                 res_freq_arr[i].append(self.vector_freqs[i])
-
 
             if len(df_arr[0]) > 100:
                 for i in range(len(self.vector_freqs)):
@@ -339,7 +338,7 @@ class RfControl:
         window.modAmpLabel.setText(str(round(float(mod_amp) / 1e6, 3)))
         window.modFreqLabel.setText(str(round(float(mod_freq) / 1e3, 3)))
 
-        #turn power and modulation off by default
+        # turn power and modulation off by default
         power = int(self.inst.query("OUTP?"))
         if power == 0:
             self.mw_power_on = False
@@ -365,7 +364,7 @@ class RfControl:
 
     def set_freq(self):
         self.inst.write('FREQ ' + str(round(float(window.freqBox.value()) * 1e9, 12)))
-        window.currentFreqLabel.setText(str(round(float(self.get_freq())/1e9, 3)))
+        window.currentFreqLabel.setText(str(round(float(self.get_freq()) / 1e9, 3)))
         return
 
     def get_freq(self):
@@ -391,8 +390,8 @@ class RfControl:
         self.inst.write(f'FM {float(window.modAmpSpinBox.value())} MHz')
         self.inst.write(f'FM:INT:FREQ {float(window.modFreqSpinBox.value())} kHz')
         mod_freq, mod_amp = self.get_mod_params()
-        window.modAmpLabel.setText(str(round(float(mod_amp)/1e6, 3)))
-        window.modFreqLabel.setText(str(round(float(mod_freq)/1e3, 3)))
+        window.modAmpLabel.setText(str(round(float(mod_amp) / 1e6, 3)))
+        window.modFreqLabel.setText(str(round(float(mod_freq) / 1e3, 3)))
         return
 
     def get_mod_params(self):
@@ -400,9 +399,9 @@ class RfControl:
 
     def change_mod_type(self):
         if window.squareWaveRadio.isChecked():
-            self.inst.write(':FM:INT:FUNC SQU') #set square wave fm
+            self.inst.write(':FM:INT:FUNC SQU')  # set square wave fm
         elif window.sineWaveRadio.isChecked():
-            self.inst.write(':FM:INT:FUNC SIN') #set sine wave fm
+            self.inst.write(':FM:INT:FUNC SIN')  # set sine wave fm
 
     def ext_mod_on_off(self, state):
         if state:
@@ -423,7 +422,8 @@ class RfControl:
 
         window.rfController.inst.write(':INIT:CONT OFF')  # set sweep to be continous
         window.rfController.inst.write(':TRIG:SEQ:SOUR BUS')  # sets sweep to trigger on *TRG command
-        window.rfController.inst.write('ROUT:CONN:TRIG1:OUTP SRun')  # sets trig out 1 on Keysight to emit pulse when sweep starts, used to trigger LIA
+        window.rfController.inst.write(
+            'ROUT:CONN:TRIG1:OUTP SRun')  # sets trig out 1 on Keysight to emit pulse when sweep starts, used to trigger LIA
         window.rfController.inst.write('ROUT:CONN:TRIG2:OUTP SETT')
         window.rfController.inst.write(':SOURce:FREQuency:MODE LIST')  # set frequency mode from CW to list sweep
         window.rfController.inst.write(f':SWE:DWELL {dwell_time}')  # set dwell time
@@ -434,12 +434,13 @@ class RfControl:
         window.rfController.inst.write(f':SOURce:FREQuency:STARt {self.start_freq} GHz')  # set start and end sweep freq
         window.rfController.inst.write(f':SOURce:FREQuency:STOP {self.stop_freq} GHz')
         window.rfController.inst.write('TSWeep')  # Prime the sweep, start sweep with *TRG command
-        window.LIAController.setup_sweep() #setup LIA for data aquisition
-        window.LIAController.daq_module.execute() #arm the aquistion (if triggering) or start aq. immediately if no trigger
+        window.LIAController.setup_sweep()  # setup LIA for data acquisition
+        window.LIAController.daq_module.execute()  # arm the acquisition (if triggering) or start aq. immediately if no trigger
 
+        # fudge factor? found in the Zurich LIA docs & examples. No explanation given as to why but
+        # think it's related to making sure the buffer is ready before starting measurements
         buffer_size = window.LIAController.daq_module.getInt("buffersize")
         time.sleep(1.2 * buffer_size)
-        read_count = 0
 
         # Record data in a loop with timeout. Setup variables before triggering sweep
         self.samples = []
@@ -447,8 +448,8 @@ class RfControl:
         j = 0
         window.rfController.inst.write('*TRG')  # trigger sweep to start
         while self.sweeping == True:
-            data_read = window.LIAController.daq_module.read(True) #read data
-            returned_signal_paths = [ signal_path.lower() for signal_path in data_read.keys()]
+            data_read = window.LIAController.daq_module.read(True)  # read data
+            returned_signal_paths = [signal_path.lower() for signal_path in data_read.keys()]
             for signal_path in window.LIAController.signal_paths:
                 if signal_path.lower() in returned_signal_paths:
                     # Loop over all the bursts for the subscribed signal. More than
@@ -464,31 +465,28 @@ class RfControl:
                     # Note: If we read before the next burst has finished, there may be no new data.
                     # No action required.
                     pass
-            print(i,j)
-            print(window.LIAController.daq_module.finished())
             if (int(window.rfController.inst.query(':STATus:OPERation:CONDition?')) & 8) == 8:  # trigger sweep to start
                 pass
             else:
-                window.LIAController.daq_module.finish()
-                self.sweeping = False
-            # else:
-            #     if window.odmrSweepContinous.isChecked():
-            #         window.rfController.inst.write('TSWeep')
-            #         window.LIAController.setup_sweep()  # setup LIA for data aquisition
-            #         window.rfController.inst.write('*TRG')
-            #         self.samples = []
-            #         window.LIAController.daq_module.execute()
-            #         pass
-            #     else:
-            #         window.LIAController.daq_module.finish()
-            #         self.sweeping = False
+                if window.odmrSweepContinous.isChecked():
+                    window.rfController.inst.write('TSWeep')
+                    window.LIAController.setup_sweep()  # setup LIA for data aquisition
+                    self.samples = []
+                    window.LIAController.daq_module.execute()
+                    time.sleep(1.2 * buffer_size)
+                    window.rfController.inst.write('*TRG')
+                    pass
+                else:
+                    window.LIAController.daq_module.finish()
+                    self.sweeping = False
 
         print(window.LIAController.daq_module.finished())
-        #when sweep is finished, read any left over data and plot
-        #stop aquisition and unsub from module
+        # when sweep is finished, read any left over data and plot
+        # stop aquisition and unsub from module
         window.LIAController.daq_module.unsubscribe('*')
         window.LIAController.odmr_sweep = False
         return
+
 
 class LIAControl:
     def __init__(self):
@@ -537,12 +535,12 @@ class LIAControl:
         self.demod_path = f"/{self.device}/demods/0/sample"
         self.signal_paths = []
         self.signal_paths.append(self.demod_path + ".x")
-        #set up sweep parameters to get data from Data Aquisition module
+        # set up sweep parameters to get data from Data Aquisition module
         self.total_duration = window.odmrAqDurBox.value()
-        self.module_sampling_rate =  window.odmrAqSampleRateBox.value() # Number of points/second
+        self.module_sampling_rate = window.odmrAqSampleRateBox.value()  # Number of points/second
         self.burst_duration = window.odmrAqBurstDurBox.value()  # Time in seconds for each data burst/segment.
         self.num_cols = int(np.ceil(self.module_sampling_rate * self.burst_duration))
-        self.num_bursts = int(np.ceil(self.total_duration /self.burst_duration))
+        self.num_bursts = int(np.ceil(self.total_duration / self.burst_duration))
         self.daq.sync()
         # Create an instance of the Data Acquisition Module.
         self.daq_module = self.daq.dataAcquisitionModule()
@@ -563,9 +561,9 @@ class LIAControl:
             self.daq_module.set('holdoff/time', 0.001)
             self.daq_module.set('delay', 0)
             self.daq_module.set('endless', 1)
-        elif trigger == False:            # Specify continuous acquisition (type=0).
+        elif trigger == False:  # Specify continuous acquisition (type=0).
             self.daq_module.set("grid/mode", 2)
-            self.daq_module.set("type", 0) #type 0 = no trigger
+            self.daq_module.set("type", 0)  # type 0 = no trigger
             self.daq_module.set("count", self.num_bursts)
             self.daq_module.set("duration", self.burst_duration)
             self.daq_module.set("grid/cols", self.num_cols)
@@ -587,7 +585,7 @@ class LIAControl:
         in_channel = 0
         demod_index = 1
         filter_order = int(window.harmonicOrderSelect.currentText())
-        time_constant = (float(window.timeConstantSpinBox.value()))/1e6  # ~80hz
+        time_constant = (float(window.timeConstantSpinBox.value())) / 1e6  # ~80hz
         exp_setting = [
             ["/%s/sigins/%d/ac" % (self.device, in_channel), ac_coupled],  # ac coupling on/off
             ["/%s/sigins/%d/imp50" % (self.device, in_channel), imp_fifty],  # 50 ohm impednecne on/off
@@ -595,13 +593,14 @@ class LIAControl:
             ["/%s/demods/%d/enable" % (self.device, demod_index), 1],  # enable data transfer
             # set data transfer rate from demod to data server
             ["/%s/demods/%d/adcselect" % (self.device, 0), 0],  # set demodulator 1's input to signal in 1
-            ["/%s/demods/%d/adcselect" % (self.device, 1), 8], #select auxin1 as demodulator 2's input
+            ["/%s/demods/%d/adcselect" % (self.device, 1), 8],  # select auxin1 as demodulator 2's input
             # set filter order to 8th order
             ["/%s/demods/%d/timeconstant" % (self.device, demod_index), time_constant],
             # sets low pass filter timeconstant ~ 3db filter freq.
             ["/%s/demods/%d/harmonic" % (self.device, demod_index), 1],  # set mod harmonic to be 1st harmonic
             ["/%s/extrefs/%d/enable" % (self.device, in_channel), 1],  # sets ext ref to be aux in 1
-            ["/%s/auxouts/%d/outputselect" % (self.device, 0), demod_select],  # set output to be demod x (0) or demod y (1)
+            ["/%s/auxouts/%d/outputselect" % (self.device, 0), demod_select],
+            # set output to be demod x (0) or demod y (1)
         ]
         self.daq.set(exp_setting)
         self.daq.set(f"/{self.device}/demods/0/enable", 1)
@@ -610,8 +609,6 @@ class LIAControl:
         self.daq.set("/%s/auxouts/%d/scale" % (self.device, 0), self.scaling_Factor)
         self.daq.set("/%s/demods/%d/order" % (self.device, demod_index), filter_order)
         clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
-
-
 
         demod_path = f"/{self.device}/demods/0/sample"
         self.signal_paths = []
@@ -637,6 +634,7 @@ class LIAControl:
             self.daq_module.subscribe(signal_path)
             self.data[signal_path] = []
         return
+
 
 class stage_options(QtWidgets.QWidget):
     def __init__(self):
@@ -672,7 +670,6 @@ class FFTGraphWindow(QtWidgets.QWidget):
         self.graphWidget.setLabel(axis='left', text='Power Spectral Density nT/sqrt(Hz)')
         self.graphWidget.setLabel(axis='bottom', text='Frequency Hz')
 
-
         self.calcSensButton.clicked.connect(lambda: self.calc_sens(freq_start=self.minFreqSpinBox.value(),
                                                                    freq_end=self.maxFreqSpinBox.value(),
                                                                    ignore_freqs=self.ignoreListFreqCheckBox.isChecked()))
@@ -685,7 +682,6 @@ class FFTGraphWindow(QtWidgets.QWidget):
 
         self.thread_function(self.take_fft,
                              progress_callback=None)
-
 
         return
 
@@ -733,7 +729,8 @@ class FFTGraphWindow(QtWidgets.QWidget):
         avg_sample = ((np.sum(self.samples, axis=0)) / window.LIAController.count) * window.LIAController.scaling_Factor
         bin_count = len(avg_sample)
         frequencies = np.arange(0, bin_count)
-        amplitude_spectral_density = (avg_sample * np.sqrt(window.LIAController.fft_duration)) * (1/(28e-6 * self.calib_const))
+        amplitude_spectral_density = (avg_sample * np.sqrt(window.LIAController.fft_duration)) * (
+                    1 / (28e-6 * self.calib_const))
         self.y = amplitude_spectral_density
         self.scaled_y = self.y
         self.x = frequencies
@@ -752,7 +749,7 @@ class FFTGraphWindow(QtWidgets.QWidget):
         self.calib_const = float(self.odmrGradientSpinBox.value())
         if ignore_freqs == True:
             freq_start = freq_start  # convert khz to hz
-            freq_end = freq_end # convert khz to hz
+            freq_end = freq_end  # convert khz to hz
             ignore_freqs_range_idxs = []
 
             # clip frequency data to the selected range
@@ -810,7 +807,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         uic.loadUi('ODMRGraphWindow.ui', self)  # Load the .ui file
         self.show()
 
-        #configure two y axis plot
+        # configure two y axis plot
 
         self.p1 = self.graphWidget.plotItem
         self.p1.setLabels(left='Voltage (V)')
@@ -913,11 +910,11 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         self.setODMRButton.clicked.connect(self.send_to_scan_table)
         self.stopSweepButton.clicked.connect(self.stop_odmr_sweep)
 
-
         self.thread_function(window.rfController.setup_sweep, window.startFreqBox.value(), window.endFreqBox.value(),
-                             window.pointsBox.value(), window.dwellTimeBox.value(), window.stepSizeBox.value(), window.odmrSweepContinous.isChecked(),
+                             window.pointsBox.value(), window.dwellTimeBox.value(), window.stepSizeBox.value(),
+                             window.odmrSweepContinous.isChecked(),
                              fin_fn=self.execute_this_function, prg_fn=self.progress_fn,
-                             err_fn = window.show_error_message, progress_callback=None)
+                             err_fn=window.show_error_message, progress_callback=None)
 
     def thread_function(self, fn, *args, **kwargs):
         self.worker = Worker(fn, args, kwargs)
@@ -946,14 +943,16 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         i.e if the user wants 3000 points but instead gets 2968 points, replot the data using a numpy range between
         freq. start and freq. end using 2968 points rather than 3000 points. This should make plotting more accurate.
         """
-        self.x = np.linspace(window.rfController.start_freq, window.rfController.stop_freq, window.rfController.num_points)
+        self.x = np.linspace(window.rfController.start_freq, window.rfController.stop_freq,
+                             window.rfController.num_points)
         self.x = self.x[0:len(self.y)]
-        self.dummy_data(self.x,self.y)
+        self.dummy_data(self.x, self.y)
         return
 
     def progress_fn(self, results):
         self.y = results
-        self.x = np.linspace(window.rfController.start_freq, window.rfController.stop_freq, window.rfController.num_points)
+        self.x = np.linspace(window.rfController.start_freq, window.rfController.stop_freq,
+                             window.rfController.num_points)
         self.x = self.x[0:len(self.y)]
         self.dummy_data(self.x, self.y)
         return
@@ -963,7 +962,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         'execute_this_function'"""
         self.worker_running = False
         window.takeODMRButton.setEnabled(True)
-        
+
     def closeEvent(self, event):
         """this function executes when the ODMR graph window closes, used to stop thread but can be used for anything
         else, such as printing or saving data, clearing graphs/memory etc."""
@@ -1102,15 +1101,12 @@ class scanningImageWindow(QtWidgets.QWidget):
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
         self.stageControl = window.stageController
 
-
         self.graphWidget.setLabel(axis='left', text='RF Frequency (GHz)')
         self.graphWidget.setLabel(axis='bottom', text='Index')
         self.graphWidget.setLabel(axis='top', text='RF Frequency Shift (GHz)')
         self.graphWidget_2.setLabel(axis='left', text='Voltage (V)')
         self.graphWidget_2.setLabel(axis='bottom', text='Index')
         self.graphWidget_2.setLabel(axis='top', text='Measured Voltage (V)')
-
-
 
         self.xCoords = np.arange(window.xStartSpinBox.value(),
                                  (window.xEndSpinBox.value() + window.xStepSpinBox.value()),
@@ -1160,11 +1156,12 @@ class scanningImageWindow(QtWidgets.QWidget):
                 self.vector_grads = []
                 for i in range(4):
                     self.vector_freqs.append(float(window.scanODMRPropertiesTable.item(i, 0).text()))
-                    self.vector_grads.append(float(window.scanODMRPropertiesTable.item(i, 1).text()))  # gradient used for feedback with vector
+                    self.vector_grads.append(float(
+                        window.scanODMRPropertiesTable.item(i, 1).text()))  # gradient used for feedback with vector
                     # self.vector_grads.append(0.3)
             else:
                 self.res_freq = float(window.scanODMRPropertiesTable.item(0, 0).text())
-                self.res_grad = float(window.scanODMRPropertiesTable.item(0, 1).text()) #gradient used for feedback
+                self.res_grad = float(window.scanODMRPropertiesTable.item(0, 1).text())  # gradient used for feedback
 
         self.stageControl.set_stage_pos(window.xStartSpinBox.value(), window.yStartSpinBox.value())
         time.sleep(5)
@@ -1233,7 +1230,7 @@ class scanningImageWindow(QtWidgets.QWidget):
             window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
             time.sleep(1)
             sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
-            ini_voltage.append(sample['x'][0]*scale)
+            ini_voltage.append(sample['x'][0] * scale)
         df_arr = [[], [], [], []]
         dV_arr = [[], [], [], []]
         res_freq_arr = [[], [], [], []]
@@ -1245,10 +1242,10 @@ class scanningImageWindow(QtWidgets.QWidget):
                 window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
                 time.sleep(0.04)
                 sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
-                voltage_now = sample['x'][0]*scale
+                voltage_now = sample['x'][0] * scale
                 self.dV = voltage_now - ini_voltage[i]
                 self.df = (1 / self.vector_grads[i]) * (-self.dV)
-                self.vector_freqs[i] = self.vector_freqs[i] + self.df/1e3
+                self.vector_freqs[i] = self.vector_freqs[i] + self.df / 1e3
                 # window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
                 df_arr[i].append(self.df)
                 dV_arr[i].append(self.dV)
@@ -1266,7 +1263,7 @@ class scanningImageWindow(QtWidgets.QWidget):
     def scan_no_vector(self, *args, **kwargs):
         while self.feedback_started == False:
             continue
-        time.sleep(3) #let feedback settle
+        time.sleep(3)  # let feedback settle
         scan_time = args[1]['scan_time']
         x_positions = self.xCoords
         y_positions = self.yCoords
@@ -1286,11 +1283,11 @@ class scanningImageWindow(QtWidgets.QWidget):
                 self.stageControl.set_stage_pos(x_position, y_position)
                 time.sleep(scan_time)
                 if self.feedback:
-                    #if feedback on, get res_freq shift and return that
+                    # if feedback on, get res_freq shift and return that
                     df_arr[0, j, i] = self.res_freq
                     kwargs['progress_callback'].emit(df_arr)
                 else:
-                    #else return current voltage instead
+                    # else return current voltage instead
                     sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
                     voltageArr[0, j, i] = sample['x'][0]
                     kwargs['progress_callback'].emit(voltageArr)
@@ -1309,7 +1306,7 @@ class scanningImageWindow(QtWidgets.QWidget):
     def scan_vector(self, *args, **kwargs):
         while self.feedback_started == False:
             continue
-        time.sleep(3) #let feedback settle
+        time.sleep(3)  # let feedback settle
         scan_time = args[1]['scan_time']
         x_positions = self.xCoords
         y_positions = self.yCoords
@@ -1362,8 +1359,10 @@ class scanningImageWindow(QtWidgets.QWidget):
             self.fc3.setData(arrs[1][2], pen=pg.mkPen('r'))
             self.fc4.setData(arrs[1][3], pen=pg.mkPen('y'))
 
+
 class Worker(QtCore.QRunnable):
     """"worker thread"""
+
     def __init__(self, fn, *args, **kwargs):
         super(Worker, self).__init__()
         self.fn = fn
@@ -1371,8 +1370,9 @@ class Worker(QtCore.QRunnable):
         self.kwargs = kwargs
         self.signals = WorkerSignals()
         print()
-        #add callback to kwargs
+        # add callback to kwargs
         self.kwargs['progress_callback'] = self.signals.progress
+
     @QtCore.pyqtSlot()
     def run(self):
         try:
@@ -1386,11 +1386,13 @@ class Worker(QtCore.QRunnable):
         finally:
             self.signals.finished.emit()
 
+
 class WorkerSignals(QtCore.QObject):
     finished = QtCore.pyqtSignal()
     error = QtCore.pyqtSignal(tuple)
     results = QtCore.pyqtSignal(object)
     progress = QtCore.pyqtSignal(object)
+
 
 app = QtWidgets.QApplication(sys.argv)  # Create an instance of QtWidgets.QApplication
 if dark_theme:
