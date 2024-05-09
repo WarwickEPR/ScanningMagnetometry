@@ -1136,9 +1136,9 @@ class scanningImageWindow(QtWidgets.QWidget):
         self.fc3 = self.graphWidget_2.plot()
         self.fc4 = self.graphWidget_2.plot()
 
-        self.thread_function(self.setup_scan,
-                             err_fn=window.show_error_message,
-                             fin_fn=self.start_scan)
+        # self.thread_function(self.setup_scan,
+        #                      err_fn=window.show_error_message,
+        #                      fin_fn=self.start_scan)
 
     def thread_function(self, fn, *args, **kwargs):
         self.worker = Worker(fn, args, kwargs)
