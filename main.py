@@ -469,6 +469,8 @@ class RfControl:
                 pass
             else:
                 if window.odmrSweepContinous.isChecked():
+                    window.LIAController.daq_module.unsubscribe('*')
+
                     window.rfController.inst.write('TSWeep')
                     window.LIAController.setup_sweep()  # setup LIA for data aquisition
                     self.samples = []
@@ -479,8 +481,6 @@ class RfControl:
                 else:
                     window.LIAController.daq_module.finish()
                     self.sweeping = False
-
-        print(window.LIAController.daq_module.finished())
         # when sweep is finished, read any left over data and plot
         # stop aquisition and unsub from module
         window.LIAController.daq_module.unsubscribe('*')
@@ -1040,8 +1040,8 @@ class ODMRGraphWindow(QtWidgets.QWidget):
 
                 self.linearRegionTable.insertRow(i)
                 self.linearRegionTable.setItem(i, 0,
-                                               QtWidgets.QTableWidgetItem(str(round(x_linear[len(prd)//2], 6))))
-                self.linearRegionTable.setItem(i, 1, QtWidgets.QTableWidgetItem(str(round(slope, 6))))
+                                               QtWidgets.QTableWidgetItem(str(round((x_linear[0] + x_linear[-1])/2, 9))))
+                self.linearRegionTable.setItem(i, 1, QtWidgets.QTableWidgetItem(str(round(slope, 9))))
                 self.linearRegionTable.setCellWidget(i, 2, QtWidgets.QCheckBox())
 
             # if plot deriviate is true, plot it else, if false, clear deriv plot.
@@ -1253,6 +1253,7 @@ class scanningImageWindow(QtWidgets.QWidget):
                 dV_arr[i].append(self.dV)
                 res_freq_arr[i].append(self.vector_freqs[i])
 
+            #makes the plot scroll so you dont clog up the graph for  long scans
             if len(df_arr[0]) > 100:
                 for i in range(len(self.vector_freqs)):
                     df_arr[i].pop(0)
