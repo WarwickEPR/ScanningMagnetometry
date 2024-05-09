@@ -7,7 +7,7 @@ import numpy as np
 import time
 import traceback
 import pyvisa
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, BayesianRidge
 from scipy.signal import savgol_filter, find_peaks
 import zhinst.utils as utils
 import zhinst.core
@@ -797,9 +797,6 @@ class FFTGraphWindow(QtWidgets.QWidget):
         self.graphWidget.setLogMode(True, True)
         return
 
-    def lorentzian_derivative(self, x, x0, gamma, A):
-        return -2 * A * gamma ** 2 * (x - x0) / ((x - x0) ** 2 + gamma ** 2) ** 2
-
 
 class ODMRGraphWindow(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
@@ -1014,6 +1011,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                     i.clear()
             except:
                 pass
+
             self.linear_region_list = []
             self.linear_region_list_checkboxes = []
             self.linearRegionTable.setRowCount(0)
@@ -1041,7 +1039,8 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                 self.linear_region_list.append(self.odmr_linear_region_plot)
 
                 self.linearRegionTable.insertRow(i)
-                self.linearRegionTable.setItem(i, 0, QtWidgets.QTableWidgetItem(str(round(x_linear[i], 6))))
+                self.linearRegionTable.setItem(i, 0,
+                                               QtWidgets.QTableWidgetItem(str(round(x_linear[len(prd)//2], 6))))
                 self.linearRegionTable.setItem(i, 1, QtWidgets.QTableWidgetItem(str(round(slope, 6))))
                 self.linearRegionTable.setCellWidget(i, 2, QtWidgets.QCheckBox())
 
@@ -1066,7 +1065,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
 
             # self.odmrGradientLabel.setText(str(round(slope,3)))
         except Exception as error:
-            print(error)
+            print(traceback.format_exc())
 
         self.updateViews()
         return
@@ -1085,6 +1084,9 @@ class ODMRGraphWindow(QtWidgets.QWidget):
             window.scanODMRPropertiesTable.setItem(row, 0, QtWidgets.QTableWidgetItem(str(round(freqs[row], 3))))
             window.scanODMRPropertiesTable.setItem(row, 1, QtWidgets.QTableWidgetItem(str(round(grads[row], 3))))
         return
+
+    def lorentzian_derivative(self, x, x0, gamma, A):
+        return -2 * A * gamma ** 2 * (x - x0) / ((x - x0) ** 2 + gamma ** 2) ** 2
 
 
 class scanningImageWindow(QtWidgets.QWidget):
