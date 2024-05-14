@@ -1140,9 +1140,11 @@ class scanningImageWindow(QtWidgets.QWidget):
 
         #make sure all the requied equipment is connected before attempting a scan
         if self.stageControl.stage_connected and window.rfController.rf_connected and window.LIAController.LIA_connected:
+                # self.thread_function(self.setup_scan,
+                #                      err_fn=window.show_error_message,
+                #                      fin_fn=self.start_scan)
                 self.thread_function(self.setup_scan,
-                                     err_fn=window.show_error_message,
-                                     fin_fn=self.start_scan)
+                                     err_fn=window.show_error_message)
         else:
             error_dialog = QtWidgets.QErrorMessage(window)
             error_dialog.showMessage("Error: Check printer, RF and LIA connections and try again")
