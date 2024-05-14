@@ -1125,6 +1125,7 @@ class scanningImageWindow(QtWidgets.QWidget):
 
         if self.vector:
             window.feedbackToggle.setChecked(True)
+            self.feedback = window.feedbackToggle.isChecked()
 
         self.vc1 = self.graphWidget.plot()
         self.vc2 = self.graphWidget.plot()
@@ -1136,9 +1137,15 @@ class scanningImageWindow(QtWidgets.QWidget):
         self.fc3 = self.graphWidget_2.plot()
         self.fc4 = self.graphWidget_2.plot()
 
-        # self.thread_function(self.setup_scan,
-        #                      err_fn=window.show_error_message,
-        #                      fin_fn=self.start_scan)
+
+        #make sure all the requied equipment is connected before attempting a scan
+        if self.stageControl.stage_connected and window.rfController.rf_connected and window.LIAController.LIA_connected:
+                self.thread_function(self.setup_scan,
+                                     err_fn=window.show_error_message,
+                                     fin_fn=self.start_scan)
+        else:
+            error_dialog = QtWidgets.QErrorMessage(window)
+            error_dialog.showMessage("Error: Check printer, RF and LIA connections and try again")
 
     def thread_function(self, fn, *args, **kwargs):
         self.worker = Worker(fn, args, kwargs)
@@ -1153,17 +1160,17 @@ class scanningImageWindow(QtWidgets.QWidget):
 
     def setup_scan(self, *args, **kwargs):
         if self.feedback:
-            if self.vector:
-                self.vector_freqs = []
-                self.vector_grads = []
-                for i in range(4):
-                    self.vector_freqs.append(float(window.scanODMRPropertiesTable.item(i, 0).text()))
-                    self.vector_grads.append(float(
-                        window.scanODMRPropertiesTable.item(i, 1).text()))  # gradient used for feedback with vector
-                    # self.vector_grads.append(0.3)
-            else:
-                self.res_freq = float(window.scanODMRPropertiesTable.item(0, 0).text())
-                self.res_grad = float(window.scanODMRPropertiesTable.item(0, 1).text())  # gradient used for feedback
+                if self.vector:
+                    self.vector_freqs = []
+                    self.vector_grads = []
+                    for i in range(4):
+                        self.vector_freqs.append(float(window.scanODMRPropertiesTable.item(i, 0).text()))
+                        self.vector_grads.append(float(
+                            window.scanODMRPropertiesTable.item(i, 1).text()))  # gradient used for feedback with vector
+                        # self.vector_grads.append(0.3)
+                else:
+                    self.res_freq = float(window.scanODMRPropertiesTable.item(0, 0).text())
+                    self.res_grad = float(window.scanODMRPropertiesTable.item(0, 1).text())  # gradient used for feedback
 
         self.stageControl.set_stage_pos(window.xStartSpinBox.value(), window.yStartSpinBox.value())
         time.sleep(5)
