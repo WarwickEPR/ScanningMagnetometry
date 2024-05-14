@@ -1226,6 +1226,7 @@ class scanningImageWindow(QtWidgets.QWidget):
         return
 
     def initialise_vector_feedback(self, *args, **kwargs):
+        print('initializing vector feedback')
         ini_voltage = []
         scale = 750
         for i in range(len(self.vector_freqs)):
@@ -1238,6 +1239,7 @@ class scanningImageWindow(QtWidgets.QWidget):
         res_freq_arr = [[], [], [], []]
         loop = 0
         self.feedback_started = True
+        print('feedback starting')
         while self.scanning:
             loop += 1
             for i in range(len(self.vector_freqs)):
@@ -1307,8 +1309,11 @@ class scanningImageWindow(QtWidgets.QWidget):
         return
 
     def scan_vector(self, *args, **kwargs):
+        print('initializing scan vector')
         while self.feedback_started == False:
+            print('waiting')
             continue
+        print('scan vector starting')
         time.sleep(3)  # let feedback settle
         scan_time = args[1]['scan_time']
         x_positions = self.xCoords
