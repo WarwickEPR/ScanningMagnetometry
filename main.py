@@ -1178,7 +1178,7 @@ class scanningImageWindow(QtWidgets.QWidget):
             if self.vector:
                 self.vector_freqs = []
                 self.vector_grads = []
-                for i in range(window.scanODMRPropertiesTable.rowCount()):
+                for i in range(4):
                     try:
                         self.vector_freqs.append(float(window.scanODMRPropertiesTable.item(i, 0).text()))
                         self.vector_grads.append(float(window.scanODMRPropertiesTable.item(i, 1).text()))  # gradient used for feedback with vector
@@ -1356,8 +1356,9 @@ class scanningImageWindow(QtWidgets.QWidget):
                 totalSize -= 1
                 self.stageControl.set_stage_pos(x_position, y_position)
                 time.sleep(scan_time)
-                print(self.vector_freqs[0])
-                df_arr[0, j, i] = self.vector_freqs[0]
+                # df_arr[0, j, i] = self.vector_freqs[0]
+                for k in range(4):
+                    df_arr[k, j, i] = self.vector_freqs[k]
                 kwargs['progress_callback'].emit(df_arr)
                 i = i - 1
                 te = time.time()
@@ -1374,9 +1375,9 @@ class scanningImageWindow(QtWidgets.QWidget):
     def update_plot(self, image_arr):
         if self.vector:
             self.imageWidget.setImage(image_arr[0])
-            self.imageWidget_2.setImage(image_arr[0])
-            self.imageWidget_3.setImage(image_arr[0])
-            self.imageWidget_4.setImage(image_arr[0])
+            self.imageWidget_2.setImage(image_arr[1])
+            self.imageWidget_3.setImage(image_arr[2])
+            self.imageWidget_4.setImage(image_arr[3])
             # self.imageWidget.autoLevels()
         else:
             self.imageWidget.setImage(image_arr)
