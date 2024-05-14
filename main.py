@@ -1139,12 +1139,25 @@ class scanningImageWindow(QtWidgets.QWidget):
 
 
         #make sure all the requied equipment is connected before attempting a scan
-        if self.stageControl.stage_connected and window.rfController.rf_connected and window.LIAController.LIA_connected:
+        # if self.stageControl.stage_connected and window.rfController.rf_connected and window.LIAController.LIA_connected:
                 # self.thread_function(self.setup_scan,
                 #                      err_fn=window.show_error_message,
-                #                      fin_fn=self.start_scan)
+            #                      fin_fn=self.start_scan)
+
+        if self.stageControl.stage_connected and window.rfController.rf_connected and window.LIAController.LIA_connected:
+            if self.feedback or self.vector:
+                if (window.scanODMRPropertiesTable.item(0, 0) is None) or (window.scanODMRPropertiesTable.item(0, 1) is None):
+                    error_dialog = QtWidgets.QErrorMessage(window)
+                    error_dialog.showMessage("Error: If using feedback or vector, first row of freq. table can not be empty")
+                    return
+                else:
+                    self.thread_function(self.setup_scan,
+                                         err_fn=window.show_error_message,
+                                         fin_fn=self.start_scan)
+            else:
                 self.thread_function(self.setup_scan,
-                                     err_fn=window.show_error_message)
+                                     err_fn=window.show_error_message,
+                                     fin_fn=self.start_scan)
         else:
             error_dialog = QtWidgets.QErrorMessage(window)
             error_dialog.showMessage("Error: Check printer, RF and LIA connections and try again")
@@ -1162,19 +1175,24 @@ class scanningImageWindow(QtWidgets.QWidget):
 
     def setup_scan(self, *args, **kwargs):
         if self.feedback:
-                if self.vector:
-                    self.vector_freqs = []
-                    self.vector_grads = []
-                    for i in range(4):
+            if self.vector:
+                self.vector_freqs = []
+                self.vector_grads = []
+                for i in range(window.scanODMRPropertiesTable.rowCount()):
+                    try:
                         self.vector_freqs.append(float(window.scanODMRPropertiesTable.item(i, 0).text()))
-                        self.vector_grads.append(float(
-                            window.scanODMRPropertiesTable.item(i, 1).text()))  # gradient used for feedback with vector
-                        # self.vector_grads.append(0.3)
-                else:
-                    self.res_freq = float(window.scanODMRPropertiesTable.item(0, 0).text())
-                    self.res_grad = float(window.scanODMRPropertiesTable.item(0, 1).text())  # gradient used for feedback
+                        self.vector_grads.append(float(window.scanODMRPropertiesTable.item(i, 1).text()))  # gradient used for feedback with vector
+                    except:
+                        #if table element is empty, skip it
+                        pass
+                    # self.vector_grads.append(0.3)
+            else:
+                self.res_freq = float(window.scanODMRPropertiesTable.item(0, 0).text())
+                self.res_grad = float(window.scanODMRPropertiesTable.item(0, 1).text())  # gradient used for feedback
 
         self.stageControl.set_stage_pos(window.xStartSpinBox.value(), window.yStartSpinBox.value())
+        #sleep needed to allow printer to move into its starting position - i dont know a way of checking if this move has finished programatically
+        #time may need to be adjusted for slower movement/larger distances - might make this a user entered value in an option menu somewhere
         time.sleep(5)
         return
 
@@ -1259,7 +1277,6 @@ class scanningImageWindow(QtWidgets.QWidget):
                 self.dV = voltage_now - ini_voltage[i]
                 self.df = (1 / self.vector_grads[i]) * (-self.dV)
                 self.vector_freqs[i] = self.vector_freqs[i] + self.df / 1e3
-                # window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
                 df_arr[i].append(self.df)
                 dV_arr[i].append(self.dV)
                 res_freq_arr[i].append(self.vector_freqs[i])
@@ -1356,9 +1373,10 @@ class scanningImageWindow(QtWidgets.QWidget):
 
     def update_plot(self, image_arr):
         if self.vector:
-            print(image_arr[0])
             self.imageWidget.setImage(image_arr[0])
-
+            self.imageWidget_2.setImage(image_arr[0])
+            self.imageWidget_3.setImage(image_arr[0])
+            self.imageWidget_4.setImage(image_arr[0])
             # self.imageWidget.autoLevels()
         else:
             self.imageWidget.setImage(image_arr)
