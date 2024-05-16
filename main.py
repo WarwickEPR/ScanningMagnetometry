@@ -1,5 +1,9 @@
 from PyQt6 import QtCore, QtWidgets, uic
 import pyqtgraph as pg
+import h5py
+import cv2
+import os
+from PIL import Image
 import sys
 import serial
 import serial.tools.list_ports
@@ -1137,12 +1141,10 @@ class scanningImageWindow(QtWidgets.QWidget):
         self.fc3 = self.graphWidget_2.plot()
         self.fc4 = self.graphWidget_2.plot()
 
+        self.exportDataButton.clicked.connect(self.export_data)
+        #random array of data for testing
+        self.test_data = np.random.random([4,10,10])
 
-        #make sure all the requied equipment is connected before attempting a scan
-        # if self.stageControl.stage_connected and window.rfController.rf_connected and window.LIAController.LIA_connected:
-                # self.thread_function(self.setup_scan,
-                #                      err_fn=window.show_error_message,
-            #                      fin_fn=self.start_scan)
 
         if self.stageControl.stage_connected and window.rfController.rf_connected and window.LIAController.LIA_connected:
             if self.feedback or self.vector:
@@ -1298,8 +1300,8 @@ class scanningImageWindow(QtWidgets.QWidget):
         scan_time = args[1]['scan_time']
         x_positions = self.xCoords
         y_positions = self.yCoords
-        voltageArr = np.zeros([1, len(y_positions), len(x_positions)])
-        df_arr = np.zeros([1, len(y_positions), len(x_positions)])
+        self.voltageArr = np.zeros([1, len(y_positions), len(x_positions)])
+        self.df_arr = np.zeros([1, len(y_positions), len(x_positions)])
         print('The Scan has started. If the printer is not ready,'
               'exit program and increase the waiting time.')
         j = 0  # xpos
@@ -1315,13 +1317,13 @@ class scanningImageWindow(QtWidgets.QWidget):
                 time.sleep(scan_time)
                 if self.feedback:
                     # if feedback on, get res_freq shift and return that
-                    df_arr[0, j, i] = self.res_freq
-                    kwargs['progress_callback'].emit(df_arr)
+                    self.df_arr[0, j, i] = self.res_freq
+                    kwargs['progress_callback'].emit(self.df_arr)
                 else:
                     # else return current voltage instead
                     sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
-                    voltageArr[0, j, i] = sample['x'][0]
-                    kwargs['progress_callback'].emit(voltageArr)
+                    self.voltageArr[0, j, i] = sample['x'][0]
+                    kwargs['progress_callback'].emit(self.voltageArr)
                 i = i - 1
                 te = time.time()
                 eta = (te - ts) * totalSize
@@ -1344,8 +1346,8 @@ class scanningImageWindow(QtWidgets.QWidget):
         scan_time = args[1]['scan_time']
         x_positions = self.xCoords
         y_positions = self.yCoords
-        voltageArr = np.zeros([4, len(y_positions), len(x_positions)])
-        df_arr = np.zeros([4, len(y_positions), len(x_positions)])
+        self.voltageArr = np.zeros([4, len(y_positions), len(x_positions)])
+        self.df_arr = np.zeros([4, len(y_positions), len(x_positions)])
         j = 0  # xpos
         totalSize = len(x_positions) * len(y_positions)
         for idx, y_position in enumerate(y_positions, 2):
@@ -1358,8 +1360,8 @@ class scanningImageWindow(QtWidgets.QWidget):
                 time.sleep(scan_time)
                 # df_arr[0, j, i] = self.vector_freqs[0]
                 for k in range(4):
-                    df_arr[k, j, i] = self.vector_freqs[k]
-                kwargs['progress_callback'].emit(df_arr)
+                    self.df_arr[k, j, i] = self.vector_freqs[k]
+                kwargs['progress_callback'].emit(self.df_arr)
                 i = i - 1
                 te = time.time()
                 eta = (te - ts) * totalSize
@@ -1395,6 +1397,39 @@ class scanningImageWindow(QtWidgets.QWidget):
             self.fc3.setData(arrs[1][2], pen=pg.mkPen('r'))
             self.fc4.setData(arrs[1][3], pen=pg.mkPen('y'))
 
+    def export_data(self):
+        folderpath = QtWidgets.QFileDialog.getExistingDirectory(self, 'Select Folder')
+        date_time = time.strftime("/Scan_Data_%Y-%m-%d_%H-%M-%S", time.gmtime())
+        # write images to h5 file
+        try:
+            df_arr_data = np.array(self.df_arr)
+            voltage_arr_data = np.array(self.voltageArr)
+            h5f = h5py.File(folderpath + date_time + ".h5", 'w')
+            h5f.create_dataset('df_array', data=df_arr_data)
+            h5f.create_dataset('voltage_array', data=voltage_arr_data)
+            h5f.close()
+        except Exception as error:
+            error_dialog = QtWidgets.QErrorMessage(window)
+            error_dialog.showMessage(str(error))
+
+        #creates new image folder where the data is being saved
+        #convert data to greyscale then export data as png images
+        if not os.path.exists(folderpath + date_time + "IMAGES"):
+            os.makedirs(folderpath + date_time + "IMAGES")
+        for i in range(len(df_arr_data)):
+            df_image = df_arr_data[i,:,:]
+            voltage_image = voltage_arr_data[i,:,:]
+            df_image = cv2.resize(df_image, dsize=(640, 640), interpolation=cv2.INTER_CUBIC)
+            voltage_image = cv2.resize(voltage_image, dsize=(640, 640), interpolation=cv2.INTER_CUBIC)
+            df_image8 = (((df_image - df_image.min()) / (df_image.max() - df_image.min())) * 255.9).astype(np.uint8)
+            voltage_image8 = (((voltage_image - voltage_image.min()) / (voltage_image.max() - voltage_image.min())) * 255.9).astype(np.uint8)
+            df_image = Image.fromarray(df_image8)
+            voltage_image = Image.fromarray(voltage_image8)
+
+            df_image.save(folderpath + date_time + "IMAGES/" + "_IMAGE_freq_" + str(i) + ".PNG")
+            voltage_image.save(folderpath + date_time + "IMAGES/" + "_IMAGE_voltage_" + str(i) + ".PNG")
+
+        return
 
 class Worker(QtCore.QRunnable):
     """"worker thread"""
