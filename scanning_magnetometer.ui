@@ -1909,7 +1909,7 @@
      <x>0</x>
      <y>0</y>
      <width>856</width>
-     <height>22</height>
+     <height>21</height>
     </rect>
    </property>
    <widget class="QMenu" name="menu1">
@@ -1917,7 +1917,7 @@
      <string>Options</string>
     </property>
     <addaction name="actionChange_Max_Position_Values"/>
-    <addaction name="actionOther"/>
+    <addaction name="actionDataViewer"/>
    </widget>
    <addaction name="menu1"/>
   </widget>
@@ -1936,7 +1936,7 @@
     <font/>
    </property>
   </action>
-  <action name="actionOther">
+  <action name="actionDataViewer">
    <property name="text">
     <string>Other</string>
    </property>
