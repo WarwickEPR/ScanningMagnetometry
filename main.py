@@ -445,7 +445,7 @@ class StageControl:
         Useful if the stage size changes, and it needs to be limited to prevent stage crashing with the sensor head or
         with a sample etc.
         """
-        self.stage_options = stage_options()
+        self.stage_options = StageOptions()
 
     def show_error_message(self, text):
         error_dialog = QtWidgets.QErrorMessage(window)
@@ -454,26 +454,54 @@ class StageControl:
 
 
 class RfControl:
+    """ Controls the connection to the RF Source - works using a pyVisa connection to the Keysight Signal Generator.
+    Class has functions to changing the output frequency/power & modulation settings.
+
+    Attributes:
+        mw_power_on : (bool) Checks if the output is on or off for the RF source
+        mod_on : (bool) Checks if modulation is applied to the output signal
+        rf_connected : (bool) Check if a successful connection has been made to the signal generator
+    """
     def __init__(self):
         super(RfControl, self).__init__()
+        self.num_points = None
+        self.stop_freq = None
+        self.start_freq = None
+        self.worker_running = None
+        self.samples = None
         self.mw_power_on = False
         self.mod_on = False
         self.rf_connected = False
 
     def thread_function(self, fn, *args, **kwargs):
-        self.worker = Worker(fn, args, kwargs)
-        """connect up the results signal to print the result it emits when triggered"""
+        """
+
+        :param fn: The function you want to have running asynchronously
+        :param args: any additional arguments  required, not really used here thinking about it...
+        :param kwargs: Contains up to 3 functions, the finish,
+                progress and error functions. These will execute for their respective function
+        :return:
+        """
+        self.worker = Worker(fn, args, kwargs)  # Create a Worker class instance
+        """connect up the results signal to execute its function when it emits when triggered, 
+        the progress signal to execute during each clock cycle and the error signal to execute the error function
+        if any issues occur
+        """
         if 'fin_fn' in kwargs:
-            pass
-            # self.worker.signals.results.connect(self.print_this)
+            self.worker.signals.results.connect(kwargs['fin_fn'])
         if 'prg_fn' in kwargs:
-            pass
-            # self.worker.signals.progress.connect(self.progress_fn)
+            self.worker.signals.progress.connect(kwargs['prg_fn'])
         if 'err_fn' in kwargs:
             self.worker.signals.error.connect(kwargs['err_fn'])
-        window.threadpool.start(self.worker)
+        window.threadpool.start(self.worker)  # start the thread
 
     def connect_rf(self, *args, **kwargs):
+        """
+
+        :param args: Contains the IP address string from the respective UI text box element
+        :param kwargs:
+        :return:
+        """
         ip_address = args[0][0]
         self.rm = pyvisa.ResourceManager()
         ip_address = "TCPIP::" + ip_address + "::INSTR"
@@ -488,7 +516,7 @@ class RfControl:
         window.modAmpLabel.setText(str(round(float(mod_amp) / 1e6, 3)))
         window.modFreqLabel.setText(str(round(float(mod_freq) / 1e3, 3)))
 
-        # turn power and modulation off by default
+        # gets current power state and sets on/off UI button to appropriate state
         power = int(self.inst.query("OUTP?"))
         if power == 0:
             self.mw_power_on = False
@@ -497,6 +525,7 @@ class RfControl:
             self.mw_power_on = True
             window.togglePwrChk.setChecked(True)
 
+        # set frequency modulation on by default
         self.inst.write('FM:STAT ON')
         self.inst.write('OUTP:MOD:STAT ON')
         window.toggleModOnOff.setChecked(True)
@@ -504,6 +533,11 @@ class RfControl:
         return
 
     def power_on_off(self, state):
+        """
+
+        :param state: (bool) State of output power on/off wanted by the user
+        :return:
+        """
         if state:
             self.inst.write('OUTP ON')
             self.mw_power_on = True
@@ -513,19 +547,22 @@ class RfControl:
         return
 
     def set_freq(self):
+        """ Set the frequency of the RF source using the value in the frequency UI box """
         self.inst.write('FREQ ' + str(round(float(window.freqBox.value()) * 1e9, 12)))
         window.currentFreqLabel.setText(str(round(float(self.get_freq()) / 1e9, 3)))
-        return
 
     def get_freq(self):
+        """ Returns the current set output frequency """
         return self.inst.query("FREQ?")
 
     def set_power(self):
+        """ Set the dBm power value of the output signal"""
         self.inst.write(f'POW {float(window.pwrBox.value())} dBm')
         curr_p = round(float(self.inst.query('POW?')), 3)
         window.powerLabel.setText(str(curr_p))
 
     def mod_on_off(self, state):
+        """ Toggle the frequency modulation of the output signal on and off"""
         if state:
             self.mod_on = True
             self.inst.write('FM:STAT ON')
@@ -537,6 +574,7 @@ class RfControl:
         return
 
     def set_mod_params(self):
+        """ Set the modulation frequency value and the modulation amplitude using the values in the UI elements"""
         self.inst.write(f'FM {float(window.modAmpSpinBox.value())} MHz')
         self.inst.write(f'FM:INT:FREQ {float(window.modFreqSpinBox.value())} kHz')
         mod_freq, mod_amp = self.get_mod_params()
@@ -545,15 +583,23 @@ class RfControl:
         return
 
     def get_mod_params(self):
+        """ Returns the current value of the frequency modulation frequency and modulation amplitude"""
         return self.inst.query('FM:INT:FREQ?'), self.inst.query('FM?')
 
     def change_mod_type(self):
+        """ Toggle type of FM from square to sine wave """
         if window.squareWaveRadio.isChecked():
             self.inst.write(':FM:INT:FUNC SQU')  # set square wave fm
         elif window.sineWaveRadio.isChecked():
             self.inst.write(':FM:INT:FUNC SIN')  # set sine wave fm
 
     def ext_mod_on_off(self, state):
+        """ Toggles whether the RF source should use its internal signal generator or an external signal for its
+        frequency modulation
+
+        :param state: (bool) True for external modulation, False for internal
+        :return:
+        """
         if state:
             self.inst.write(':FM:SOUR EXT')
         elif not state:
@@ -561,6 +607,13 @@ class RfControl:
         return
 
     def setup_sweep(self, *args, **kwargs):
+        """ Set the correct parameters for both the RF source and the LIA for performing an ODMR sweep. Parameters set
+        using the respective UI text/spin/toggle box elements.
+
+        :param args: Contains the float values from the UI elements
+        :param kwargs: Contains the function to execute when the callback is emitted, this is used to update ODMR graph
+        :return:
+        """
         self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
         window.LIAController.odmr_sweep = True
         self.sweeping = True
@@ -570,6 +623,7 @@ class RfControl:
         dwell_time = args[0][3] / 1000
         sweep_step = args[0][4]
 
+        # Setting parameters of the RF source
         window.rfController.inst.write(':INIT:CONT OFF')  # set sweep to be continous
         window.rfController.inst.write(':TRIG:SEQ:SOUR BUS')  # sets sweep to trigger on *TRG command
         window.rfController.inst.write(
@@ -597,7 +651,7 @@ class RfControl:
         i = 0
         j = 0
         window.rfController.inst.write('*TRG')  # trigger sweep to start
-        while self.sweeping == True:
+        while self.sweeping:
             data_read = window.LIAController.daq_module.read(True)  # read data
             returned_signal_paths = [signal_path.lower() for signal_path in data_read.keys()]
             for signal_path in window.LIAController.signal_paths:
@@ -620,9 +674,8 @@ class RfControl:
             else:
                 if window.odmrSweepContinous.isChecked():
                     window.LIAController.daq_module.unsubscribe('*')
-
                     window.rfController.inst.write('TSWeep')
-                    window.LIAController.setup_sweep()  # setup LIA for data aquisition
+                    window.LIAController.setup_sweep()  # setup LIA for data acquisition
                     self.samples = []
                     window.LIAController.daq_module.execute()
                     time.sleep(1.2 * buffer_size)
@@ -631,57 +684,86 @@ class RfControl:
                 else:
                     window.LIAController.daq_module.finish()
                     self.sweeping = False
-        # when sweep is finished, read any left over data and plot
-        # stop aquisition and unsub from module
+        # when sweep is finished, read any leftover data and plot
+        # stop acquisition and unsubscribe from module
         window.LIAController.daq_module.unsubscribe('*')
         window.LIAController.odmr_sweep = False
         return
 
 
 class LIAControl:
+    """ Control connection to the Zurich Lock-in amplifier using pyvisa. Also contains the functions to measure inputs
+    and outputs of the LIA as well as set various parameters. Also contains the functions to setup different
+    data acquisition modules for ODMR sweeps and FFT measurements.
+
+    Attributes:
+        LIA_connected : (bool) Zurich LIA connection state
+        odmr_sweep : (bool) Is an ODMR sweep currently happening?
+        fft_sweep: (bool) Is an FFT sweep/acquisition currently happening?
+    """
     def __init__(self):
         super(LIAControl, self).__init__()
+        self.data = None
+        self.clockbase = None
+        self.device_id = None
+        self.server_host = None
+        self.scaling_Factor = None
         self.LIA_connected = False
         self.odmr_sweep = False
         self.fft_sweep = False
         return
 
     def thread_function(self, fn, *args, **kwargs):
-        self.worker = Worker(fn, args, kwargs)
-        """connect up the results signal to print the result it emits when triggered"""
+        """
+
+        :param fn: The function you want to have running asynchronously
+        :param args: any additional arguments  required, not really used here thinking about it...
+        :param kwargs: Contains up to 3 functions, the finish,
+                progress and error functions. These will execute for their respective function
+        :return:
+        """
+        self.worker = Worker(fn, args, kwargs)  # Create a Worker class instance
+        """connect up the results signal to execute its function when it emits when triggered, 
+        the progress signal to execute during each clock cycle and the error signal to execute the error function
+        if any issues occur
+        """
         if 'fin_fn' in kwargs:
-            pass
-            # self.worker.signals.results.connect(self.print_this)
+            self.worker.signals.results.connect(kwargs['fin_fn'])
         if 'prg_fn' in kwargs:
-            pass
-            # self.worker.signals.progress.connect(self.progress_fn)
+            self.worker.signals.progress.connect(kwargs['prg_fn'])
         if 'err_fn' in kwargs:
             self.worker.signals.error.connect(kwargs['err_fn'])
-        window.threadpool.start(self.worker)
+        window.threadpool.start(self.worker)  # start the thread
 
     def connect_lia(self, *args, **kwargs):
+        """
+
+        :param args:  Contains the UI element strings of IP address for the LIA connection
+        :param kwargs:
+        :return:
+        """
         try:
-            self.server_host: str = "192.168.70.166"
+            self.server_host: str = "192.168.70.166"  # this needs to be a user input - remove the magic number
             self.device_id = args[1]['device_id']
-            server_port = 8004
-            api_level = 6
+            server_port = 8004  # this also needs to be a user defined input
+            api_level = 6  # determines how detailed returning information from the LIA is when using the API commands
             (self.daq, self.device, _) = zhinst.utils.create_api_session(
                 self.device_id, api_level, server_host=self.server_host, server_port=server_port
             )
             zhinst.utils.api_server_version_check(self.daq)
-            self.daq.set(f"/{self.device}/demods/0/enable", 1)
-            self.clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
+            self.daq.set(f"/{self.device}/demods/0/enable", 1)  # enable the demodulation
+            self.clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))  # get the clockspeed of the LIA for
 
             self.LIA_connected = True
-
-            # self.demod_path = f"/{self.device}/demods/0/sample"
-            # self.signal_paths = []
-            # self.signal_paths.append(self.demod_path + ".x")  # The demodulator X output.
-            # self.signal_paths.append(self.demod_path + ".y")
         except Exception as e:
+            # Probably should make this a popup message instead of console output..
             print(e)
 
     def setup_sweep(self):
+        """ Set the parameters and arm the data acquisition module of the LIA, ready to start ODMR sweep.
+
+        :return:
+        """
         self.demod_path = f"/{self.device}/demods/0/sample"
         self.signal_paths = []
         self.signal_paths.append(self.demod_path + ".x")
@@ -699,8 +781,8 @@ class LIAControl:
         self.daq_module.set("device", self.device)
         # Configure the Data Acquisition Module.
 
-        trigger = True
-        if trigger == True:
+        trigger = True  # Uses an input on TrigIn1 to trigger the start of the data acquisition
+        if trigger:
             self.daq_module.set("grid/mode", 4)
             self.daq_module.set('type', 6)
             self.daq_module.set('triggernode', self.demod_path + '.TrigIn1')  # set trigger input to be TrigIn1
@@ -711,7 +793,7 @@ class LIAControl:
             self.daq_module.set('holdoff/time', 0.001)
             self.daq_module.set('delay', 0)
             self.daq_module.set('endless', 1)
-        elif trigger == False:  # Specify continuous acquisition (type=0).
+        elif not trigger:  # Specify continuous acquisition (type=0).
             self.daq_module.set("grid/mode", 2)
             self.daq_module.set("type", 0)  # type 0 = no trigger
             self.daq_module.set("count", self.num_bursts)
@@ -727,9 +809,13 @@ class LIAControl:
         return
 
     def setup_fft(self):
+        """ Set the parameters and arm the data acquisition module of the LIA, ready to start FFT measurement.
+
+            :return:
+        """
         self.scaling_Factor = int(window.scalingFactorSpinBox.value())
         demod_select = 0
-        range = int(window.rangeSelect.currentText())
+        v_range = int(window.rangeSelect.currentText())
         imp_fifty = int(window.fiftyOhmCheck.isChecked())
         ac_coupled = int(window.acCoupleCheck.isChecked())
         in_channel = 0
@@ -739,7 +825,7 @@ class LIAControl:
         exp_setting = [
             ["/%s/sigins/%d/ac" % (self.device, in_channel), ac_coupled],  # ac coupling on/off
             ["/%s/sigins/%d/imp50" % (self.device, in_channel), imp_fifty],  # 50 ohm impednecne on/off
-            ["/%s/sigins/%d/range" % (self.device, in_channel), range],  # set signal in range
+            ["/%s/sigins/%d/range" % (self.device, in_channel), v_range],  # set signal in range
             ["/%s/demods/%d/enable" % (self.device, demod_index), 1],  # enable data transfer
             # set data transfer rate from demod to data server
             ["/%s/demods/%d/adcselect" % (self.device, 0), 0],  # set demodulator 1's input to signal in 1
@@ -758,7 +844,6 @@ class LIAControl:
         self.daq.set("/%s/demods/%d/harmonic" % (self.device, demod_index), 1)
         self.daq.set("/%s/auxouts/%d/scale" % (self.device, 0), self.scaling_Factor)
         self.daq.set("/%s/demods/%d/order" % (self.device, demod_index), filter_order)
-        clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
 
         demod_path = f"/{self.device}/demods/0/sample"
         self.signal_paths = []
@@ -786,9 +871,9 @@ class LIAControl:
         return
 
 
-class stage_options(QtWidgets.QWidget):
+class StageOptions(QtWidgets.QWidget):
     def __init__(self):
-        super(stage_options, self).__init__()  # Call the inherited classes __init__ method
+        super(StageOptions, self).__init__()  # Call the inherited classes __init__ method
         uic.loadUi('stage_options.ui', self)  # Load the .ui file
         self.show()
 
@@ -806,17 +891,31 @@ class stage_options(QtWidgets.QWidget):
 
 
 class FFTGraphWindow(QtWidgets.QWidget):
+    """ Opens a new window with a log-log graph showing the FFTs taken from the LIA. This is for measuring the
+    magnetometer sensitivity
+
+    Attributes:
+        fft_plot : pyqt.PlotItem
+        x : x data - probably frequency
+        y : y data - Power spectral density (V/sqrt(Hz))
+        scaled_y : The y values after applying the scaling of the LIA
+        calib_const : The V/MHz value to use when converting the measured voltage from the LIA to a nano-tesla value
+        graphWidget : pyqtgraph.PlotItem
+
+    """
     def __init__(self):
         super().__init__()
         super(FFTGraphWindow, self).__init__()  # Call the inherited classes __init__ method
         uic.loadUi('FFTGraphWindow.ui', self)  # Load the .ui file
         self.show()
+        self.samples = None
         self.fft_plot = None
         self.x = None
         self.y = None
         self.scaled_y = None
         self.calib_const = 1
 
+        #Set up of UI elements
         self.graphWidget.setLabel(axis='left', text='Power Spectral Density nT/sqrt(Hz)')
         self.graphWidget.setLabel(axis='bottom', text='Frequency Hz')
 
@@ -830,25 +929,41 @@ class FFTGraphWindow(QtWidgets.QWidget):
         self.odmrGradientSpinBox.valueChanged.connect(lambda: self.dummy_data(
             calib_const=self.odmrGradientSpinBox.value()))
 
+        # Start threading of the take_fft function
         self.thread_function(self.take_fft,
                              progress_callback=None)
-
         return
 
     def thread_function(self, fn, *args, **kwargs):
-        self.worker = Worker(fn, args, kwargs)
-        """connect up the results signal to print the result it emits when triggered"""
+        """
+
+        :param fn: The function you want to have running asynchronously
+        :param args: any additional arguments  required, not really used here thinking about it...
+        :param kwargs: Contains up to 3 functions, the finish,
+                progress and error functions. These will execute for their respective function
+        :return:
+        """
+        self.worker = Worker(fn, args, kwargs)  # Create a Worker class instance
+        """connect up the results signal to execute its function when it emits when triggered, 
+        the progress signal to execute during each clock cycle and the error signal to execute the error function
+        if any issues occur
+        """
         if 'fin_fn' in kwargs:
-            pass
-            # self.worker.signals.results.connect(self.print_this)
+            self.worker.signals.results.connect(kwargs['fin_fn'])
         if 'prg_fn' in kwargs:
-            pass
-            # self.worker.signals.progress.connect(self.progress_fn)
+            self.worker.signals.progress.connect(kwargs['prg_fn'])
         if 'err_fn' in kwargs:
             self.worker.signals.error.connect(kwargs['err_fn'])
-        window.threadpool.start(self.worker)
+        window.threadpool.start(self.worker)  # start the thread
 
     def take_fft(self, *args, **kwargs):
+        """ Begins setting up the LIA for measuring the signal and performing the calculations to get the
+        power spectral density as well removing unwanted signals and measuring the average noise floor.
+
+        :param args:
+        :param kwargs:
+        :return:
+        """
         self.worker_running = True  # this will stop the thread when its finished or if the ODMR window closes
         window.LIAController.fft_sweep = True
         window.LIAController.setup_fft()
@@ -889,6 +1004,14 @@ class FFTGraphWindow(QtWidgets.QWidget):
         return
 
     def add_ignore_freq(self, freq_start, freq_end):
+        """ Will add freq. values to the "ignoreFrequencyList" which will be used to remove the signals in the
+        frequency range between freq_start and freq_end. Useful when calculating the noise floor, but you want to
+        ignore known signals like the 50 Hz mains signal.
+
+        :param freq_start: (float) Ignore data from this start point
+        :param freq_end:  (float) Ignore data up to this end point
+        :return:
+        """
         row_pos = self.ignoreFrequencyList.rowCount()
         self.ignoreFrequencyList.insertRow(row_pos)
         self.ignoreFrequencyList.setItem(row_pos, 0, QtWidgets.QTableWidgetItem(str(freq_start)))
@@ -896,6 +1019,14 @@ class FFTGraphWindow(QtWidgets.QWidget):
         return
 
     def calc_sens(self, freq_start=10, freq_end=100, ignore_freqs=False):
+        """ Uses the mean average value between the freq_start and freq_end values (in Hz). If ignore_freqs is true then
+        data in the freqs range shown in the ignoreFrequencyList, is ignored when calculating the mean average.
+
+        :param freq_start: (float) Ignore data from this start point
+        :param freq_end:  (float) Ignore data up to this end point
+        :param ignore_freqs: (bool) If true, ignore data between frequency ranges in the ignoreFrequencyList
+        :return:
+        """
         self.calib_const = float(self.odmrGradientSpinBox.value())
         if ignore_freqs == True:
             freq_start = freq_start  # convert khz to hz
@@ -937,13 +1068,17 @@ class FFTGraphWindow(QtWidgets.QWidget):
         # print(mean_sens) # mean sens value
 
     def dummy_data(self, calib_const=1):
+        """ Plots the data to the FFT graph - should probably rename from "dummy_data"
+
+        :param calib_const: (float) Used to convert from volts to tesla value
+        :return:
+        """
         self.scaled_y = self.y
         try:
             self.fft_plot.clear()
         except:
             pass
         self.fft_plot = self.graphWidget.plot(self.x, self.scaled_y)
-
         self.graphWidget.setLogMode(True, True)
         return
 
