@@ -1938,7 +1938,7 @@
   </action>
   <action name="actionDataViewer">
    <property name="text">
-    <string>Other</string>
+    <string>Data Viewer</string>
    </property>
   </action>
  </widget>
