@@ -49,10 +49,14 @@ class MainUI(QtWidgets.QMainWindow):
 
     def __init__(self):
         super(MainUI, self).__init__()  # Call the inherited classes __init__ method
+        self.odmr_graph_window = None
+        self.fft_graph_window = None
+        self.vector_test_window = None
+        self.scan_window = None
         uic.loadUi('scanning_magnetometer.ui', self)  # Load the .ui file
         self.show()  # Show the GUI
 
-        self.stageController = stageControl()  # stage controller class instance
+        self.stageController = StageControl()  # stage controller class instance
         self.rfController = RfControl()
         self.LIAController = LIAControl()
 
@@ -68,16 +72,16 @@ class MainUI(QtWidgets.QMainWindow):
         self.getStagePositionButton.clicked.connect(self.stageController.get_stage_pos)
         self.actionChange_Max_Position_Values.triggered.connect(self.stageController.set_max_stage_position)
 
-        self.startScanButton.clicked.connect(self.stageController.open_scan_window)
+        self.startScanButton.clicked.connect(self.open_scan_window)
 
         #  LIA ui controls
         self.connectLIAButton.clicked.connect(lambda: self.LIAController.thread_function(self.LIAController.connect_lia,
                                                                                          device_id=self.LIANameBox.text(),
                                                                                          err_fn=self.show_error_message))
-        self.takeFFTButton.clicked.connect(self.stageController.open_fft_graph)
+        self.takeFFTButton.clicked.connect(self.open_fft_graph)
 
         #  RF ui controls
-        self.takeODMRButton.clicked.connect(self.stageController.open_odmr_graph)
+        self.takeODMRButton.clicked.connect(self.open_odmr_graph)
         self.connectMWSourceButton.clicked.connect(
             lambda: self.rfController.thread_function(self.rfController.connect_rf,
                                                       self.MWSourceIPAddressBox.text(),
@@ -137,6 +141,21 @@ class MainUI(QtWidgets.QMainWindow):
         """
         self.vector_test_window = VectorTest()  # instantiate the vector test window
         return
+
+    def open_fft_graph(self):
+        """ Opens the fast Fourier transform window for sensitivity measurements"""
+        self.fft_graph_window = FFTGraphWindow()
+
+    def open_odmr_graph(self):
+        """ Opens the ODMR graph window for ODMR sweeps and fitting parameters"""
+        window.takeODMRButton.setEnabled(False)  # stops multiple windows being opened and causing strangness occuring
+        self.odmr_graph_window = ODMRGraphWindow()
+
+    def open_scan_window(self):
+        """ Opens the scan window which shows any feedback/vector tracking graphs as well as showing a real-time image
+        of the current scan.
+        """
+        self.scan_window = scanningImageWindow()
 
 
 class VectorTest(QtWidgets.QWidget):
@@ -311,31 +330,58 @@ class VectorTest(QtWidgets.QWidget):
         self.scanning = False  # stops the while loop in initialise_vector_feedback and finishes/kills the thread.
 
 
-class stageControl:
+class StageControl:
+    """ Controls the connection to the stage and contains the functions to operate it included the read and send gcode
+    functionality
+
+    Attributes:
+        ser : serial connection instance
+        stage_connected : boolean to check if a successful stage connection has been made
+    """
+
     def __init__(self):
-        super(stageControl, self).__init__()
+        super(StageControl, self).__init__()
+        self.stage_options = None
         self.ser = None
         self.stage_connected = False
         return
 
     def execute_gcode(self, command):
+        """ For sending g-codes to the stage to execute them - does not read any data coming back from the stage, use
+        read_gcode for queries.
+
+        :param command: The G-code to send to the printer e.g. G24
+        :return:
+        """
         try:
             self.ser.write(f'{command}\r\n'.encode())
         except:
             self.show_error_message("ERROR: Could not execute stage command")
 
     def read_gcode(self, command):
+        """ For sending g-codes to the stage where a response is expected and reading it, e.g. getting the current
+        stage position.
+
+        :param command: The G-code to send to the printer e.g. G24
+        :return:
+        """
         try:
             self.ser.write(f'{command}\r\n'.encode())
-            response = self.ser.readline()
+            self.response = self.ser.readline()
             self.ser.readline()  # clears next line
 
         except Exception as error:
             error_dialog = QtWidgets.QErrorMessage(window)
             error_dialog.showMessage(str(error))
-        return response
+        return self.response
 
     def connect_stage(self, com_port, baud_rate=115200):
+        """
+
+        :param com_port: (str) the com port to connect to i.e "COM4"
+        :param baud_rate: (int) the baud rate (or bit rate) of the stage
+        :return:
+        """
         try:
             # connect to stage code here
             self.ser = serial.Serial(port=com_port, baudrate=baud_rate)
@@ -349,18 +395,39 @@ class stageControl:
             self.stage_connected = False
 
     def home_stage(self):
+        """ Starts the stage homing process - important to do this before starting a scan so
+        x, y and z positions are correct and don't cause stage crashes
+
+        :return:
+        """
         self.execute_gcode('G28')  # home gcode
         return
 
     def set_stage_pos(self, x, y):
+        """ Move the stage in the xy plane
+
+        :param x: (float) desired x position
+        :param y: (float) desired y position
+        :return:
+        """
         self.execute_gcode(f'G00 X{x} Y{y}')
         return
 
     def set_stage_height(self, z):
+        """ Move the stage up and down
+
+        :param z: (float) desired z position or "height"
+        :return:
+        """
         self.execute_gcode(f'G00 Z{z}')
         return
 
     def get_stage_pos(self):
+        """ queries the stage to return its current x y and z coordinates. This may return inaccurate values if printer
+        is not homed first
+
+        :return:
+        """
         try:
             response = self.read_gcode('M114')
             response = response.decode("utf-8").split()  # response[0] = xPos in mm, [1] = yPos, [2] = zPos
@@ -374,17 +441,11 @@ class stageControl:
             error_dialog.showMessage(str(error))
 
     def set_max_stage_position(self):
+        """ Opens the stage options window so the users can set the desired max parameters like position and speed.
+        Useful if the stage size changes, and it needs to be limited to prevent stage crashing with the sensor head or
+        with a sample etc.
+        """
         self.stage_options = stage_options()
-
-    def open_fft_graph(self):
-        self.fft_graph_window = FFTGraphWindow()
-
-    def open_odmr_graph(self):
-        window.takeODMRButton.setEnabled(False)
-        self.odmr_graph_window = ODMRGraphWindow()
-
-    def open_scan_window(self):
-        self.scan_window = scanningImageWindow()
 
     def show_error_message(self, text):
         error_dialog = QtWidgets.QErrorMessage(window)
@@ -1191,7 +1252,7 @@ class scanningImageWindow(QtWidgets.QWidget):
         uic.loadUi('scanningWindow.ui', self)  # Load the .ui file
         self.show()
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
-        self.stageControl = window.stageController
+        self.StageControl = window.stageController
 
         self.graphWidget.setLabel(axis='left', text='RF Frequency (GHz)')
         self.graphWidget.setLabel(axis='bottom', text='Index')
@@ -1231,7 +1292,7 @@ class scanningImageWindow(QtWidgets.QWidget):
         # random array of data for testing
         self.test_data = np.random.random([4, 10, 10])
 
-        if self.stageControl.stage_connected and window.rfController.rf_connected and window.LIAController.LIA_connected:
+        if self.StageControl.stage_connected and window.rfController.rf_connected and window.LIAController.LIA_connected:
             if self.feedback or self.vector:
                 if (window.scanODMRPropertiesTable.item(0, 0) is None) or (
                         window.scanODMRPropertiesTable.item(0, 1) is None):
@@ -1280,7 +1341,7 @@ class scanningImageWindow(QtWidgets.QWidget):
                 self.res_freq = float(window.scanODMRPropertiesTable.item(0, 0).text())
                 self.res_grad = float(window.scanODMRPropertiesTable.item(0, 1).text())  # gradient used for feedback
 
-        self.stageControl.set_stage_pos(window.xStartSpinBox.value(), window.yStartSpinBox.value())
+        self.StageControl.set_stage_pos(window.xStartSpinBox.value(), window.yStartSpinBox.value())
         # sleep needed to allow printer to move into its starting position - i dont know a way of checking if this move has finished programatically
         # time may need to be adjusted for slower movement/larger distances - might make this a user entered value in an option menu somewhere
         time.sleep(5)
@@ -1401,7 +1462,7 @@ class scanningImageWindow(QtWidgets.QWidget):
                 ts = time.time()
                 totalSize -= 1
                 print(f'\nx = {x_position} mm, y = {y_position} mm', i, j)
-                self.stageControl.set_stage_pos(x_position, y_position)
+                self.StageControl.set_stage_pos(x_position, y_position)
                 time.sleep(scan_time)
                 if self.feedback:
                     # if feedback on, get res_freq shift and return that
@@ -1417,7 +1478,7 @@ class scanningImageWindow(QtWidgets.QWidget):
                 eta = (te - ts) * totalSize
                 print(time.ctime(int(timeStart + eta)))
             j += 1
-            self.stageControl.set_stage_pos(x_positions[0], y_position)
+            self.StageControl.set_stage_pos(x_positions[0], y_position)
             time.sleep(3)
         print('Scan completed. Resetting printer.')
         time.sleep(1)
@@ -1444,7 +1505,7 @@ class scanningImageWindow(QtWidgets.QWidget):
                 timeStart = time.time()
                 ts = time.time()
                 totalSize -= 1
-                self.stageControl.set_stage_pos(x_position, y_position)
+                self.StageControl.set_stage_pos(x_position, y_position)
                 time.sleep(scan_time)
                 # df_arr[0, j, i] = self.vector_freqs[0]
                 for k in range(4):
@@ -1455,7 +1516,7 @@ class scanningImageWindow(QtWidgets.QWidget):
                 eta = (te - ts) * totalSize
                 print(time.ctime(int(timeStart + eta)))
             j += 1
-            self.stageControl.set_stage_pos(x_positions[0], y_position)
+            self.StageControl.set_stage_pos(x_positions[0], y_position)
             time.sleep(3)
         print('Scan completed. Resetting printer.')
         time.sleep(1)
