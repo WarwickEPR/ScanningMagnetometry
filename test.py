@@ -5,6 +5,12 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 mpl.use('TkAgg')
 
+"""
+Alex J. Newman - 18-05-2023=4
+this is just a scratch pad of test scripts - remove for final release blah blah etc etc...
+
+"""
+
 device_id = "dev4521" # Device serial number available on its rear panel.
 # interface = "1GbE" # For Ethernet connection or when MFLI/MFIA is connected to a remote Data Server.
 #interface = "USB" # For all instruments connected to the host computer via USB except MFLI/MFIA.

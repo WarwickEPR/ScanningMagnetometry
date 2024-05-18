@@ -1,3 +1,12 @@
+# -*- coding: utf-8 -*-
+"""Scanning Magnetometer main file
+
+This module contains all the classes for the UI such as displaying graphs and opening new windows.
+It also controls connections to the different equipment such as COM port serial connections and PyVisa connections. It
+also controls the flow of data between these bits of equipment and sorts out the plotting/updating and save/export of
+data.
+"""
+
 from PyQt6 import QtCore, QtWidgets, uic
 import pyqtgraph as pg
 import h5py
@@ -11,13 +20,12 @@ import numpy as np
 import time
 import traceback
 import pyvisa
-from sklearn.linear_model import LinearRegression, BayesianRidge
+from sklearn.linear_model import LinearRegression
 from scipy.signal import savgol_filter, find_peaks
 import zhinst.utils as utils
 import zhinst.core
 
-uiclass, baseclass = pg.Qt.loadUiType("scanning_magnetometer.ui")
-
+# if dark theme is available then use by default
 try:
     import qdarktheme
 
@@ -27,6 +35,18 @@ except Exception as error:
 
 
 class MainUI(QtWidgets.QMainWindow):
+    """
+    This is the main window class. All other windows with be children of this window. All class instances of
+    connections to equipment are stored here as well.
+
+    Attributes:
+        stageController: stage controller class instance
+        rfController: Microwave source class instance
+        LIAController: Lock-In Amplifier class instance
+        threadpool: QtThreadPool class instance for submitting multi-thread tasks - asynchronous processing
+
+    """
+
     def __init__(self):
         super(MainUI, self).__init__()  # Call the inherited classes __init__ method
         uic.loadUi('scanning_magnetometer.ui', self)  # Load the .ui file
@@ -36,6 +56,7 @@ class MainUI(QtWidgets.QMainWindow):
         self.rfController = RfControl()
         self.LIAController = LIAControl()
 
+        # ------------------ UI elements are connected to their respective functions here ------------------ #
         #  stage ui controls
         self.connectStageButton.clicked.connect(
             lambda: self.stageController.connect_stage(self.comPortBox.currentText()))
@@ -76,10 +97,6 @@ class MainUI(QtWidgets.QMainWindow):
         # debug buttons
         self.vectorTestButton.clicked.connect(self.vectorTest)
 
-        # configure thread pool
-        self.threadpool = QtCore.QThreadPool()
-        print('max %d threads' % self.threadpool.maxThreadCount())
-
         try:
             ports = serial.tools.list_ports.comports()
             available_ports = []
@@ -91,39 +108,63 @@ class MainUI(QtWidgets.QMainWindow):
             error_dialog = QtWidgets.QMessageBox(self)
             error_dialog.setText("ERROR: Could not populate COM port list")
             error_dialog.exec()
+        # ------------------ UI ELEMENTS FINISH HERE ------------------ #
+
+        # configure thread pool, needed to multi-threading and asynchronous processing
+        self.threadpool = QtCore.QThreadPool()
+
+        # can supress this printout to console to tell user how many threads are available - only really useful for
+        # developers
+        # print('max %d threads' % self.threadpool.maxThreadCount())
         return
 
     def show_error_message(self, error):
+        """ Displays pop up error message for try and except statements. Pass Exception as "error" parameter to display
+        error to user if printing to console is not possible (i.e in a binary release.)
+
+        :param error: Exception class - pass in the error from a try/except statement
+        :return:
+        """
         error_dialog = QtWidgets.QErrorMessage(self)
         error_dialog.showMessage(str(error[1]))
         return
 
-    def show_error_message_txt(self, text):
-        error_dialog = QtWidgets.QErrorMessage(self)
-        error_dialog.showMessage(str(text))
-        return
-
-    def show_message(self):
-        ret = QtWidgets.QMessageBox()
-        ret.setText("Has the printed finished homing?")
-        ret.setStandardButtons(QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No)
-        reply = ret.exec()
-        if reply == QtWidgets.QMessageBox.StandardButton.Yes:
-            print('yes')
-        print('going')
-
     def vectorTest(self):
-        self.vector_test_window = VectorTest()
+        """debug function of testing the vector measurment capabilites - should normally be disabled in the binary
+        release
+
+        :return:
+        """
+        self.vector_test_window = VectorTest()  # instantiate the vector test window
         return
 
 
 class VectorTest(QtWidgets.QWidget):
+    """ Debug vector test window
+    This is used for debugging and testing the vector measurement and tracking capabilities of the system. Not for use
+    by the end user. The button to open this window is and will be disabled in binary releases.
+
+    Attributes:
+        graphWidget: 1D line plotting widget
+        graphWidget_2: 1D line plotting widget
+        vc1: pyqtgraph.PlotItem.plot() function
+        vc2: pyqtgraph.PlotItem.plot() function
+        vc3: pyqtgraph.PlotItem.plot() function
+        vc4: pyqtgraph.PlotItem.plot() function
+        fc1: pyqtgraph.PlotItem.plot() function
+        fc2: pyqtgraph.PlotItem.plot() function
+        fc3: pyqtgraph.PlotItem.plot() function
+        fc4: pyqtgraph.PlotItem.plot() function
+    """
+
     def __init__(self):
+        # load the UI for the vector test window
         super(VectorTest, self).__init__()
         uic.loadUi('vectorTestWindow.ui', self)  # Load the .ui file
         self.show()
-        self.scanning = True
+        self.scanning = True  # when set to false it will stop threading the function
 
+        # configure the layout of the axes for the two graphs
         self.graphWidget.setLabel(axis='left', text='RF Frequency (GHz)')
         self.graphWidget.setLabel(axis='bottom', text='Index')
         self.graphWidget.setLabel(axis='top', text='RF Frequency Shift (GHz)')
@@ -131,6 +172,7 @@ class VectorTest(QtWidgets.QWidget):
         self.graphWidget_2.setLabel(axis='bottom', text='Index')
         self.graphWidget_2.setLabel(axis='top', text='Measured Voltage (V)')
 
+        # calls pyqtgraph.PlotItem.plot() and creates a new plot window showing the data (which to start with is empty)
         self.vc1 = self.graphWidget.plot()
         self.vc2 = self.graphWidget.plot()
         self.vc3 = self.graphWidget.plot()
@@ -141,74 +183,115 @@ class VectorTest(QtWidgets.QWidget):
         self.fc3 = self.graphWidget_2.plot()
         self.fc4 = self.graphWidget_2.plot()
 
+        # starts the multi-thread for the vector feedback - prevents other ui elements and calculations being
+        # interrupted
         self.thread_function(self.initialise_vector_feedback, err_fn=window.show_error_message, prg_fn=self.debug_plot)
 
+        # initial starting frequencies to use for vector tracking/measurements - change these to the desired values
         f1 = 2.7766
         f2 = 2.7940
         f3 = 2.8259
         f4 = 2.8505  # GHz
 
+        # the ODMR gradients (i.e. calibration constants or feedback "strength") for each of the respective four
+        # frequencies being used.
         c1 = 0.3  # V/MHz
         c2 = 0.3
         c3 = 0.3
         c4 = 0.3
 
+        # saving the sets of frequencies and their respective gradients to separate lists to iterate over later
         self.vector_freqs = [f1, f2, f3, f4]
         self.vector_grads = [c1, c2, c3, c4]
 
         return
 
     def thread_function(self, fn, *args, **kwargs):
-        self.worker = Worker(fn, args, kwargs)
-        """connect up the results signal to print the result it emits when triggered"""
+        """
+
+        :param fn: The function you want to have running asynchronously
+        :param args: any additional arguments  required, not really used here thinking about it...
+        :param kwargs: Contains up to 3 functions, the finish,
+                progress and error functions. These will execute for their respective function
+        :return:
+        """
+        self.worker = Worker(fn, args, kwargs)  # Create a Worker class instance
+        """connect up the results signal to execute its function when it emits when triggered, 
+        the progress signal to execute during each clock cycle and the error signal to execute the error function
+        if any issues occur
+        """
         if 'fin_fn' in kwargs:
             self.worker.signals.results.connect(kwargs['fin_fn'])
         if 'prg_fn' in kwargs:
             self.worker.signals.progress.connect(kwargs['prg_fn'])
         if 'err_fn' in kwargs:
             self.worker.signals.error.connect(kwargs['err_fn'])
-        window.threadpool.start(self.worker)
+        window.threadpool.start(self.worker)  # start the thread
 
     def initialise_vector_feedback(self, *args, **kwargs):
+        """ Starts the vector feedback to keep adjusting the microwave frequencies for 4 ODMR peaks to allow for
+        calculation of the magnetic field vector
+
+        :param args:
+        :param kwargs: contains the callback to emit the signal to execute the progress function given to the
+                        thread_function
+        :return:
+        """
         ini_voltage = []
-        scale = 750
+
+        scale = 750  # Scale set on the lock-in, the outputted data isn't scaled so need to do this manually afterward.
+
+        #  iterate through the starting frequency list, set the RF source to that value and get the voltage value
+        # this will be used as the set-point for the feedback, these are appended to list ini_voltage
         for i in range(len(self.vector_freqs)):
             window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
             time.sleep(1)
             sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
             ini_voltage.append(sample['x'][0] * scale)
-        self.feedback_started = True
+        self.feedback_started = True  # check if the feedback is on or off and stop the thread if set to false
         df_arr = [[], [], [], []]
         dV_arr = [[], [], [], []]
         res_freq_arr = [[], [], [], []]
         loop = 0
         while self.scanning:
             loop += 1
+            # iterate over the 4 freqs in the list and calculate the difference between the voltage now and its
+            # respective set-point voltage. This difference in voltage, along with the given calib const. (V/MHz) is
+            # used to calculate the field vectors.
             for i in range(len(self.vector_freqs)):
                 window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
 
-                time.sleep(0.04)
+                time.sleep(0.04)  # wait for LIA to calm down after changing RF frequency before measuring voltage
                 sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
-                voltage_now = sample['x'][0] * scale
+                voltage_now = sample['x'][0] * scale  # Scale the LIA output to match the measured calib. constants.
                 self.dV = voltage_now - ini_voltage[i]
                 self.df = (1 / self.vector_grads[i]) * (-self.dV)  # freq. shift in MHz
                 self.vector_freqs[i] = self.vector_freqs[i] + self.df / 1e3
-
-                # window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
+                # append results to list for plotting to graphs later
                 df_arr[i].append(self.df)
                 dV_arr[i].append(self.dV)
                 res_freq_arr[i].append(self.vector_freqs[i])
 
+            # if the lists get longer than 100 elements, start removing the last element before plotting - gives a
+            # scrolling graph effect for longer scans, prevents excessive "bunching up" of data on the graph.
             if len(df_arr[0]) > 100:
                 for i in range(len(self.vector_freqs)):
                     df_arr[i].pop(0)
                     dV_arr[i].pop(0)
                     res_freq_arr[i].pop(0)
+            # trying to iterate this while loop to fast while plotting causes the software to crash -
+            # needs a workaround - using a 100 ms sleep to prevent this at the moment
             time.sleep(0.1)
-            kwargs['progress_callback'].emit([res_freq_arr, dV_arr])
+            kwargs['progress_callback'].emit([res_freq_arr, dV_arr])  # update the graphs
         return
 
     def debug_plot(self, arrs):
+        """ Updates the debug plots for the measured voltage and frequencies - useful to see how they change over time
+        to know if the tracking has lost its lock or not, for example.
+
+        :param arrs: Lists of the measured voltage and frequencies over time to plot to the debug graph widgets
+        :return:
+        """
         self.vc1.setData(arrs[0][0], pen=pg.mkPen('b'))
         self.vc2.setData(arrs[0][1], pen=pg.mkPen('g'))
         self.vc3.setData(arrs[0][2], pen=pg.mkPen('r'))
@@ -221,9 +304,11 @@ class VectorTest(QtWidgets.QWidget):
         return
 
     def closeEvent(self, event):
-        """this function executes when the ODMR graph window closes, used to stop thread but can be used for anything
-        else, such as printing or saving data, clearing graphs/memory etc."""
-        self.scanning = False
+        """this function executes when the vector debug graph window closes, used to stop thread
+        :param event:
+        :return:
+        """
+        self.scanning = False  # stops the while loop in initialise_vector_feedback and finishes/kills the thread.
 
 
 class stageControl:
@@ -734,7 +819,7 @@ class FFTGraphWindow(QtWidgets.QWidget):
         bin_count = len(avg_sample)
         frequencies = np.arange(0, bin_count)
         amplitude_spectral_density = (avg_sample * np.sqrt(window.LIAController.fft_duration)) * (
-                    1 / (28e-6 * self.calib_const))
+                1 / (28e-6 * self.calib_const))
         self.y = amplitude_spectral_density
         self.scaled_y = self.y
         self.x = frequencies
@@ -1044,7 +1129,8 @@ class ODMRGraphWindow(QtWidgets.QWidget):
 
                 self.linearRegionTable.insertRow(i)
                 self.linearRegionTable.setItem(i, 0,
-                                               QtWidgets.QTableWidgetItem(str(round((x_linear[0] + x_linear[-1])/2, 9))))
+                                               QtWidgets.QTableWidgetItem(
+                                                   str(round((x_linear[0] + x_linear[-1]) / 2, 9))))
                 self.linearRegionTable.setItem(i, 1, QtWidgets.QTableWidgetItem(str(round(slope, 9))))
                 self.linearRegionTable.setCellWidget(i, 2, QtWidgets.QCheckBox())
 
@@ -1142,15 +1228,16 @@ class scanningImageWindow(QtWidgets.QWidget):
         self.fc4 = self.graphWidget_2.plot()
 
         self.exportDataButton.clicked.connect(self.export_data)
-        #random array of data for testing
-        self.test_data = np.random.random([4,10,10])
-
+        # random array of data for testing
+        self.test_data = np.random.random([4, 10, 10])
 
         if self.stageControl.stage_connected and window.rfController.rf_connected and window.LIAController.LIA_connected:
             if self.feedback or self.vector:
-                if (window.scanODMRPropertiesTable.item(0, 0) is None) or (window.scanODMRPropertiesTable.item(0, 1) is None):
+                if (window.scanODMRPropertiesTable.item(0, 0) is None) or (
+                        window.scanODMRPropertiesTable.item(0, 1) is None):
                     error_dialog = QtWidgets.QErrorMessage(window)
-                    error_dialog.showMessage("Error: If using feedback or vector, first row of freq. table can not be empty")
+                    error_dialog.showMessage(
+                        "Error: If using feedback or vector, first row of freq. table can not be empty")
                     return
                 else:
                     self.thread_function(self.setup_scan,
@@ -1183,9 +1270,10 @@ class scanningImageWindow(QtWidgets.QWidget):
                 for i in range(4):
                     try:
                         self.vector_freqs.append(float(window.scanODMRPropertiesTable.item(i, 0).text()))
-                        self.vector_grads.append(float(window.scanODMRPropertiesTable.item(i, 1).text()))  # gradient used for feedback with vector
+                        self.vector_grads.append(float(
+                            window.scanODMRPropertiesTable.item(i, 1).text()))  # gradient used for feedback with vector
                     except:
-                        #if table element is empty, skip it
+                        # if table element is empty, skip it
                         pass
                     # self.vector_grads.append(0.3)
             else:
@@ -1193,8 +1281,8 @@ class scanningImageWindow(QtWidgets.QWidget):
                 self.res_grad = float(window.scanODMRPropertiesTable.item(0, 1).text())  # gradient used for feedback
 
         self.stageControl.set_stage_pos(window.xStartSpinBox.value(), window.yStartSpinBox.value())
-        #sleep needed to allow printer to move into its starting position - i dont know a way of checking if this move has finished programatically
-        #time may need to be adjusted for slower movement/larger distances - might make this a user entered value in an option menu somewhere
+        # sleep needed to allow printer to move into its starting position - i dont know a way of checking if this move has finished programatically
+        # time may need to be adjusted for slower movement/larger distances - might make this a user entered value in an option menu somewhere
         time.sleep(5)
         return
 
@@ -1283,7 +1371,7 @@ class scanningImageWindow(QtWidgets.QWidget):
                 dV_arr[i].append(self.dV)
                 res_freq_arr[i].append(self.vector_freqs[i])
 
-            #makes the plot scroll so you dont clog up the graph for  long scans
+            # makes the plot scroll so you dont clog up the graph for  long scans
             if len(df_arr[0]) > 100:
                 for i in range(len(self.vector_freqs)):
                     df_arr[i].pop(0)
@@ -1412,17 +1500,18 @@ class scanningImageWindow(QtWidgets.QWidget):
             error_dialog = QtWidgets.QErrorMessage(window)
             error_dialog.showMessage(str(error))
 
-        #creates new image folder where the data is being saved
-        #convert data to greyscale then export data as png images
+        # creates new image folder where the data is being saved
+        # convert data to greyscale then export data as png images
         if not os.path.exists(folderpath + date_time + "IMAGES"):
             os.makedirs(folderpath + date_time + "IMAGES")
         for i in range(len(df_arr_data)):
-            df_image = df_arr_data[i,:,:]
-            voltage_image = voltage_arr_data[i,:,:]
+            df_image = df_arr_data[i, :, :]
+            voltage_image = voltage_arr_data[i, :, :]
             df_image = cv2.resize(df_image, dsize=(640, 640), interpolation=cv2.INTER_CUBIC)
             voltage_image = cv2.resize(voltage_image, dsize=(640, 640), interpolation=cv2.INTER_CUBIC)
             df_image8 = (((df_image - df_image.min()) / (df_image.max() - df_image.min())) * 255.9).astype(np.uint8)
-            voltage_image8 = (((voltage_image - voltage_image.min()) / (voltage_image.max() - voltage_image.min())) * 255.9).astype(np.uint8)
+            voltage_image8 = (((voltage_image - voltage_image.min()) / (
+                    voltage_image.max() - voltage_image.min())) * 255.9).astype(np.uint8)
             df_image = Image.fromarray(df_image8)
             voltage_image = Image.fromarray(voltage_image8)
 
@@ -1430,6 +1519,7 @@ class scanningImageWindow(QtWidgets.QWidget):
             voltage_image.save(folderpath + date_time + "IMAGES/" + "_IMAGE_voltage_" + str(i) + ".PNG")
 
         return
+
 
 class Worker(QtCore.QRunnable):
     """"worker thread"""
