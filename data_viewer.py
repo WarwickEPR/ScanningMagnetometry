@@ -10,15 +10,12 @@ import pyqtgraph as pg
 import h5py
 import numpy as np
 import sys
-try:
-    import qdarktheme
-    dark_theme = True
-except Exception as error:
-    dark_theme = False
+
 
 class DataViewer(QtWidgets.QMainWindow):
     def __init__(self):
         super(DataViewer, self).__init__()  # Call the inherited classes __init__ method
+        self.selected_data = None
         self.f = None
         uic.loadUi('data_viewer.ui', self)  # Load the .ui file
         self.show()  # Show the GUI
@@ -29,7 +26,8 @@ class DataViewer(QtWidgets.QMainWindow):
         self.saveImgCSVButton.clicked.connect(self.export_image_to_csv)
         self.fileItemList.itemDoubleClicked.connect(lambda: self.select_file(self.fileItemList.currentItem()))
         self.dataList.itemDoubleClicked.connect(lambda: self.select_data(self.dataList.currentItem()))
-        self.selectPlotType.currentIndexChanged.connect(lambda: self.change_plot_type(self.selectPlotType.currentIndex()))
+        self.selectPlotType.currentIndexChanged.connect(
+            lambda: self.change_plot_type(self.selectPlotType.currentIndex()))
 
     def load_file(self):
         """ loads a selected .h5 file and populates the list view with the different data sets available"""
@@ -57,22 +55,20 @@ class DataViewer(QtWidgets.QMainWindow):
         :param item: (QtListWidgetItem) currently select item in the list
         :return:
         """
-        print("item selected", item.text())
         self.data = self.f[item.text()][()]
         for i in range(len(self.data)):
-            self.dataList.addItem(str(i+1))
+            self.dataList.addItem(str(i + 1))
         # self.dataImage.setImage(data[0,:,:])
         return
 
     def select_data(self, item):
-        self.selected_data = self.data[int(item.text())-1]
-        print(type(self.selected_data), self.selected_data.shape)
+        self.selected_data = self.data[int(item.text()) - 1]
         if len(self.selected_data.shape) == 1:
-            #data is 1D array, plot as line
+            #  data is 1D array, plot as line
             self.dataGraph.plot(self.selected_data)
         elif len(self.selected_data.shape) == 2:
             self.imageWidget.setImage(self.selected_data)
-            #array is 2D, plot as image
+            #  array is 2D, plot as image
         return
 
     def change_plot_type(self, item):
@@ -83,7 +79,6 @@ class DataViewer(QtWidgets.QMainWindow):
         if type(self.imageWidget.image) is np.ndarray:
             filepath = QtWidgets.QFileDialog.getSaveFileName(self, 'Select File', filter="CSV (*.csv)")[0]
             np.savetxt(filepath, self.imageWidget.image, delimiter=',')
-            print(filepath)
             return
         else:
             error_dialog = QtWidgets.QErrorMessage(self)
