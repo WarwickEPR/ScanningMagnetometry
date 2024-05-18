@@ -26,6 +26,7 @@ class DataViewer(QtWidgets.QMainWindow):
         self.statusBar = QtWidgets.QStatusBar()
         self.setStatusBar(self.statusBar)
         self.loadH5FileButton.clicked.connect(self.load_file)
+        self.saveImgCSVButton.clicked.connect(self.export_image_to_csv)
         self.fileItemList.itemDoubleClicked.connect(lambda: self.select_file(self.fileItemList.currentItem()))
         self.dataList.itemDoubleClicked.connect(lambda: self.select_data(self.dataList.currentItem()))
         self.selectPlotType.currentIndexChanged.connect(lambda: self.change_plot_type(self.selectPlotType.currentIndex()))
@@ -64,20 +65,27 @@ class DataViewer(QtWidgets.QMainWindow):
         return
 
     def select_data(self, item):
-        # print(item.text(),type(item.text()))
-        selected_data = self.data[int(item.text())-1]
-        print(type(selected_data) , selected_data.shape)
-        if len(selected_data.shape) == 1:
+        self.selected_data = self.data[int(item.text())-1]
+        print(type(self.selected_data), self.selected_data.shape)
+        if len(self.selected_data.shape) == 1:
             #data is 1D array, plot as line
-            self.dataGraph.plot(selected_data)
-        elif len(selected_data.shape) == 2:
-            self.imageWidget.setImage(selected_data)
+            self.dataGraph.plot(self.selected_data)
+        elif len(self.selected_data.shape) == 2:
+            self.imageWidget.setImage(self.selected_data)
             #array is 2D, plot as image
-
-        # print(self.data[int(item.text()), :, :])
-        # print(len(data))
         return
 
     def change_plot_type(self, item):
         self.stackedGraphs.setCurrentIndex(item)
+        return
+
+    def export_image_to_csv(self):
+        if type(self.imageWidget.image) is np.ndarray:
+            filepath = QtWidgets.QFileDialog.getSaveFileName(self, 'Select File', filter="CSV (*.csv)")[0]
+            np.savetxt(filepath, self.imageWidget.image, delimiter=',')
+            print(filepath)
+            return
+        else:
+            error_dialog = QtWidgets.QErrorMessage(self)
+            error_dialog.showMessage("No Image Selected To Export")
         return

@@ -18,7 +18,7 @@
     <rect>
      <x>10</x>
      <y>610</y>
-     <width>191</width>
+     <width>201</width>
      <height>44</height>
     </rect>
    </property>
@@ -169,6 +169,31 @@
      <string>Image Plot</string>
     </property>
    </item>
+  </widget>
+  <widget class="QFrame" name="frame_2">
+   <property name="geometry">
+    <rect>
+     <x>10</x>
+     <y>430</y>
+     <width>201</width>
+     <height>44</height>
+    </rect>
+   </property>
+   <property name="frameShape">
+    <enum>QFrame::StyledPanel</enum>
+   </property>
+   <property name="frameShadow">
+    <enum>QFrame::Raised</enum>
+   </property>
+   <layout class="QHBoxLayout" name="horizontalLayout_2">
+    <item>
+     <widget class="QPushButton" name="saveImgCSVButton">
+      <property name="text">
+       <string>Export Image as CSV</string>
+      </property>
+     </widget>
+    </item>
+   </layout>
   </widget>
  </widget>
  <customwidgets>
