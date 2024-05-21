@@ -1508,7 +1508,7 @@ class scanningImageWindow(QtWidgets.QWidget):
                                  )
         else:
             self.thread_function(self.scan_no_vector,
-                                 scan_time=0.2,
+                                 scan_time=0.05,
                                  err_fn=window.show_error_message,
                                  prg_fn=self.update_plot,
                                  )
@@ -1620,7 +1620,7 @@ class scanningImageWindow(QtWidgets.QWidget):
                 print(time.ctime(int(timeStart + eta)))
             j += 1
             self.StageControl.set_stage_pos(x_positions[0], y_position)
-            time.sleep(3)
+            time.sleep(4)
         print('Scan completed. Resetting printer.')
         time.sleep(1)
         self.scanning = False
