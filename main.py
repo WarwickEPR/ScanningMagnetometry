@@ -79,6 +79,7 @@ class MainUI(QtWidgets.QMainWindow):
         #  LIA ui controls
         self.connectLIAButton.clicked.connect(lambda: self.LIAController.thread_function(self.LIAController.connect_lia,
                                                                                          device_id=self.LIANameBox.text(),
+                                                                                         device_ip=self.LIAIPBox.text(),
                                                                                          err_fn=self.show_error_message))
         self.takeFFTButton.clicked.connect(self.open_fft_graph)
 
@@ -749,7 +750,7 @@ class LIAControl:
         :return:
         """
         try:
-            self.server_host: str = "192.168.70.166"  # this needs to be a user input - remove the magic number
+            self.server_host: str = args[1]['device_ip']  # this needs to be a user input - remove the magic number
             self.device_id = args[1]['device_id']
             server_port = 8004  # this also needs to be a user defined input
             api_level = 6  # determines how detailed returning information from the LIA is when using the API commands
