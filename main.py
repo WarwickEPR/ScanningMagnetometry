@@ -1509,7 +1509,7 @@ class scanningImageWindow(QtWidgets.QWidget):
                                  )
         else:
             self.thread_function(self.scan_no_vector,
-                                 scan_time=0.05,
+                                 scan_time=float(window.scanDwellTimeSpinBox.value()),
                                  err_fn=window.show_error_message,
                                  prg_fn=self.update_plot,
                                  )

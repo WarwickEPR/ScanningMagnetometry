@@ -29,7 +29,7 @@
        <enum>QTabWidget::Rounded</enum>
       </property>
       <property name="currentIndex">
-       <number>2</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="stage_control">
        <attribute name="title">
@@ -755,6 +755,41 @@
          </property>
          <property name="value">
           <double>0.100000000000000</double>
+         </property>
+        </widget>
+        <widget class="QLabel" name="label_29">
+         <property name="geometry">
+          <rect>
+           <x>12</x>
+           <y>112</y>
+           <width>81</width>
+           <height>20</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>Dwell Time (S)</string>
+         </property>
+        </widget>
+        <widget class="QDoubleSpinBox" name="scanDwellTimeSpinBox">
+         <property name="geometry">
+          <rect>
+           <x>100</x>
+           <y>110</y>
+           <width>91</width>
+           <height>25</height>
+          </rect>
+         </property>
+         <property name="decimals">
+          <number>3</number>
+         </property>
+         <property name="maximum">
+          <double>100.000000000000000</double>
+         </property>
+         <property name="singleStep">
+          <double>0.100000000000000</double>
+         </property>
+         <property name="value">
+          <double>0.050000000000000</double>
          </property>
         </widget>
        </widget>
