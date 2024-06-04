@@ -25,11 +25,12 @@ from scipy.signal import savgol_filter, find_peaks
 import zhinst.utils as utils
 import zhinst.core
 import data_viewer
+import default_param_window
+import yaml
 
 # if dark theme is available then use by default
 try:
     import qdarktheme
-
     dark_theme = True
 except Exception as error:
     dark_theme = False
@@ -61,6 +62,17 @@ class MainUI(QtWidgets.QMainWindow):
         self.rfController = RfControl()
         self.LIAController = LIAControl()
 
+        # load config.yml to set default values if it exists in directory
+        try:
+            with open("config.yml", "r") as f:
+                self.default_parameters = yaml.safe_load(f)
+                print(self.default_parameters)
+                self.LIAIPBox.setText(self.default_parameters['Device_IP'])
+                self.LIANameBox.setText(self.default_parameters['Device_ID'])
+                self.MWSourceIPAddressBox.setText(self.default_parameters['RF_IP'])
+        except Exception as error:
+            print(error)
+
         # ------------------ UI elements are connected to their respective functions here ------------------ #
         #  stage ui controls
         self.connectStageButton.clicked.connect(
@@ -73,6 +85,7 @@ class MainUI(QtWidgets.QMainWindow):
         self.getStagePositionButton.clicked.connect(self.stageController.get_stage_pos)
         self.actionChange_Max_Position_Values.triggered.connect(self.stageController.set_max_stage_position)
         self.actionDataViewer.triggered.connect(self.open_data_viewer)
+        self.actionDefaultParameters.triggered.connect(self.open_default_param)
 
         self.startScanButton.clicked.connect(self.open_scan_window)
 
@@ -163,6 +176,11 @@ class MainUI(QtWidgets.QMainWindow):
     def open_data_viewer(self):
         self.data_viewer_window = data_viewer.DataViewer()
         return
+
+    def open_default_param(self):
+        self.default_param_window = default_param_window.DefaultParamWindow()
+        return
+
 
 
 class VectorTest(QtWidgets.QWidget):
