@@ -62,16 +62,14 @@ class MainUI(QtWidgets.QMainWindow):
         self.rfController = RfControl()
         self.LIAController = LIAControl()
 
-        # load config.yml to set default values if it exists in directory
+        # try loading default default_config.yml to set default values if it exists in directory
         try:
-            with open("config.yml", "r") as f:
-                self.default_parameters = yaml.safe_load(f)
-                print(self.default_parameters)
-                self.LIAIPBox.setText(self.default_parameters['Device_IP'])
-                self.LIANameBox.setText(self.default_parameters['Device_ID'])
-                self.MWSourceIPAddressBox.setText(self.default_parameters['RF_IP'])
+            with open("settings.yml", "r") as f:
+                self.config_path = yaml.safe_load(f)
+            self.load_config(config_file_name=self.config_path['Config_Path']['Path'])
         except Exception as error:
             print(error)
+
 
         # ------------------ UI elements are connected to their respective functions here ------------------ #
         #  stage ui controls
@@ -86,6 +84,8 @@ class MainUI(QtWidgets.QMainWindow):
         self.actionChange_Max_Position_Values.triggered.connect(self.stageController.set_max_stage_position)
         self.actionDataViewer.triggered.connect(self.open_data_viewer)
         self.actionDefaultParameters.triggered.connect(self.open_default_param)
+        self.actionLoadConfig.triggered.connect(self.load_config_button_selected)
+        self.actionSaveConfig.triggered.connect(self.save_config)
 
         self.startScanButton.clicked.connect(self.open_scan_window)
 
@@ -178,7 +178,154 @@ class MainUI(QtWidgets.QMainWindow):
         return
 
     def open_default_param(self):
-        self.default_param_window = default_param_window.DefaultParamWindow()
+        filepath = QtWidgets.QFileDialog.getOpenFileName(self, 'Select File', filter="yml (*.yml)")[0]
+        new_settings = self.config_path
+        new_settings['Config_Path']['Path'] = str(filepath)
+        with open("settings.yml", 'w') as f:
+            yaml.dump(new_settings, f, default_flow_style=False)
+        return
+
+    def load_config_button_selected(self):
+        filepath = QtWidgets.QFileDialog.getOpenFileName(self, 'Select File', filter="yml (*.yml)")[0]
+        self.load_config(config_file_name=filepath)
+
+    def load_config(self, config_file_name="default_config.yml"):
+        try:
+            with open(config_file_name, "r") as f:
+                self.default_parameters = yaml.safe_load(f)
+        except Exception as error:
+            print(error)
+            return
+        try:
+            # set connection default values
+            self.LIAIPBox.setText(self.default_parameters['Connection_Params']['Device_IP'])
+            self.LIANameBox.setText(self.default_parameters['Connection_Params']['Device_ID'])
+            self.MWSourceIPAddressBox.setText(self.default_parameters['Connection_Params']['RF_IP'])
+
+            #set stage scanning parameter values
+            self.scanAveragingTimeSpinBox.setValue(float(self.default_parameters['Stage_Params']['Avg_Time']))
+            self.scanDwellTimeSpinBox.setValue(float(self.default_parameters['Stage_Params']['Dwell']))
+            self.xEndSpinBox.setValue(float(self.default_parameters['Stage_Params']['X_End']))
+            self.xStartSpinBox.setValue(float(self.default_parameters['Stage_Params']['X_Start']))
+            self.xStepSpinBox.setValue(float(self.default_parameters['Stage_Params']['X_Step']))
+            self.yEndSpinBox.setValue(float(self.default_parameters['Stage_Params']['Y_End']))
+            self.yStartSpinBox.setValue(float(self.default_parameters['Stage_Params']['Y_Start']))
+            self.yStepSpinBox.setValue(float(self.default_parameters['Stage_Params']['Y_Step']))
+
+            # set odmr sweep params
+            self.startFreqBox.setValue(float(self.default_parameters['Sweep_Params']['Sweep_Start']))
+            self.endFreqBox.setValue(float(self.default_parameters['Sweep_Params']['Sweep_End']))
+            self.dwellTimeBox.setValue(float(self.default_parameters['Sweep_Params']['Dwell']))
+            self.stepSizeBox.setValue(float(self.default_parameters['Sweep_Params']['Sweep_Step']))
+            self.pointsBox.setValue(int(self.default_parameters['Sweep_Params']['Points']))
+            self.sweepDefBox.setCurrentIndex(int(self.default_parameters['Sweep_Params']['Sweep_Type']))
+
+            #set rf source params
+            self.freqBox.setValue(float(self.default_parameters['RF_Params']['Freq']))
+            self.pwrBox.setValue(float(self.default_parameters['RF_Params']['Power']))
+            self.togglePwrChk.setChecked(eval(self.default_parameters['RF_Params']['Power_On']))
+            self.modFreqSpinBox.setValue(float(self.default_parameters['RF_Params']['Mod_Freq']))
+            self.modAmpSpinBox.setValue(float(self.default_parameters['RF_Params']['Mod_Amp']))
+
+            self.toggleModOnOff.setChecked(eval(self.default_parameters['RF_Params']['Mod_On']))
+            self.toggleExtModOnOff.setChecked(eval(self.default_parameters['RF_Params']['Ext_Mod']))
+
+            freqs = []
+            grads = []
+            for i in self.default_parameters['RF_Params']['Feedback_Freq_Table'][0]:
+                    freqs.append(float(i))
+            for i in self.default_parameters['RF_Params']['Feedback_Freq_Table'][1]:
+                    grads.append(float(i))
+            self.scanODMRPropertiesTable.setRowCount(0)
+            for row in range(len(freqs)):
+                self.scanODMRPropertiesTable.insertRow(row)
+                self.scanODMRPropertiesTable.setItem(row, 0,
+                                                       QtWidgets.QTableWidgetItem(str(freqs[row])))
+                self.scanODMRPropertiesTable.setItem(row, 1,
+                                                       QtWidgets.QTableWidgetItem(str(grads[row])))
+
+            # set lia params
+            self.odmrAqDurBox.setValue(int(self.default_parameters['LIA_Params']['Duration']))
+            self.odmrAqBurstDurBox.setValue(float(self.default_parameters['LIA_Params']['Burst_Dur']))
+            self.odmrAqSampleRateBox.setValue(int(self.default_parameters['LIA_Params']['Sample_Rate']))
+            self.scalingFactorSpinBox.setValue(int(self.default_parameters['LIA_Params']['Scaling']))
+            self.timeConstantSpinBox.setValue(int(self.default_parameters['LIA_Params']['Time_Const']))
+            self.rangeSelect.setCurrentIndex(int(self.default_parameters['LIA_Params']['Range']))
+            self.harmonicOrderSelect.setCurrentIndex(int(self.default_parameters['LIA_Params']['Filter_Order']))
+            self.fftAverageSpinBox.setValue(int(self.default_parameters['LIA_Params']['FFT_Average']))
+            self.fftDurationSpinBox.setValue(int(self.default_parameters['LIA_Params']['FFT_Duration']))
+            self.sampleRateSpinBox.setValue(int(self.default_parameters['LIA_Params']['FFT_Sample_Rate']))
+            self.acCoupleCheck.setChecked(eval(self.default_parameters['LIA_Params']['FFT_AC_Coupling']))
+            self.fiftyOhmCheck.setChecked(eval(self.default_parameters['LIA_Params']['FFT_50_Ohm']))
+        except Exception as error:
+            print(error)
+        return
+
+    def save_config(self):
+        new_config = self.default_parameters
+        # set connection default values
+        new_config['Connection_Params']['Device_IP'] = str(self.LIAIPBox.text())
+        new_config['Connection_Params']['Device_ID'] = str(self.LIANameBox.text())
+        new_config['Connection_Params']['RF_IP'] = str(self.MWSourceIPAddressBox.text())
+
+        #set stage scanning parameter values
+        new_config['Stage_Params']['Avg_Time'] = str(self.scanAveragingTimeSpinBox.value())
+        new_config['Stage_Params']['Dwell'] = str(self.scanDwellTimeSpinBox.value())
+        new_config['Stage_Params']['X_End'] = str(self.xEndSpinBox.value())
+        new_config['Stage_Params']['X_Start'] = str(self.xStartSpinBox.value())
+        new_config['Stage_Params']['X_Step'] = str(self.xStepSpinBox.value())
+        new_config['Stage_Params']['Y_End'] = str(self.yEndSpinBox.value())
+        new_config['Stage_Params']['Y_Start'] = str(self.yStartSpinBox.value())
+        new_config['Stage_Params']['Y_Step'] = str(self.yStepSpinBox.value())
+
+        # set odmr sweep params
+        new_config['Sweep_Params']['Sweep_Start'] = str(self.startFreqBox.value())
+        new_config['Sweep_Params']['Sweep_End'] = str(self.endFreqBox.value())
+        new_config['Sweep_Params']['Dwell'] = str(self.dwellTimeBox.value())
+        new_config['Sweep_Params']['Sweep_Step'] = str(self.stepSizeBox.value())
+        new_config['Sweep_Params']['Points'] = str(self.pointsBox.value())
+        new_config['Sweep_Params']['Sweep_Type'] = str(self.sweepDefBox.currentIndex())
+
+        # set rf source params
+        new_config['RF_Params']['Freq'] = str(self.freqBox.value())
+        new_config['RF_Params']['Power'] = str(self.pwrBox.value())
+        new_config['RF_Params']['Power_On'] = str(self.togglePwrChk.isChecked())
+        new_config['RF_Params']['Mod_Freq'] = str(self.modFreqSpinBox.value())
+        new_config['RF_Params']['Mod_Amp'] = str(self.modAmpSpinBox.value())
+        new_config['RF_Params']['Mod_On'] = str(self.toggleModOnOff.isChecked())
+        new_config['RF_Params']['Ext_Mod'] = str(self.toggleExtModOnOff.isChecked())
+
+
+
+        freqs = []
+        grads = []
+        for i in range(4):
+            try:
+                freqs.append(float(self.scanODMRPropertiesTable.item(i, 0).text()))
+                grads.append(float(
+                    self.scanODMRPropertiesTable.item(i, 1).text()))  # gradient used for feedback with vector
+            except Exception as error:
+                # if table element is empty, skip it
+                print(error)
+        new_config['RF_Params']['Feedback_Freq_Table'] = [freqs, grads]
+
+        new_config['LIA_Params']['Duration'] = str(self.odmrAqDurBox.value())
+
+        new_config['LIA_Params']['Burst_Dur'] = str(self.odmrAqBurstDurBox.value())
+        new_config['LIA_Params']['Sample_Rate'] = str(self.odmrAqSampleRateBox.value())
+        new_config['LIA_Params']['Scaling'] = str(self.scalingFactorSpinBox.value())
+        new_config['LIA_Params']['Time_Const'] = str(self.timeConstantSpinBox.value())
+        new_config['LIA_Params']['Range'] = str(self.rangeSelect.currentIndex())
+        new_config['LIA_Params']['Filter_Order'] = str(self.harmonicOrderSelect.currentIndex())
+        new_config['LIA_Params']['FFT_Average'] = str(self.odmrAqDurBox.value())
+        new_config['LIA_Params']['FFT_Duration'] = str(self.fftAverageSpinBox.value())
+        new_config['LIA_Params']['FFT_Sample_Rate'] = str(self.fftDurationSpinBox.value())
+        new_config['LIA_Params']['FFT_AC_Coupling'] = str(self.acCoupleCheck.isChecked())
+        new_config['LIA_Params']['FFT_50_Ohm'] = str(self.fiftyOhmCheck.isChecked())
+
+        filepath = QtWidgets.QFileDialog.getSaveFileName(self, 'Select File', filter="yml (*.yml)")[0]
+        with open(filepath, 'w') as f:
+            yaml.dump(new_config, f, default_flow_style=False)
         return
 
 
@@ -1291,7 +1438,7 @@ class ODMRGraphWindow(QtWidgets.QWidget):
         return
 
     def print_this(self, results):
-        """this then prints the result emitted from the results signal, that is returned by the function 
+        """this then prints the result emitted from the results signal, that is returned by the function
         'execute_this_function'"""
         self.worker_running = False
         window.takeODMRButton.setEnabled(True)

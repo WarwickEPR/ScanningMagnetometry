@@ -1,0 +1,51 @@
+Connection_Params:
+  Device_ID: dev7811
+  Device_IP: 192.168.1.1
+  RF_IP: 192.168.1.2
+LIA_Params:
+  Burst_Dur: '0.005'
+  Duration: '10'
+  FFT_50_Ohm: 'False'
+  FFT_AC_Coupling: 'False'
+  FFT_Average: '5'
+  FFT_Duration: '1'
+  FFT_Sample_Rate: '2048'
+  Filter_Order: '7'
+  Range: '0'
+  Sample_Rate: '50'
+  Scaling: '750'
+  Time_Const: '600'
+RF_Params:
+  Ext_Mod: 'False'
+  Feedback_Freq_Table:
+  - - 2.71
+    - 2.72
+    - 2.73
+    - 2.74
+  - - 0.1
+    - 0.1
+    - 0.1
+    - 0.1
+  Freq: '2.75'
+  Mod_Amp: '2.8'
+  Mod_Freq: '3.05'
+  Mod_On: 'True'
+  Mod_Type: '1'
+  Power: '-30'
+  Power_On: 'False'
+Stage_Params:
+  Avg_Time: '0.1'
+  Dwell: '0.05'
+  X_End: '20'
+  X_Start: '10'
+  X_Step: '1'
+  Y_End: '20'
+  Y_Start: '10'
+  Y_Step: '1'
+Sweep_Params:
+  Dwell: '3.0'
+  Points: '1000'
+  Sweep_End: '3.0'
+  Sweep_Start: '2.7'
+  Sweep_Step: '250'
+  Sweep_Type: '1'

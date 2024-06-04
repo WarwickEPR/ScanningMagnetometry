@@ -10,7 +10,6 @@ import pyqtgraph as pg
 import h5py
 import numpy as np
 import sys
-import default_params
 import yaml
 
 
@@ -29,20 +28,22 @@ class DefaultParamWindow(QtWidgets.QMainWindow):
         self.applyParamsButton.clicked.connect(self.set_params)
 
     def set_params(self):
-        self.default_parameters = {
-            "Device_IP" : self.liaDefaultIPTextBox.text(),
-            "Device_ID" : self.liaDefaultIDTextBox.text(),
-            "RF_IP" : self.RFDefaultIPTextBox.text()
-        }
+        # self.default_parameters = {"Connection_Params": {"Device_IP": self.liaDefaultIPTextBox.text(),
+        #                                                  "Device_ID": self.liaDefaultIDTextBox.text(),
+        #                                                  "RF_IP": self.RFDefaultIPTextBox.text()},
+        #                            "Stage_Params": {"X_Start": 10, "X_End": 20, "X_Step": 1, "Y_Start": 10,
+        #                                             "Y_End": 20, "Y_Step": 1, "Dwell": 0.05, "Avg_Time": 0.1},
+        #                            "Sweep_Params": {"Sweep_Start": 2.7, "Sweep_End": 3.0}
+        #                            }
         print(self.default_parameters)
-        with open('config.yml', 'w') as f:
+        with open('default_config.yml', 'w') as f:
             yaml.dump(self.default_parameters, f, default_flow_style=False)
         print(self.default_parameters)
         return
 
     def load_params(self):
         try:
-            with open("config.yml", "r") as f:
+            with open("default_config.yml", "r") as f:
                 self.default_parameters = yaml.safe_load(f)
                 print(self.default_parameters)
                 self.liaDefaultIPTextBox.setText(self.default_parameters['Device_IP'])
