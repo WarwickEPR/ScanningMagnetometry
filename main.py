@@ -300,7 +300,7 @@ class VectorTest(QtWidgets.QWidget):
             for i in range(len(self.vector_freqs)):
                 window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
 
-                time.sleep(0.04)  # wait for LIA to calm down after changing RF frequency before measuring voltage
+                time.sleep(0.08)  # wait for LIA to calm down after changing RF frequency before measuring voltage
                 sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
                 voltage_now = sample['x'][0] * scale  # Scale the LIA output to match the measured calib. constants.
                 self.dV = voltage_now - ini_voltage[i]
@@ -525,9 +525,15 @@ class RfControl:
         ip_address = args[0][0]
         self.rm = pyvisa.ResourceManager()
         ip_address = "TCPIP::" + ip_address + "::INSTR"
-        self.inst = self.rm.open_resource(ip_address)
+        self.inst = self.rm.open_resource(ip_address,
+                                          query_delay = 0.1,
+                                          timeout = 0.1,
+                                          send_end = True)
+        self.inst.read_termination = '\r\n'
+        self.inst.write_termination = '\r\n'
         self.inst.chunk_size = 102400
         self.inst.write("*CLS")  # clear error bank
+
         self.inst.baud_rate = 115200
 
         window.powerLabel.setText(str(round(float(self.inst.query('POW?')), 3)))
@@ -535,7 +541,7 @@ class RfControl:
         mod_freq, mod_amp = self.get_mod_params()
         window.modAmpLabel.setText(str(round(float(mod_amp) / 1e6, 3)))
         window.modFreqLabel.setText(str(round(float(mod_freq) / 1e3, 3)))
-
+        #
         # gets current power state and sets on/off UI button to appropriate state
         power = int(self.inst.query("OUTP?"))
         if power == 0:
@@ -544,11 +550,17 @@ class RfControl:
         elif power == 1:
             self.mw_power_on = True
             window.togglePwrChk.setChecked(True)
-
+        time.sleep(0.05)
+        power = int(self.inst.query("OUTP?"))
+        #
         # set frequency modulation on by default
+        time.sleep(0.05)
         self.inst.write('FM:STAT ON')
+        time.sleep(0.05)
         self.inst.write('OUTP:MOD:STAT ON')
+        time.sleep(0.05)
         self.inst.write('LFO:STAT ON')
+        time.sleep(0.05)
         window.toggleModOnOff.setChecked(True)
         self.rf_connected = True
         return
@@ -1578,7 +1590,7 @@ class scanningImageWindow(QtWidgets.QWidget):
             loop += 1
             for i in range(len(self.vector_freqs)):
                 window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
-                time.sleep(0.04)
+                time.sleep(0.08)
                 sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
                 voltage_now = sample['x'][0] * scale
                 self.dV = voltage_now - ini_voltage[i]
