@@ -535,6 +535,7 @@ class RfControl:
         # set frequency modulation on by default
         self.inst.write('FM:STAT ON')
         self.inst.write('OUTP:MOD:STAT ON')
+        self.inst.write('LFO:STAT ON')
         window.toggleModOnOff.setChecked(True)
         self.rf_connected = True
         return
