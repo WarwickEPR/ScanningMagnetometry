@@ -1554,7 +1554,7 @@
          </rect>
         </property>
         <property name="title">
-         <string>Fast-Fourier Transform Settings</string>
+         <string>Demodulation Settings</string>
         </property>
         <widget class="QPushButton" name="takeFFTButton">
          <property name="geometry">
