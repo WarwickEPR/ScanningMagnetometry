@@ -209,26 +209,39 @@ class VectorTest(QtWidgets.QWidget):
         self.fc3 = self.graphWidget_2.plot()
         self.fc4 = self.graphWidget_2.plot()
 
+        self.vector_freqs = []
+        self.vector_grads = []
+        for i in range(4):
+            try:
+                self.vector_freqs.append(float(window.scanODMRPropertiesTable.item(i, 0).text()))
+                self.vector_grads.append(float(
+                    window.scanODMRPropertiesTable.item(i, 1).text()))  # gradient used for feedback with vector
+            except:
+                # if table element is empty, skip it
+                pass
+
         # starts the multi-thread for the vector feedback - prevents other ui elements and calculations being
         # interrupted
         self.thread_function(self.initialise_vector_feedback, err_fn=window.show_error_message, prg_fn=self.debug_plot)
 
         # initial starting frequencies to use for vector tracking/measurements - change these to the desired values
-        f1 = 2.7766
-        f2 = 2.7940
-        f3 = 2.8259
-        f4 = 2.8505  # GHz
+        # f1 = 2.7766
+        # f2 = 2.7940
+        # f3 = 2.8259
+        # f4 = 2.8505  # GHz
+        #
+        # # the ODMR gradients (i.e. calibration constants or feedback "strength") for each of the respective four
+        # # frequencies being used.
+        # c1 = 0.3  # V/MHz
+        # c2 = 0.3
+        # c3 = 0.3
+        # c4 = 0.3
 
-        # the ODMR gradients (i.e. calibration constants or feedback "strength") for each of the respective four
-        # frequencies being used.
-        c1 = 0.3  # V/MHz
-        c2 = 0.3
-        c3 = 0.3
-        c4 = 0.3
 
-        # saving the sets of frequencies and their respective gradients to separate lists to iterate over later
-        self.vector_freqs = [f1, f2, f3, f4]
-        self.vector_grads = [c1, c2, c3, c4]
+
+        # # saving the sets of frequencies and their respective gradients to separate lists to iterate over later
+        # self.vector_freqs = [f1, f2, f3, f4]
+        # self.vector_grads = [c1, c2, c3, c4]
 
         return
 
