@@ -694,8 +694,8 @@ class RfControl:
                                           query_delay = 0.1,
                                           timeout = 0.1,
                                           send_end = True)
-        self.inst.read_termination = '\r\n'
-        self.inst.write_termination = '\r\n'
+        # self.inst.read_termination = '\r\n'
+        # self.inst.write_termination = '\r\n'
         self.inst.chunk_size = 102400
         self.inst.write("*CLS")  # clear error bank
 
@@ -1485,7 +1485,11 @@ class ODMRGraphWindow(QtWidgets.QWidget):
                 self.dummy_data(x, y)
 
             linear_region_width = int(linear_region_width)
-            derivative = np.gradient(y, x)  # take derivative of curve, find elbow or "knee" point of curve
+
+            if self.usePositiveGradientsCheckBox.isChecked():
+                derivative = np.gradient(y, x)  # take derivative of curve, find elbow or "knee" point of curve
+            else:
+                derivative = -1 * np.gradient(y,x)
             elbow_index = np.argmin(derivative)  # find the minimum of the gradient, use that to determine linear region
             peaks, _ = find_peaks(derivative, height=peak_height, distance=peak_distance, prominence=peak_prom)
 
