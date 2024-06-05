@@ -29,7 +29,7 @@
        <enum>QTabWidget::Rounded</enum>
       </property>
       <property name="currentIndex">
-       <number>2</number>
+       <number>0</number>
       </property>
       <widget class="QWidget" name="stage_control">
        <attribute name="title">
@@ -343,7 +343,7 @@
          <rect>
           <x>220</x>
           <y>10</y>
-          <width>581</width>
+          <width>601</width>
           <height>211</height>
          </rect>
         </property>
@@ -624,7 +624,7 @@
         <widget class="QTableWidget" name="scanODMRPropertiesTable">
          <property name="geometry">
           <rect>
-           <x>340</x>
+           <x>360</x>
            <y>10</y>
            <width>231</width>
            <height>191</height>
@@ -696,8 +696,8 @@
         <widget class="QCheckBox" name="feedbackToggle">
          <property name="geometry">
           <rect>
-           <x>203</x>
-           <y>110</y>
+           <x>214</x>
+           <y>129</y>
            <width>120</width>
            <height>22</height>
           </rect>
@@ -715,8 +715,8 @@
         <widget class="QCheckBox" name="scanAveragingToggle">
          <property name="geometry">
           <rect>
-           <x>202</x>
-           <y>141</y>
+           <x>213</x>
+           <y>160</y>
            <width>121</width>
            <height>22</height>
           </rect>
@@ -790,6 +790,19 @@
          </property>
          <property name="value">
           <double>0.050000000000000</double>
+         </property>
+        </widget>
+        <widget class="QPushButton" name="setVectorMatrixButton">
+         <property name="geometry">
+          <rect>
+           <x>260</x>
+           <y>80</y>
+           <width>91</width>
+           <height>31</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>Set Matrix</string>
          </property>
         </widget>
        </widget>
@@ -1966,7 +1979,7 @@
      <x>0</x>
      <y>0</y>
      <width>856</width>
-     <height>21</height>
+     <height>22</height>
     </rect>
    </property>
    <widget class="QMenu" name="menu1">

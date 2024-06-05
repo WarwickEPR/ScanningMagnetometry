@@ -55,6 +55,7 @@ class MainUI(QtWidgets.QMainWindow):
         self.fft_graph_window = None
         self.vector_test_window = None
         self.scan_window = None
+        self.a_matrix_values = None
         uic.loadUi('scanning_magnetometer.ui', self)  # Load the .ui file
         self.show()  # Show the GUI
 
@@ -114,8 +115,12 @@ class MainUI(QtWidgets.QMainWindow):
         self.toggleExtModOnOff.stateChanged.connect(
             lambda: self.rfController.ext_mod_on_off(self.toggleExtModOnOff.isChecked()))
 
+        self.setVectorMatrixButton.clicked.connect(self.set_vector_matrx)
+
+
         # debug buttons
         self.vectorTestButton.clicked.connect(self.vectorTest)
+
 
         try:
             ports = serial.tools.list_ports.comports()
@@ -177,6 +182,10 @@ class MainUI(QtWidgets.QMainWindow):
         self.data_viewer_window = data_viewer.DataViewer()
         return
 
+    def set_vector_matrx(self):
+        self.vector_matrix_window = VectorMatrixWindow()
+        return
+
     def open_default_param(self):
         filepath = QtWidgets.QFileDialog.getOpenFileName(self, 'Select File', filter="yml (*.yml)")[0]
         new_settings = self.config_path
@@ -229,6 +238,9 @@ class MainUI(QtWidgets.QMainWindow):
 
             self.toggleModOnOff.setChecked(eval(self.default_parameters['RF_Params']['Mod_On']))
             self.toggleExtModOnOff.setChecked(eval(self.default_parameters['RF_Params']['Ext_Mod']))
+            self.a_matrix_values = self.default_parameters['RF_Params']['A_Matrix_Values']
+
+
 
             freqs = []
             grads = []
@@ -294,6 +306,7 @@ class MainUI(QtWidgets.QMainWindow):
         new_config['RF_Params']['Mod_Amp'] = str(self.modAmpSpinBox.value())
         new_config['RF_Params']['Mod_On'] = str(self.toggleModOnOff.isChecked())
         new_config['RF_Params']['Ext_Mod'] = str(self.toggleExtModOnOff.isChecked())
+        new_config['RF_Params']['A_Matrix_Values'] = self.a_matrix_values
 
 
 
@@ -328,7 +341,46 @@ class MainUI(QtWidgets.QMainWindow):
             yaml.dump(new_config, f, default_flow_style=False)
         return
 
+class VectorMatrixWindow(QtWidgets.QWidget):
+    def __init__(self):
+        super(VectorMatrixWindow, self).__init__()
+        uic.loadUi('vectorMatrixWindow.ui', self)  # Load the .ui file
+        self.show()
 
+        self.applyChangesButton.clicked.connect(self.apply_changes)
+
+        self.df1dbx.setValue(window.a_matrix_values[0][0])
+        self.df1dby.setValue(window.a_matrix_values[0][1])
+        self.df1dbz.setValue(window.a_matrix_values[0][2])
+
+        self.df2dbx.setValue(window.a_matrix_values[1][0])
+        self.df2dby.setValue(window.a_matrix_values[1][1])
+        self.df2dbz.setValue(window.a_matrix_values[1][2])
+
+        self.df3dbx.setValue(window.a_matrix_values[2][0])
+        self.df3dby.setValue(window.a_matrix_values[2][1])
+        self.df3dbz.setValue(window.a_matrix_values[2][2])
+
+        self.df3dbx.setValue(window.a_matrix_values[3][0])
+        self.df3dby.setValue(window.a_matrix_values[3][1])
+        self.df3dbz.setValue(window.a_matrix_values[3][2])
+
+    def apply_changes(self):
+        window.a_matrix_values[0][0] = float(self.df1dbx.value())
+        window.a_matrix_values[0][1] = float(self.df1dby.value())
+        window.a_matrix_values[0][2] = float(self.df1dbz.value())
+
+        window.a_matrix_values[1][0] = float(self.df2dbx.value())
+        window.a_matrix_values[1][1] = float(self.df2dby.value())
+        window.a_matrix_values[1][2] = float(self.df2dbz.value())
+
+        window.a_matrix_values[2][0] = float(self.df3dbx.value())
+        window.a_matrix_values[2][1] = float(self.df3dby.value())
+        window.a_matrix_values[2][2] = float(self.df3dbz.value())
+
+        window.a_matrix_values[3][0] = float(self.df4dbx.value())
+        window.a_matrix_values[3][1] = float(self.df4dby.value())
+        window.a_matrix_values[3][2] = float(self.df4dbz.value())
 
 class VectorTest(QtWidgets.QWidget):
     """ Debug vector test window
@@ -636,6 +688,7 @@ class StageControl:
         error_dialog = QtWidgets.QErrorMessage(window)
         error_dialog.showMessage(text)
         return
+
 
 
 class RfControl:
@@ -1743,8 +1796,11 @@ class scanningImageWindow(QtWidgets.QWidget):
     def initialise_vector_feedback(self, *args, **kwargs):
         print('initializing vector feedback')
         ini_voltage = []
+        self.ini_freq = []
         scale = 750
+        self.vector_freqs_plotting = self.vector_freqs
         for i in range(len(self.vector_freqs)):
+            self.ini_freq.append(self.vector_freqs[i])
             window.rfController.inst.write('FREQ ' + str(round(float(self.vector_freqs[i]) * 1e9, 12)))
             time.sleep(1)
             sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
@@ -1834,7 +1890,9 @@ class scanningImageWindow(QtWidgets.QWidget):
         y_positions = self.yCoords
         self.voltageArr = np.zeros([4, len(y_positions), len(x_positions)])
         self.df_arr = np.zeros([4, len(y_positions), len(x_positions)])
+        self.b_arr = np.zeros([3, len(y_positions), len(x_positions)])
         j = 0  # xpos
+        A_pinv = np.linalg.pinv(np.array(window.a_matrix_values))
         totalSize = len(x_positions) * len(y_positions)
         for idx, y_position in enumerate(y_positions, 2):
             i = len(x_positions) - 1
@@ -1847,11 +1905,22 @@ class scanningImageWindow(QtWidgets.QWidget):
                 # df_arr[0, j, i] = self.vector_freqs[0]
                 for k in range(4):
                     self.df_arr[k, j, i] = self.vector_freqs[k]
-                kwargs['progress_callback'].emit(self.df_arr)
+                print(np.array(self.vector_freqs), np.array(self.ini_freq))
+                df1, df2, df3, df4 = (np.array(self.vector_freqs) - np.array(self.ini_freq)) * 1000 # difference in freq. in MHz
+                freq_col = ([[df1],
+                             [df2],
+                             [df3],
+                             [df4]])
+                B = np.dot(A_pinv, freq_col)
+                for k in range(3):
+                    self.b_arr[k, j, i] = B[k][0]
+                kwargs['progress_callback'].emit(self.b_arr)
                 i = i - 1
                 te = time.time()
                 eta = (te - ts) * totalSize
                 print(time.ctime(int(timeStart + eta)))
+                if self.scanning == False:
+                    return
             j += 1
             self.StageControl.set_stage_pos(x_positions[0], y_position)
             time.sleep(3)
@@ -1862,10 +1931,10 @@ class scanningImageWindow(QtWidgets.QWidget):
 
     def update_plot(self, image_arr):
         if self.vector:
-            self.imageWidget.setImage(image_arr[0])
-            self.imageWidget_2.setImage(image_arr[1])
-            self.imageWidget_3.setImage(image_arr[2])
-            self.imageWidget_4.setImage(image_arr[3])
+            # self.imageWidget.setImage(image_arr[0])
+            self.imageWidget_2.setImage(image_arr[0])
+            self.imageWidget_3.setImage(image_arr[1])
+            self.imageWidget_4.setImage(image_arr[2])
             # self.imageWidget.autoLevels()
         else:
             self.imageWidget.setImage(image_arr)
@@ -1918,6 +1987,12 @@ class scanningImageWindow(QtWidgets.QWidget):
 
         return
 
+    def closeEvent(self, event):
+        """this function executes when the vector debug graph window closes, used to stop thread
+        :param event:
+        :return:
+        """
+        self.scanning = False
 
 class Worker(QtCore.QRunnable):
     """"worker thread"""
