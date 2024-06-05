@@ -190,13 +190,13 @@
  </widget>
  <customwidgets>
   <customwidget>
-   <class>ImageView</class>
+   <class>PlotWidget</class>
    <extends>QWidget</extends>
    <header>pyqtgraph</header>
    <container>1</container>
   </customwidget>
   <customwidget>
-   <class>PlotWidget</class>
+   <class>ImageView</class>
    <extends>QWidget</extends>
    <header>pyqtgraph</header>
    <container>1</container>

@@ -1044,6 +1044,10 @@ class LIAControl:
             self.daq_module.set('holdoff/time', 0.001)
             self.daq_module.set('delay', 0)
             self.daq_module.set('endless', 1)
+            self.daq.setInt("/%s/sigins/0/imp50" % self.device, int(window.fiftyOhmCheck.isChecked()))
+            self.daq.setInt("/%s/sigins/0/ac" % self.device, int(window.acCoupleCheck.isChecked()))
+            self.daq.setInt('/%s/demods/0/order' % self.device, (int(window.harmonicOrderSelect.currentIndex()) + 1))
+            self.daq.setDouble('/%s/demods/0/timeconstant' % self.device, (float(window.timeConstantSpinBox.value())) / 1e6)
         elif not trigger:  # Specify continuous acquisition (type=0).
             self.daq_module.set("grid/mode", 2)
             self.daq_module.set("type", 0)  # type 0 = no trigger
