@@ -1868,12 +1868,14 @@ class scanningImageWindow(QtWidgets.QWidget):
                 else:
                     # else return current voltage instead
                     sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
-                    self.voltageArr[0, j, i] = sample['x'][0]
+                    self.voltageArr[0, j, i] = np.sqrt(((sample['x'][0])**2 + (sample['y'][0])**2))
                     kwargs['progress_callback'].emit(self.voltageArr)
                 i = i - 1
                 te = time.time()
                 eta = (te - ts) * totalSize
                 print(time.ctime(int(timeStart + eta)))
+                if self.scanning == False:
+                    return
             j += 1
             self.StageControl.set_stage_pos(x_positions[0], y_position)
             time.sleep(4)
