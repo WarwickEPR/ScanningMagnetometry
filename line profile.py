@@ -23,7 +23,7 @@ from scipy.signal import hilbert
 import matplotlib.pyplot as plt
 
 
-def connect_lia(device_ip = '192.168.70.166', device_id = 'dev4521'):
+def connect_lia(device_ip='192.168.70.166', device_id='dev4521'):
     """
 
     :param args:  Contains the UI element strings of IP address for the LIA connection
@@ -47,6 +47,7 @@ def connect_lia(device_ip = '192.168.70.166', device_id = 'dev4521'):
         print(e)
     return daq, device
 
+
 def connect_stage(com_port, baud_rate=115200):
     """
     :param com_port: (str) the com port to connect to i.e "COM4"
@@ -59,6 +60,7 @@ def connect_stage(com_port, baud_rate=115200):
     except Exception as error:
         print("could not connect")
     return ser
+
 
 def execute_gcode(command):
     """ For sending g-codes to the stage to execute them - does not read any data coming back from the stage, use
@@ -83,6 +85,7 @@ def set_stage_pos(x, y):
     execute_gcode(f'G00 X{x} Y{y}')
     return
 
+
 def set_stage_height(z):
     """ Move the stage up and down
 
@@ -91,6 +94,7 @@ def set_stage_height(z):
     """
     execute_gcode(f'G00 Z{z}')
     return
+
 
 daq, device = connect_lia()
 
@@ -107,7 +111,7 @@ print(stream['/dev4521/demods/0/sample']['time'])
 ser = connect_stage("COM6")
 # coords = [[70, 85], [90, 85], [110, 85], [130, 85], [150, 85]]
 # coords = [[50, 85], [70, 85], [90, 85], [110, 85], [130, 85]]
-coords = [[51, 48]] #change in height at single point in xy
+# coords = [[51, 48]] #change in height at single point in xy
 # coords = [[50, 52], [50, 55], [50, 58], [50, 61], [50, 64],
 #           [55, 52], [55, 55], [55, 58], [55, 61], [55, 64],
 #           [60, 52], [60, 55], [60, 58], [60, 61], [60, 64],
@@ -115,52 +119,55 @@ coords = [[51, 48]] #change in height at single point in xy
 #           [70, 52], [70, 55], [70, 58], [70, 61], [70, 64]]
 # coords = [[110, 85]]
 
-heights = np.linspace(21.9, 1.9, 40)
+coord_x = 52
+coord_y = np.linspace(30, 100, 140)
+heights = np.linspace(9, 19, 40)
 # heights = [10.5, 10, 9.5, 9, 8.5, 8, 7.5, 7, 6.5, 6, 5.5, 5]
 
-#PUT THIS BACK IN FOR CHANGES IN HEIGHT AT A SINGLE POINT
-r = np.zeros([len(heights), len(coords) + 1])
-r_std = np.zeros([len(heights), len(coords)])
-r[:,-1] = heights
+# PUT THIS BACK IN FOR CHANGES IN HEIGHT AT A SINGLE POINT
+r = np.zeros([len(coord_y), len(heights)])
+r_std = np.zeros([len(coord_y), len(heights)])
 
 
-plt.ion()
+# # THIS IS FOR DOING LINE PROFILES AT A CONSTANT HEIGHT
+# r = np.zeros([len(coord_y), 2])
+# r_std = np.zeros([len(coord_y), 1])
+# r[:, -1] = coord_y
+
+# ser.close()
+# while True:
+#     stream = daq.poll(0.5, 200, 1, True)
+#     print(np.mean(stream['/dev4521/demods/0/sample']['x'])*1000, np.std(stream['/dev4521/demods/0/sample']['x'])*1000)
+#     time.sleep(1)
 
 try:
-    for i in range(len(coords)):
-        x = coords[i][0]
-        y = coords[i][1]
-        print("moving to", x,y)
+    for j in range(len(heights)):
+        set_stage_height(heights[j])
+        time.sleep(5)
+        x = coord_x
+        y = coord_y[0]
         set_stage_pos(x, y)
         time.sleep(5)
-        for j in range(len(heights)):
-            set_stage_height(heights[j])
-            y = heights[j]
-            # set_stage_pos(x, y)
-            print("changing height to", heights[j])
-            time.sleep(1)
+        for i in range(len(coord_y)):
+            x = coord_x
+            y = coord_y[i]
+            print("moving to", x, y)
+            set_stage_pos(x, y)
             stream = daq.poll(0.5, 200, 1, True)
-            r[j][i] = np.mean(stream['/dev4521/demods/0/sample']['x'])
-            r_std[j][i] = np.std(stream['/dev4521/demods/0/sample']['x'])
-        set_stage_height(heights[0]) #set back to starting height
-        # set_stage_pos(x, coords[0][1])
-        time.sleep(1)
-    np.savetxt("Z:/Alex N/Lab Data/August 24/Diluted Iron Oxide Scans In Microplate/vials_varied_height/signal_vs_height/r.csv",
-               r, delimiter=',')
+            r[i][j] = np.mean(stream['/dev4521/demods/0/sample']['x'])
+            r_std[i][j] = np.std(stream['/dev4521/demods/0/sample']['x'])
+    np.savetxt(
+        "Z:/Alex N/Lab Data/August 24/Diluted Iron Oxide Scans In Microplate/vials_varied_height/signal_vs_height/r.csv",
+        r, delimiter=',')
     np.savetxt(
         "Z:/Alex N/Lab Data/August 24/Diluted Iron Oxide Scans In Microplate/vials_varied_height/signal_vs_height/r_std.csv",
         r_std, delimiter=',')
+    np.savetxt(
+        "Z:/Alex N/Lab Data/August 24/Diluted Iron Oxide Scans In Microplate/vials_varied_height/signal_vs_height/line_profile_heights.csv",
+        heights, delimiter=',')
 except KeyboardInterrupt:
     print("stopping")
     ser.close()
-
-
-
-
-
-
-
-
 
 #
 # def generate_audio_chunk(f=220, duration=0.05, volume=0.2, phi = 0):
@@ -195,7 +202,6 @@ except KeyboardInterrupt:
 #     R = np.abs(corr)
 #     phi = np.log(corr).imag
 #     return phi
-
 
 
 # p = pyaudio.PyAudio()

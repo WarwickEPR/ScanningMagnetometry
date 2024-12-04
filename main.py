@@ -1666,6 +1666,7 @@ class scanningImageWindow(QtWidgets.QWidget):
         self.vector = window.vectorRadio.isChecked()
         self.feedback = window.feedbackToggle.isChecked()
         self.scan_averaging = window.scanAveragingToggle.isChecked()
+        self.avg_time = window.scanAveragingTimeSpinBox.value()
         self.scanning = False
 
         if self.vector:
@@ -1842,11 +1843,14 @@ class scanningImageWindow(QtWidgets.QWidget):
     def scan_no_vector(self, *args, **kwargs):
         while self.feedback_started == False:
             continue
+        if self.scan_averaging:
+            window.LIAController.daq.subscribe('/%s/demods/0/sample' % window.LIAController.device)
         time.sleep(3)  # let feedback settle
         scan_time = args[1]['scan_time']
         x_positions = self.xCoords
         y_positions = self.yCoords
         self.voltageArr = np.zeros([1, len(y_positions), len(x_positions)])
+        self.voltageArrSTD = np.zeros([1, len(y_positions), len(x_positions)])
         self.df_arr = np.zeros([1, len(y_positions), len(x_positions)])
         print('The Scan has started. If the printer is not ready,'
               'exit program and increase the waiting time.')
@@ -1854,6 +1858,8 @@ class scanningImageWindow(QtWidgets.QWidget):
         totalSize = len(x_positions) * len(y_positions)
         for idx, y_position in enumerate(y_positions, 2):
             i = len(x_positions) - 1
+            self.StageControl.set_stage_pos(x_positions[0], y_position)
+            time.sleep(4)
             for x_position in x_positions:
                 timeStart = time.time()
                 ts = time.time()
@@ -1867,9 +1873,15 @@ class scanningImageWindow(QtWidgets.QWidget):
                     kwargs['progress_callback'].emit(self.df_arr)
                 else:
                     # else return current voltage instead
-                    sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
-                    self.voltageArr[0, j, i] = np.sqrt(((sample['x'][0])**2 + (sample['y'][0])**2))
-                    kwargs['progress_callback'].emit(self.voltageArr)
+                    if self.scan_averaging:
+                        stream = window.LIAController.daq.poll(self.avg_time, 200, 1, True)
+                        self.voltageArr[0, j, i] = np.mean(stream['/dev4521/demods/0/sample']['x'])
+                        self.voltageArrSTD[0, j, i] = np.std(stream['/dev4521/demods/0/sample']['x'])
+                        kwargs['progress_callback'].emit(self.voltageArr)
+                    else:
+                        sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)
+                        self.voltageArr[0, j, i] = np.sqrt(((sample['x'][0])**2 + (sample['y'][0])**2))
+                        kwargs['progress_callback'].emit(self.voltageArr)
                 i = i - 1
                 te = time.time()
                 eta = (te - ts) * totalSize
@@ -1877,8 +1889,8 @@ class scanningImageWindow(QtWidgets.QWidget):
                 if self.scanning == False:
                     return
             j += 1
-            self.StageControl.set_stage_pos(x_positions[0], y_position)
-            time.sleep(4)
+            # self.StageControl.set_stage_pos(x_positions[0], y_position)
+            # time.sleep(4)
         print('Scan completed. Resetting printer.')
         time.sleep(1)
         self.scanning = False
@@ -1965,9 +1977,11 @@ class scanningImageWindow(QtWidgets.QWidget):
         try:
             df_arr_data = np.array(self.df_arr)
             voltage_arr_data = np.array(self.voltageArr)
+            voltage_std_arr_data = np.array(self.voltageArrSTD)
             h5f = h5py.File(folderpath + date_time + ".h5", 'w')
             h5f.create_dataset('df_array', data=df_arr_data)
             h5f.create_dataset('voltage_array', data=voltage_arr_data)
+            h5f.create_dataset('voltage_st_arrayy', data=voltage_std_arr_data)
             h5f.close()
         except Exception as error:
             error_dialog = QtWidgets.QErrorMessage(window)
