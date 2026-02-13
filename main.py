@@ -1004,9 +1004,9 @@ class LIAControl:
             zhinst.utils.api_server_version_check(self.daq)
             self.daq.set(f"/{self.device}/demods/0/enable", 1)  # enable the demodulation
             self.clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))  # get the clockspeed of the LIA for
-
             self.LIA_connected = True
         except Exception as e:
+            print("Couldn't connect to LIA")
             # Probably should make this a popup message instead of console output..
             print(e)
 
@@ -1859,7 +1859,7 @@ class scanningImageWindow(QtWidgets.QWidget):
         for idx, y_position in enumerate(y_positions, 2):
             i = len(x_positions) - 1
             self.StageControl.set_stage_pos(x_positions[0], y_position)
-            time.sleep(4)
+            time.sleep(10)
             for x_position in x_positions:
                 timeStart = time.time()
                 ts = time.time()
@@ -1941,22 +1941,35 @@ class scanningImageWindow(QtWidgets.QWidget):
                     return
             j += 1
             self.StageControl.set_stage_pos(x_positions[0], y_position)
-            time.sleep(3)
+            time.sleep(6)
         print('Scan completed. Resetting printer.')
         time.sleep(1)
         self.scanning = False
         return
 
+    @staticmethod
+    def calculate_levels(a):
+        px = a.ravel()[np.flatnonzero(a)]
+        k = int(len(px) * 0.05)
+        if k > 0:
+            px_low = np.argpartition(px, k)
+            px_high = np.argpartition(px, -k)
+            return px[px_low[k-1]], px[px_high[-k-1]]
+        else:
+            return min(px), max(px)
+
     def update_plot(self, image_arr):
         if self.vector:
             # self.imageWidget.setImage(image_arr[0])
-            self.imageWidget_2.setImage(image_arr[0])
-            self.imageWidget_3.setImage(image_arr[1])
-            self.imageWidget_4.setImage(image_arr[2])
-            # self.imageWidget.autoLevels()
+            levels0 = self.calculate_levels(image_arr[0])
+            levels1 = self.calculate_levels(image_arr[1])
+            levels2 = self.calculate_levels(image_arr[2])
+            self.imageWidget_2.setImage(image_arr[0], levels=levels0)
+            self.imageWidget_3.setImage(image_arr[1], levels=levels1)
+            self.imageWidget_4.setImage(image_arr[2], levels=levels2)
         else:
-            self.imageWidget.setImage(image_arr)
-            # self.imageWidget.autoLevels()
+            levels = self.calculate_levels(image_arr)
+            self.imageWidget.setImage(image_arr, levels=levels)
 
     def debug_plot(self, arrs):
         if self.vector:
