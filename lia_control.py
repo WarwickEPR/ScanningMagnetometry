@@ -1,0 +1,190 @@
+# -*- coding: utf-8 -*-
+"""Lock-In Amplifier (LIA) control module for the Scanning Magnetometer.
+
+Handles all communication with the Zurich Lock-In Amplifier via the Python API.
+Manages data acquisition for both ODMR sweeps and FFT measurements.
+"""
+
+import numpy as np
+import zhinst.utils
+from threading_utils import ThreadedComponent
+
+
+class LIAControl(ThreadedComponent):
+    """Control connection to the Zurich Lock-In Amplifier.
+    
+    Contains functions to measure inputs/outputs and set various parameters.
+    Also contains functions to setup different data acquisition modules for
+    ODMR sweeps and FFT measurements.
+
+    Attributes:
+        LIA_connected: (bool) Zurich LIA connection state
+        odmr_sweep: (bool) Is an ODMR sweep currently happening?
+        fft_sweep: (bool) Is an FFT sweep/acquisition currently happening?
+        daq: API session with the LIA
+        device: Device identifier string
+        daq_module: Data acquisition module instance
+        data: Dictionary storing acquired data
+        signal_paths: List of signal paths to subscribe to
+        clockbase: Clock base frequency of the LIA
+    """
+
+    def __init__(self, window):
+        super(LIAControl, self).__init__()
+        self.window = window
+        self.data = None
+        self.clockbase = None
+        self.device_id = None
+        self.server_host = None
+        self.scaling_Factor = None
+        self.LIA_connected = False
+        self.odmr_sweep = False
+        self.fft_sweep = False
+        self.daq = None
+        self.device = None
+        self.daq_module = None
+        self.signal_paths = None
+        return
+
+    def connect_lia(self, *args, **kwargs):
+        """Connect to the Zurich Lock-In Amplifier.
+
+        :param args: Contains UI element strings (device_ip, device_id, etc)
+        :param kwargs: Additional keyword arguments
+        :return:
+        """
+        try:
+            self.server_host = args[1]['device_ip']
+            self.device_id = args[1]['device_id']
+            server_port = 8004
+            api_level = 6  # API detail level
+            
+            (self.daq, self.device, _) = zhinst.utils.create_api_session(
+                self.device_id, api_level, server_host=self.server_host, server_port=server_port
+            )
+            zhinst.utils.api_server_version_check(self.daq)
+            self.daq.set(f"/{self.device}/demods/0/enable", 1)  # enable demodulation
+            self.clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
+            self.LIA_connected = True
+        except Exception as e:
+            print("Couldn't connect to LIA")
+            print(e)
+
+    def setup_sweep(self):
+        """Set parameters and arm data acquisition module for ODMR sweep.
+
+        Configures the LIA to receive triggered data acquisitions synchronized
+        with the RF source sweep.
+
+        :return:
+        """
+        self.demod_path = f"/{self.device}/demods/0/sample"
+        self.signal_paths = []
+        self.signal_paths.append(self.demod_path + ".x")
+        
+        # Get sweep parameters from UI
+        self.total_duration = self.window.odmrAqDurBox.value()
+        self.module_sampling_rate = self.window.odmrAqSampleRateBox.value()
+        self.burst_duration = self.window.odmrAqBurstDurBox.value()
+        self.num_cols = int(np.ceil(self.module_sampling_rate * self.burst_duration))
+        self.num_bursts = int(np.ceil(self.total_duration / self.burst_duration))
+        
+        self.daq.sync()
+        
+        # Create data acquisition module
+        self.daq_module = self.daq.dataAcquisitionModule()
+        self.daq_module.set("device", self.device)
+
+        # Configure for triggered acquisition
+        trigger = True
+        if trigger:
+            self.daq_module.set("grid/mode", 4)
+            self.daq_module.set('type', 6)
+            self.daq_module.set('triggernode', self.demod_path + '.TrigIn1')
+            self.daq_module.set("duration", self.burst_duration)
+            self.daq_module.set('edge', 0)
+            self.daq_module.set("count", self.window.pointsBox.value())
+            self.daq_module.set("grid/cols", self.module_sampling_rate)
+            self.daq_module.set('holdoff/time', 0.001)
+            self.daq_module.set('delay', 0)
+            self.daq_module.set('endless', 1)
+            self.daq.setInt("/%s/sigins/0/imp50" % self.device, int(self.window.fiftyOhmCheck.isChecked()))
+            self.daq.setInt("/%s/sigins/0/ac" % self.device, int(self.window.acCoupleCheck.isChecked()))
+            self.daq.setInt('/%s/demods/0/order' % self.device, 
+                                    (int(self.window.harmonicOrderSelect.currentIndex()) + 1))
+            self.daq.setDouble('/%s/demods/0/timeconstant' % self.device, 
+                                        (float(self.window.timeConstantSpinBox.value())) / 1e6)
+        else:
+            self.daq_module.set("grid/mode", 2)
+            self.daq_module.set("type", 0)
+            self.daq_module.set("count", self.num_bursts)
+            self.daq_module.set("duration", self.burst_duration)
+            self.daq_module.set("grid/cols", self.num_cols)
+
+        self.data = {}
+        for signal_path in self.signal_paths:
+            print("Subscribing to ", signal_path)
+            self.daq_module.subscribe(signal_path)
+            self.data[signal_path] = []
+        return
+
+    def setup_fft(self):
+        """Set parameters and arm data acquisition module for FFT measurement.
+
+        Configures the LIA for continuous FFT acquisition for sensitivity measurements.
+
+        :return:
+        """
+        self.scaling_Factor = int(self.window.scalingFactorSpinBox.value())
+        demod_select = 0
+        v_range = int(self.window.rangeSelect.currentText())
+        imp_fifty = int(self.window.fiftyOhmCheck.isChecked())
+        ac_coupled = int(self.window.acCoupleCheck.isChecked())
+        in_channel = 0
+        demod_index = 1
+        filter_order = int(self.window.harmonicOrderSelect.currentText())
+        time_constant = (float(self.window.timeConstantSpinBox.value())) / 1e6
+
+        # Configure signal inputs
+        exp_setting = [
+            ["/%s/sigins/%d/ac" % (self.device, in_channel), ac_coupled],
+            ["/%s/sigins/%d/imp50" % (self.device, in_channel), imp_fifty],
+            ["/%s/sigins/%d/range" % (self.device, in_channel), v_range],
+            ["/%s/demods/%d/enable" % (self.device, demod_index), 1],
+            ["/%s/demods/%d/adcselect" % (self.device, 0), 0],
+            ["/%s/demods/%d/adcselect" % (self.device, 1), 8],
+            ["/%s/demods/%d/timeconstant" % (self.device, demod_index), time_constant],
+            ["/%s/demods/%d/harmonic" % (self.device, demod_index), 1],
+            ["/%s/extrefs/%d/enable" % (self.device, in_channel), 1],
+            ["/%s/auxouts/%d/outputselect" % (self.device, 0), demod_select],
+        ]
+        self.daq.set(exp_setting)
+        self.daq.set(f"/{self.device}/demods/0/enable", 1)
+        self.daq.set(f"/{self.device}/demods/1/enable", 1)
+        self.daq.set("/%s/demods/%d/harmonic" % (self.device, demod_index), 1)
+        self.daq.set("/%s/auxouts/%d/scale" % (self.device, 0), self.scaling_Factor)
+        self.daq.set("/%s/demods/%d/order" % (self.device, demod_index), filter_order)
+
+        demod_path = f"/{self.device}/demods/0/sample"
+        self.signal_paths = []
+        self.signal_paths.append(demod_path + ".x.fft.abs.avg")
+
+        self.count = int(self.window.fftAverageSpinBox.value())
+        self.fft_duration = int(self.window.fftDurationSpinBox.value())
+        cols = int(self.window.sampleRateSpinBox.value())
+
+        # Create and configure data acquisition module
+        self.daq_module = self.daq.dataAcquisitionModule()
+        self.daq_module.set("device", self.device)
+        self.daq_module.set("type", 0)  # Continuous acquisition
+        self.daq_module.set("grid/mode", 2)
+        self.daq_module.set("count", self.count)
+        self.daq_module.set("duration", self.fft_duration)
+        self.daq_module.set("grid/cols", cols)
+
+        self.data = {}
+        for signal_path in self.signal_paths:
+            print("Subscribing to ", signal_path)
+            self.daq_module.subscribe(signal_path)
+            self.data[signal_path] = []
+        return
