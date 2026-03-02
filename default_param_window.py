@@ -11,6 +11,7 @@ import h5py
 import numpy as np
 import sys
 import yaml
+from paths import ui_file
 
 
 class DefaultParamWindow(QtWidgets.QMainWindow):
@@ -18,7 +19,7 @@ class DefaultParamWindow(QtWidgets.QMainWindow):
         super(DefaultParamWindow, self).__init__()  # Call the inherited classes __init__ method
         self.selected_data = None
         self.f = None
-        uic.loadUi('defaultParamWindow.ui', self)  # Load the .ui file
+        uic.loadUi(ui_file('defaultParamWindow.ui'), self)  # Load the .ui file
         self.show()  # Show the GUI
 
         # populate text boxes with current parameters

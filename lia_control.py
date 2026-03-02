@@ -46,6 +46,20 @@ class LIAControl(ThreadedComponent):
         self.signal_paths = None
         return
 
+    @staticmethod
+    def _normalize_device_id(device_id):
+        """Normalize user-entered Zurich device IDs to LabOne format (e.g. dev4521)."""
+        value = str(device_id).strip().lower().replace(" ", "")
+        if value.startswith("device"):
+            value = "dev" + value[6:]
+        elif value.isdigit():
+            value = "dev" + value
+        if not value.startswith("dev") or not value[3:].isdigit():
+            raise ValueError(
+                f"Invalid LIA device ID '{device_id}'. Expected format like 'dev4521'."
+            )
+        return value
+
     def connect_lia(self, *args, **kwargs):
         """Connect to the Zurich Lock-In Amplifier.
 
@@ -55,7 +69,7 @@ class LIAControl(ThreadedComponent):
         """
         try:
             self.server_host = args[1]['device_ip']
-            self.device_id = args[1]['device_id']
+            self.device_id = self._normalize_device_id(args[1]['device_id'])
             server_port = 8004
             api_level = 6  # API detail level
             
@@ -67,8 +81,12 @@ class LIAControl(ThreadedComponent):
             self.clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
             self.LIA_connected = True
         except Exception as e:
-            print("Couldn't connect to LIA")
-            print(e)
+            self.LIA_connected = False
+            raise ConnectionError(
+                f"Couldn't connect to LIA at {self.server_host}:8004 using device ID '{self.device_id}'. "
+                f"Check LabOne is reachable at the given IP and use ID format like 'dev4521'. "
+                f"Original error: {e}"
+            )
 
     def setup_sweep(self):
         """Set parameters and arm data acquisition module for ODMR sweep.
@@ -104,10 +122,10 @@ class LIAControl(ThreadedComponent):
             self.daq_module.set("duration", self.burst_duration)
             self.daq_module.set('edge', 0)
             self.daq_module.set("count", self.window.pointsBox.value())
-            self.daq_module.set("grid/cols", self.module_sampling_rate)
+            self.daq_module.set("grid/cols", max(1, self.num_cols))
             self.daq_module.set('holdoff/time', 0.001)
             self.daq_module.set('delay', 0)
-            self.daq_module.set('endless', 1)
+            self.daq_module.set('endless', 0)
             self.daq.setInt("/%s/sigins/0/imp50" % self.device, int(self.window.fiftyOhmCheck.isChecked()))
             self.daq.setInt("/%s/sigins/0/ac" % self.device, int(self.window.acCoupleCheck.isChecked()))
             self.daq.setInt('/%s/demods/0/order' % self.device, 

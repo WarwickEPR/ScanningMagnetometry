@@ -23,7 +23,7 @@ from scipy.signal import hilbert
 import matplotlib.pyplot as plt
 
 
-def connect_lia(device_ip='192.168.70.166', device_id='dev4521'):
+def connect_lia(device_ip='192.168.70.166', device_id='dev7811'):
     """
 
     :param args:  Contains the UI element strings of IP address for the LIA connection
@@ -97,16 +97,17 @@ def set_stage_height(z):
 
 
 daq, device = connect_lia()
+sample_path = f'/{device}/demods/0/sample'
 
 # t0 = time.time()
 # sample = daq.getSample("/%s/demods/0/sample" % device)
 # print(time.time() - t0)
 
-daq.subscribe('/%s/demods/0/sample' % device)
+daq.subscribe(sample_path)
 stream = daq.poll(0.5, 200, 1, True)
 # np.mean(stream['/dev4521/demods/0/sample']['x'])
 
-print(stream['/dev4521/demods/0/sample']['time'])
+print(stream[sample_path]['time'])
 
 ser = connect_stage("COM6")
 # coords = [[70, 85], [90, 85], [110, 85], [130, 85], [150, 85]]
@@ -154,8 +155,8 @@ try:
             print("moving to", x, y)
             set_stage_pos(x, y)
             stream = daq.poll(0.5, 200, 1, True)
-            r[i][j] = np.mean(stream['/dev4521/demods/0/sample']['x'])
-            r_std[i][j] = np.std(stream['/dev4521/demods/0/sample']['x'])
+            r[i][j] = np.mean(stream[sample_path]['x'])
+            r_std[i][j] = np.std(stream[sample_path]['x'])
     np.savetxt(
         "Z:/Alex N/Lab Data/August 24/Diluted Iron Oxide Scans In Microplate/vials_varied_height/signal_vs_height/r.csv",
         r, delimiter=',')

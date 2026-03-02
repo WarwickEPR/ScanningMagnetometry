@@ -10,6 +10,7 @@ import pyqtgraph as pg
 import h5py
 import numpy as np
 import sys
+from paths import ui_file
 
 
 class DataViewer(QtWidgets.QMainWindow):
@@ -17,7 +18,7 @@ class DataViewer(QtWidgets.QMainWindow):
         super(DataViewer, self).__init__()  # Call the inherited classes __init__ method
         self.selected_data = None
         self.f = None
-        uic.loadUi('data_viewer.ui', self)  # Load the .ui file
+        uic.loadUi(ui_file('data_viewer.ui'), self)  # Load the .ui file
         self.show()  # Show the GUI
 
         self.statusBar = QtWidgets.QStatusBar()

@@ -213,20 +213,18 @@ class RfControl(ThreadedComponent):
         self.window.LIAController.setup_sweep()
         self.window.LIAController.daq_module.execute()
 
-        # Wait for buffer to be ready
-        buffer_size = self.window.LIAController.daq_module.getInt("buffersize")
-        time.sleep(1.2 * buffer_size)
-
         # Record data in a loop
         self.samples = []
         i = 0
         j = 0
         last_emit = 0.0
+        emit_interval = 0.05
         self.inst.write('*TRG')  # trigger sweep to start
         
         while self.sweeping:
             data_read = self.window.LIAController.daq_module.read(True)
             returned_signal_paths = [signal_path.lower() for signal_path in data_read.keys()]
+            got_new_samples = False
             
             for signal_path in self.window.LIAController.signal_paths:
                 if signal_path.lower() in returned_signal_paths:
@@ -234,12 +232,16 @@ class RfControl(ThreadedComponent):
                         i += 1
                         self.samples.append(np.mean(signal_burst['value'][0]))
                         self.window.LIAController.data[signal_path].append(signal_burst)
-                    now = time.monotonic()
-                    if now - last_emit >= 0.1:
-                        kwargs['progress_callback'].emit(self.samples)
-                        last_emit = now
+                        got_new_samples = True
                 else:
                     j += 1
+
+            now = time.monotonic()
+            if got_new_samples and now - last_emit >= emit_interval:
+                kwargs['progress_callback'].emit(self.samples)
+                last_emit = now
+            elif not got_new_samples:
+                time.sleep(0.01)
 
             if (int(self.inst.query(':STATus:OPERation:CONDition?')) & 8) == 8:
                 pass
@@ -250,9 +252,17 @@ class RfControl(ThreadedComponent):
                     self.window.LIAController.setup_sweep()
                     self.samples = []
                     self.window.LIAController.daq_module.execute()
-                    time.sleep(1.2 * buffer_size)
                     self.inst.write('*TRG')
                 else:
+                    # Drain any remaining bursts before finishing so final points are not lost.
+                    tail_read = self.window.LIAController.daq_module.read(True)
+                    tail_paths = [signal_path.lower() for signal_path in tail_read.keys()]
+                    for signal_path in self.window.LIAController.signal_paths:
+                        if signal_path.lower() in tail_paths:
+                            for signal_burst in tail_read[signal_path.lower()]:
+                                self.samples.append(np.mean(signal_burst['value'][0]))
+                                self.window.LIAController.data[signal_path].append(signal_burst)
+                    kwargs['progress_callback'].emit(self.samples)
                     self.window.LIAController.daq_module.finish()
                     self.sweeping = False
 

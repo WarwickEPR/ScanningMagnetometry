@@ -12,6 +12,7 @@ import pyqtgraph as pg
 import h5py
 import cv2
 import os
+import copy
 from PIL import Image
 import sys
 import serial
@@ -21,7 +22,7 @@ import time
 import traceback
 import pyvisa
 from sklearn.linear_model import LinearRegression
-from scipy.signal import savgol_filter, find_peaks
+from scipy.signal import savgol_filter, find_peaks, peak_widths
 import zhinst.utils as utils
 import zhinst.core
 import data_viewer
@@ -31,6 +32,7 @@ from threading_utils import Worker, WorkerSignals, ThreadedComponent
 from stage_control import StageControl
 from rf_control import RfControl
 from lia_control import LIAControl
+from paths import ui_file
 
 # if dark theme is available then use by default
 try:
@@ -38,6 +40,150 @@ try:
     dark_theme = True
 except Exception as error:
     dark_theme = False
+
+
+def apply_ui_polish(widget):
+    """Apply lightweight visual and usability improvements without changing UI flow."""
+    widget.setStyleSheet("""
+        QWidget {
+            color: #e6e8ee;
+        }
+        QMainWindow, QWidget#centralwidget, QTabWidget::pane, QFrame {
+            background-color: #1f232a;
+        }
+        QTabBar::tab {
+            padding: 4px 10px;
+            border: 1px solid #4b5563;
+            border-bottom: none;
+            background: #262b33;
+            color: #d9dde7;
+            margin-right: 2px;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+        }
+        QTabBar::tab:selected {
+            background: #313845;
+            color: #ffffff;
+        }
+        QPushButton {
+            background-color: #2b313b;
+            border: 1px solid #6b7280;
+            border-radius: 4px;
+            padding: 4px 10px;
+            color: #f3f4f6;
+        }
+        QPushButton:hover {
+            background-color: #374151;
+            border-color: #9ca3af;
+        }
+        QPushButton:pressed {
+            background-color: #1f2937;
+            border-color: #d1d5db;
+        }
+        QPushButton:disabled {
+            color: #8f96a3;
+            border-color: #4b5563;
+            background-color: #242933;
+        }
+        QLabel {
+            font-weight: 400;
+            color: #e5e7eb;
+        }
+        QLineEdit,
+        QComboBox,
+        QSpinBox,
+        QDoubleSpinBox,
+        QPlainTextEdit,
+        QTextEdit {
+            background-color: #171a20;
+            border: 1px solid #6b7280;
+            border-radius: 4px;
+            padding-left: 2px;
+            color: #f9fafb;
+            selection-background-color: #3b82f6;
+            selection-color: #ffffff;
+        }
+        QLineEdit:focus,
+        QComboBox:focus,
+        QSpinBox:focus,
+        QDoubleSpinBox:focus,
+        QPlainTextEdit:focus,
+        QTextEdit:focus {
+            border: 1px solid #60a5fa;
+        }
+        QHeaderView::section {
+            background-color: #2b313b;
+            color: #f3f4f6;
+            border: 1px solid #4b5563;
+            padding: 4px 6px;
+            font-weight: 600;
+        }
+        QCheckBox,
+        QRadioButton {
+            spacing: 6px;
+            color: #e5e7eb;
+        }
+        QCheckBox::indicator,
+        QRadioButton::indicator {
+            width: 14px;
+            height: 14px;
+            border: 1px solid #9ca3af;
+            background: #111827;
+        }
+        QCheckBox::indicator:checked,
+        QRadioButton::indicator:checked {
+            background: #60a5fa;
+            border: 1px solid #bfdbfe;
+        }
+        QTableWidget {
+            gridline-color: #4b5563;
+            alternate-background-color: #252b34;
+            background-color: #181c23;
+            color: #f3f4f6;
+            border: 1px solid #4b5563;
+        }
+        QMenuBar, QMenu {
+            background-color: #20252d;
+            color: #e5e7eb;
+            border: 1px solid #4b5563;
+        }
+    """)
+
+    for spinbox in widget.findChildren(QtWidgets.QAbstractSpinBox):
+        spinbox.setKeyboardTracking(False)
+        spinbox.setAccelerated(True)
+
+    def ensure_text_fits(control, extra_width=8):
+        text = control.text().replace('&', '') if hasattr(control, 'text') else ''
+        if not text:
+            return
+        metrics = control.fontMetrics()
+        required_width = metrics.horizontalAdvance(text) + extra_width
+        required_height = metrics.height() + 6
+        width = max(control.width(), required_width)
+        height = max(control.height(), required_height)
+        if width != control.width() or height != control.height():
+            control.resize(width, height)
+
+    for label in widget.findChildren(QtWidgets.QLabel):
+        ensure_text_fits(label, extra_width=10)
+
+    for button in widget.findChildren(QtWidgets.QPushButton):
+        ensure_text_fits(button, extra_width=16)
+
+    for check in widget.findChildren(QtWidgets.QCheckBox):
+        ensure_text_fits(check, extra_width=26)
+
+    for radio in widget.findChildren(QtWidgets.QRadioButton):
+        ensure_text_fits(radio, extra_width=26)
+
+    for table in widget.findChildren(QtWidgets.QTableWidget):
+        table.setAlternatingRowColors(True)
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setStretchLastSection(True)
+
+    for tab_widget in widget.findChildren(QtWidgets.QTabWidget):
+        tab_widget.setDocumentMode(True)
 
 
 class MainUI(QtWidgets.QMainWindow):
@@ -55,12 +201,20 @@ class MainUI(QtWidgets.QMainWindow):
 
     def __init__(self):
         super(MainUI, self).__init__()  # Call the inherited classes __init__ method
+        self.base_dir = os.path.dirname(os.path.abspath(__file__))
+        self.settings_file = os.path.join(self.base_dir, "configs", "settings.yml")
+        self.fallback_config_file = os.path.join(self.base_dir, "configs", "default_config.yml")
+        self.default_parameters = self._default_config_template()
+        self.config_path = {'Config_Path': {'Path': self.fallback_config_file}}
         self.odmr_graph_window = None
         self.fft_graph_window = None
         self.vector_test_window = None
         self.scan_window = None
-        self.a_matrix_values = None
-        uic.loadUi('scanning_magnetometer.ui', self)  # Load the .ui file
+        self.a_matrix_values = copy.deepcopy(self.default_parameters['RF_Params']['A_Matrix_Values'])
+        uic.loadUi(ui_file('scanning_magnetometer.ui'), self)  # Load the .ui file
+        apply_ui_polish(self)
+        self.setMinimumSize(980, 620)
+        self.setWindowTitle("Scanning Magnetometer")
         self.show()  # Show the GUI
 
         self.stageController = StageControl(self, StageOptions)  # stage controller class instance
@@ -69,11 +223,12 @@ class MainUI(QtWidgets.QMainWindow):
 
         # try loading default default_config.yml to set default values if it exists in directory
         try:
-            with open("settings.yml", "r") as f:
+            with open(self.settings_file, "r") as f:
                 self.config_path = yaml.safe_load(f)
-            self.load_config(config_file_name=self.config_path['Config_Path']['Path'])
+            self.load_config(config_file_name=self.config_path.get('Config_Path', {}).get('Path', self.fallback_config_file))
         except Exception as error:
             print(error)
+            self.load_config(config_file_name=self.fallback_config_file)
 
 
         # ------------------ UI elements are connected to their respective functions here ------------------ #
@@ -148,6 +303,60 @@ class MainUI(QtWidgets.QMainWindow):
         # print('max %d threads' % self.threadpool.maxThreadCount())
         return
 
+    @staticmethod
+    def _default_config_template():
+        return {
+            "Connection_Params": {
+                "Device_ID": "dev7811",
+                "Device_IP": "192.168.1.101",
+                "RF_IP": "192.168.1.2"
+            },
+            "Stage_Params": {
+                "Avg_Time": "0.1",
+                "Dwell": "0.05",
+                "X_End": "20",
+                "X_Start": "10",
+                "X_Step": "1",
+                "Y_End": "20",
+                "Y_Start": "10",
+                "Y_Step": "1"
+            },
+            "Sweep_Params": {
+                "Dwell": "3.0",
+                "Points": "1000",
+                "Sweep_End": "3.0",
+                "Sweep_Start": "2.7",
+                "Sweep_Step": "250",
+                "Sweep_Type": "1"
+            },
+            "RF_Params": {
+                "Ext_Mod": "False",
+                "Feedback_Freq_Table": [[2.71, 2.72, 2.73, 2.74], [0.1, 0.1, 0.1, 0.1]],
+                "A_Matrix_Values": [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]],
+                "Freq": "2.75",
+                "Mod_Amp": "2.8",
+                "Mod_Freq": "3.05",
+                "Mod_On": "True",
+                "Mod_Type": "1",
+                "Power": "-30",
+                "Power_On": "False"
+            },
+            "LIA_Params": {
+                "Burst_Dur": "0.005",
+                "Duration": "10",
+                "FFT_50_Ohm": "False",
+                "FFT_AC_Coupling": "False",
+                "FFT_Average": "5",
+                "FFT_Duration": "1",
+                "FFT_Sample_Rate": "2048",
+                "Filter_Order": "7",
+                "Range": "0",
+                "Sample_Rate": "50",
+                "Scaling": "750",
+                "Time_Const": "600"
+            }
+        }
+
     def show_error_message(self, error):
         """ Displays pop up error message for try and except statements. Pass Exception as "error" parameter to display
         error to user if printing to console is not possible (i.e in a binary release.)
@@ -158,6 +367,26 @@ class MainUI(QtWidgets.QMainWindow):
         error_dialog = QtWidgets.QErrorMessage(self)
         error_dialog.showMessage(str(error[1]))
         return
+
+    def closeEvent(self, event):
+        confirm = QtWidgets.QMessageBox.question(
+            self,
+            "Exit Scanning Magnetometer",
+            "Are you sure you want to close the program?\nThis will stop and close all open windows.",
+            QtWidgets.QMessageBox.StandardButton.Yes | QtWidgets.QMessageBox.StandardButton.No,
+            QtWidgets.QMessageBox.StandardButton.No,
+        )
+
+        if confirm != QtWidgets.QMessageBox.StandardButton.Yes:
+            event.ignore()
+            return
+
+        for widget in QtWidgets.QApplication.topLevelWidgets():
+            if widget is not self:
+                widget.close()
+
+        event.accept()
+        QtWidgets.QApplication.quit()
 
     def vectorTest(self):
         """debug function of testing the vector measurment capabilites - should normally be disabled in the binary
@@ -193,23 +422,39 @@ class MainUI(QtWidgets.QMainWindow):
 
     def open_default_param(self):
         filepath = QtWidgets.QFileDialog.getOpenFileName(self, 'Select File', filter="yml (*.yml)")[0]
+        if not filepath:
+            return
         new_settings = self.config_path
         new_settings['Config_Path']['Path'] = str(filepath)
-        with open("settings.yml", 'w') as f:
+        with open(self.settings_file, 'w') as f:
             yaml.dump(new_settings, f, default_flow_style=False)
+        self.config_path = new_settings
         return
 
     def load_config_button_selected(self):
         filepath = QtWidgets.QFileDialog.getOpenFileName(self, 'Select File', filter="yml (*.yml)")[0]
         self.load_config(config_file_name=filepath)
 
-    def load_config(self, config_file_name="default_config.yml"):
-        try:
-            with open(config_file_name, "r") as f:
-                self.default_parameters = yaml.safe_load(f)
-        except Exception as error:
-            print(error)
-            return
+    def load_config(self, config_file_name=None):
+        loaded = False
+        candidate_paths = []
+        if config_file_name:
+            candidate_paths.append(config_file_name)
+        candidate_paths.append(self.fallback_config_file)
+        for path in candidate_paths:
+            try:
+                with open(path, "r") as f:
+                    params = yaml.safe_load(f) or {}
+                if isinstance(params, dict) and params:
+                    self.default_parameters = params
+                    loaded = True
+                    break
+            except Exception as error:
+                print(error)
+
+        if not loaded:
+            self.default_parameters = self._default_config_template()
+
         try:
             # set connection default values
             self.LIAIPBox.setText(self.default_parameters['Connection_Params']['Device_IP'])
@@ -279,7 +524,10 @@ class MainUI(QtWidgets.QMainWindow):
         return
 
     def save_config(self):
-        new_config = self.default_parameters
+        if not isinstance(self.default_parameters, dict) or not self.default_parameters:
+            self.default_parameters = self._default_config_template()
+
+        new_config = copy.deepcopy(self.default_parameters)
         # set connection default values
         new_config['Connection_Params']['Device_IP'] = str(self.LIAIPBox.text())
         new_config['Connection_Params']['Device_ID'] = str(self.LIANameBox.text())
@@ -341,15 +589,27 @@ class MainUI(QtWidgets.QMainWindow):
         new_config['LIA_Params']['FFT_AC_Coupling'] = str(self.acCoupleCheck.isChecked())
         new_config['LIA_Params']['FFT_50_Ohm'] = str(self.fiftyOhmCheck.isChecked())
 
-        filepath = QtWidgets.QFileDialog.getSaveFileName(self, 'Select File', filter="yml (*.yml)")[0]
+        default_save_path = os.path.join(self.base_dir, "configs", "config.yml")
+        filepath = QtWidgets.QFileDialog.getSaveFileName(
+            self,
+            'Select File',
+            default_save_path,
+            filter="YAML Files (*.yml *.yaml)"
+        )[0]
+        if not filepath:
+            return
+        if not filepath.lower().endswith(('.yml', '.yaml')):
+            filepath = f"{filepath}.yml"
         with open(filepath, 'w') as f:
             yaml.dump(new_config, f, default_flow_style=False)
+        self.default_parameters = new_config
         return
 
 class VectorMatrixWindow(QtWidgets.QWidget):
     def __init__(self):
         super(VectorMatrixWindow, self).__init__()
-        uic.loadUi('vectorMatrixWindow.ui', self)  # Load the .ui file
+        uic.loadUi(ui_file('vectorMatrixWindow.ui'), self)  # Load the .ui file
+        apply_ui_polish(self)
         self.show()
 
         self.applyChangesButton.clicked.connect(self.apply_changes)
@@ -408,7 +668,8 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
     def __init__(self):
         # load the UI for the vector test window
         super(VectorTest, self).__init__()
-        uic.loadUi('vectorTestWindow.ui', self)  # Load the .ui file
+        uic.loadUi(ui_file('vectorTestWindow.ui'), self)  # Load the .ui file
+        apply_ui_polish(self)
         self.show()
         self.scanning = True  # when set to false it will stop threading the function
 
@@ -557,7 +818,8 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
 class StageOptions(QtWidgets.QWidget):
     def __init__(self):
         super(StageOptions, self).__init__()  # Call the inherited classes __init__ method
-        uic.loadUi('stage_options.ui', self)  # Load the .ui file
+        uic.loadUi(ui_file('stage_options.ui'), self)  # Load the .ui file
+        apply_ui_polish(self)
         self.show()
 
     def apply_position_changes(self):
@@ -589,7 +851,8 @@ class FFTGraphWindow(QtWidgets.QWidget, ThreadedComponent):
     def __init__(self):
         super().__init__()
         super(FFTGraphWindow, self).__init__()  # Call the inherited classes __init__ method
-        uic.loadUi('FFTGraphWindow.ui', self)  # Load the .ui file
+        uic.loadUi(ui_file('FFTGraphWindow.ui'), self)  # Load the .ui file
+        apply_ui_polish(self)
         self.show()
         self.samples = None
         self.fft_plot = None
@@ -747,7 +1010,8 @@ class FFTGraphWindow(QtWidgets.QWidget, ThreadedComponent):
 class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
     def __init__(self, *args, **kwargs):
         super(ODMRGraphWindow, self).__init__(*args, **kwargs)  # Call the inherited classes __init__ method
-        uic.loadUi('ODMRGraphWindow.ui', self)  # Load the .ui file
+        uic.loadUi(ui_file('ODMRGraphWindow.ui'), self)  # Load the .ui file
+        apply_ui_polish(self)
         self.show()
 
         # configure two y axis plot
@@ -774,6 +1038,15 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         self.worker_running = False
         self.x = None
         self.y = None
+        self._last_fit_time = 0.0
+        self._hovered_linear_row = None
+        self._linear_region_default_pen = pg.mkPen(color=(255, 0, 0), width=5)
+        self._linear_region_hover_pen = pg.mkPen(color=(255, 215, 0), width=7)
+
+        self.linearRegionTable.setMouseTracking(True)
+        self.linearRegionTable.viewport().setMouseTracking(True)
+        self.linearRegionTable.cellEntered.connect(self.on_linear_region_table_hover)
+        self.linearRegionTable.viewport().installEventFilter(self)
 
         self.odmrRegionFitBox.valueChanged.connect(lambda: self.fit_linear_region(self.x, self.y,
                                                                                   self.odmrRegionFitBox.value(),
@@ -839,7 +1112,18 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
                                            peak_prom=self.peakPromSpinBox.value(),
                                            ))
 
-        self.peakHeightSpinBox.valueChanged.connect(
+        self.peakDistanceSpinBox.valueChanged.connect(
+            lambda: self.fit_linear_region(self.x, self.y, self.odmrRegionFitBox.value(),
+                                           plot_derivative=self.showDerivativeCheckbox.isChecked(),
+                                           denoise=self.smoothingCheckBox.isChecked(),
+                                           window_length=self.smoothWindowBox.value(),
+                                           polyorder=self.polyorderSpinBox.value(),
+                                           peak_height=self.peakHeightSpinBox.value(),
+                                           peak_distance=self.peakDistanceSpinBox.value(),
+                                           peak_prom=self.peakPromSpinBox.value(),
+                                           ))
+
+        self.peakPromSpinBox.valueChanged.connect(
             lambda: self.fit_linear_region(self.x, self.y, self.odmrRegionFitBox.value(),
                                            plot_derivative=self.showDerivativeCheckbox.isChecked(),
                                            denoise=self.smoothingCheckBox.isChecked(),
@@ -851,6 +1135,7 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
                                            ))
 
         self.setODMRButton.clicked.connect(self.send_to_scan_table)
+        self.autoFitButton.clicked.connect(self.run_auto_fit)
         self.stopSweepButton.clicked.connect(self.stop_odmr_sweep)
 
         self.thread_function(window.rfController.setup_sweep, window.startFreqBox.value(), window.endFreqBox.value(),
@@ -878,6 +1163,8 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
                              window.rfController.num_points)
         self.x = self.x[0:len(self.y)]
         self.dummy_data(self.x, self.y)
+        if self.autoFitAfterSweepCheckBox.isChecked():
+            self.run_auto_fit()
         return
 
     def progress_fn(self, results):
@@ -887,6 +1174,22 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         self.x = self.x[0:len(self.y)]
         self.dummy_data(self.x, self.y)
         return
+
+    def run_auto_fit(self):
+        if window.rfController.sweeping:
+            return
+        if self.x is None or self.y is None or len(self.y) < 7:
+            return
+        self.fit_linear_region(self.x, self.y,
+                               self.odmrRegionFitBox.value(),
+                               plot_derivative=self.showDerivativeCheckbox.isChecked(),
+                               denoise=self.smoothingCheckBox.isChecked(),
+                               window_length=self.smoothWindowBox.value(),
+                               polyorder=self.polyorderSpinBox.value(),
+                               peak_height=0,
+                               peak_distance=0,
+                               peak_prom=0,
+                               force=True)
 
     def print_this(self, results):
         """this then prints the result emitted from the results signal, that is returned by the function
@@ -912,6 +1215,29 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         ## (probably this should be handled in ViewBox.resizeEvent)
         self.p2.linkedViewChanged(self.p1.vb, self.p2.XAxis)
 
+    def eventFilter(self, obj, event):
+        if obj is self.linearRegionTable.viewport() and event.type() == QtCore.QEvent.Type.Leave:
+            self.clear_linear_region_hover()
+        return super().eventFilter(obj, event)
+
+    def clear_linear_region_hover(self):
+        if self._hovered_linear_row is None:
+            return
+        row = self._hovered_linear_row
+        if self.linear_region_list is not None and 0 <= row < len(self.linear_region_list):
+            self.linear_region_list[row].setPen(self._linear_region_default_pen)
+        self._hovered_linear_row = None
+
+    def on_linear_region_table_hover(self, row, _column):
+        if self.linear_region_list is None or row < 0 or row >= len(self.linear_region_list):
+            self.clear_linear_region_hover()
+            return
+        if self._hovered_linear_row == row:
+            return
+        self.clear_linear_region_hover()
+        self.linear_region_list[row].setPen(self._linear_region_hover_pen)
+        self._hovered_linear_row = row
+
     def dummy_data(self, x, y):
         try:
             self.odmr_plot.clear()
@@ -923,26 +1249,103 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         return
 
     def fit_linear_region(self, x, y, linear_region_width=50, window_length=50, polyorder=3, peak_height=-5,
-                          peak_distance=100, peak_prom=5, plot_derivative=False, denoise=False):
+                          peak_distance=100, peak_prom=5, plot_derivative=False, denoise=False, force=False):
         try:
+            if window.rfController.sweeping and not force:
+                return
+            if x is None or y is None:
+                return
+            x = np.asarray(x, dtype=float)
+            y = np.asarray(y, dtype=float)
+            if len(x) < 7 or len(y) < 7:
+                return
+
             window_length = int(window_length)
             polyorder = int(polyorder)
+
+            # enforce valid Savitzky-Golay parameters for robust auto-fitting
+            max_allowed_window = len(y) if len(y) % 2 == 1 else len(y) - 1
+            if max_allowed_window < 5:
+                max_allowed_window = 5
+            window_length = min(window_length, max_allowed_window)
+            if window_length % 2 == 0:
+                window_length -= 1
+            window_length = max(5, window_length)
+            polyorder = max(1, min(polyorder, window_length - 2))
+
+            y_for_fit = y
             if denoise:
-                y = savgol_filter(y, window_length=window_length, polyorder=polyorder)
+                y_for_fit = savgol_filter(y, window_length=window_length, polyorder=polyorder)
+
             try:
                 self.odmr_plot.clear()
-                self.dummy_data(x, y)
+                self.dummy_data(x, y_for_fit)
             except:
-                self.dummy_data(x, y)
+                self.dummy_data(x, y_for_fit)
 
-            linear_region_width = int(linear_region_width)
+            linear_region_width = max(7, int(linear_region_width))
+            if linear_region_width % 2 == 0:
+                linear_region_width += 1
 
             if self.usePositiveGradientsCheckBox.isChecked():
-                derivative = np.gradient(y, x)  # take derivative of curve, find elbow or "knee" point of curve
+                derivative = np.gradient(y_for_fit, x)  # take derivative of curve, find elbow or "knee" point of curve
             else:
-                derivative = -1 * np.gradient(y,x)
-            elbow_index = np.argmin(derivative)  # find the minimum of the gradient, use that to determine linear region
-            peaks, _ = find_peaks(derivative, height=peak_height, distance=peak_distance, prominence=peak_prom)
+                derivative = -1 * np.gradient(y_for_fit, x)
+
+            # adaptive thresholds from derivative statistics to reduce manual tuning effort
+            deriv_median = float(np.median(derivative))
+            mad = float(np.median(np.abs(derivative - deriv_median)))
+            robust_sigma = max(1e-12, 1.4826 * mad)
+            auto_height = deriv_median + 2.0 * robust_sigma
+            auto_prom = max(robust_sigma * 2.5, float(np.ptp(derivative)) * 0.04)
+            auto_distance = max(3, int(len(x) / 120))
+
+            detect_height = float(peak_height) if float(peak_height) > 0 else auto_height
+            detect_prom = float(peak_prom) if float(peak_prom) > 0 else auto_prom
+            detect_distance = int(peak_distance) if int(peak_distance) > 0 else auto_distance
+
+            peaks, peak_props = find_peaks(
+                derivative,
+                height=detect_height,
+                distance=detect_distance,
+                prominence=detect_prom,
+            )
+
+            if len(peaks) == 0:
+                peaks, peak_props = find_peaks(
+                    derivative,
+                    distance=max(2, detect_distance // 2),
+                    prominence=max(auto_prom * 0.45, 1e-12),
+                )
+
+            if len(peaks) == 0:
+                try:
+                    for item in self.linear_region_list:
+                        item.clear()
+                except:
+                    pass
+                self.linearRegionTable.setRowCount(0)
+                if plot_derivative:
+                    try:
+                        self.p2.removeItem(self.odmr_deriv_plot)
+                    except:
+                        pass
+                    pen = pg.mkPen(color=(0, 255, 0), style=QtCore.Qt.PenStyle.DashDotLine)
+                    self.odmr_deriv_plot = pg.PlotCurveItem(x, derivative, pen=pen)
+                    self.p2.addItem(self.odmr_deriv_plot)
+                self.updateViews()
+                return
+
+            # keep strongest peaks if many are found, then preserve left-to-right order
+            prominences = peak_props.get('prominences', np.ones(len(peaks)))
+            max_peaks = 24
+            if len(peaks) > max_peaks:
+                keep = np.argsort(prominences)[-max_peaks:]
+                keep = keep[np.argsort(peaks[keep])]
+                peaks = peaks[keep]
+                prominences = prominences[keep]
+
+            widths, _, _, _ = peak_widths(derivative, peaks, rel_height=0.5)
 
             try:
                 for i in self.linear_region_list:
@@ -953,13 +1356,21 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
             self.linear_region_list = []
             self.linear_region_list_checkboxes = []
             self.linearRegionTable.setRowCount(0)
+            row_idx = 0
+            auto_selected_rows = []
             for i in range(len(peaks)):
+                adaptive_width = max(linear_region_width, int(np.ceil(widths[i] * 1.8)))
+                if adaptive_width % 2 == 0:
+                    adaptive_width += 1
+
                 # Adjust linear region parameter to control the width of the linear region
-                linear_region_start = max(0, peaks[i] - linear_region_width // 2)
-                linear_region_end = min(len(x) - 1, peaks[i] + linear_region_width // 2)
+                linear_region_start = max(0, peaks[i] - adaptive_width // 2)
+                linear_region_end = min(len(x) - 1, peaks[i] + adaptive_width // 2)
                 # Extract data points for the linear region
                 x_linear = x[linear_region_start:linear_region_end].reshape(-1, 1)
-                y_linear = y[linear_region_start:linear_region_end]
+                y_linear = y_for_fit[linear_region_start:linear_region_end]
+                if len(x_linear) < 3:
+                    continue
 
                 # Perform linear regression
                 model = LinearRegression()
@@ -970,18 +1381,38 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
 
                 prd = model.predict(x_linear)
                 x_linear = x_linear.flatten()
+                ss_res = float(np.sum((y_linear - prd) ** 2))
+                ss_tot = float(np.sum((y_linear - np.mean(y_linear)) ** 2))
+                r_squared = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
 
                 pen = pg.mkPen(color=(255, 0, 0), width=5)
 
-                self.odmr_linear_region_plot = self.graphWidget.plot(x_linear, prd, pen=pen)
+                self.odmr_linear_region_plot = self.graphWidget.plot(x_linear, prd, pen=self._linear_region_default_pen)
                 self.linear_region_list.append(self.odmr_linear_region_plot)
 
-                self.linearRegionTable.insertRow(i)
-                self.linearRegionTable.setItem(i, 0,
+                self.linearRegionTable.insertRow(row_idx)
+                self.linearRegionTable.setItem(row_idx, 0,
                                                QtWidgets.QTableWidgetItem(
                                                    str(round((x_linear[0] + x_linear[-1]) / 2, 9))))
-                self.linearRegionTable.setItem(i, 1, QtWidgets.QTableWidgetItem(str(round(slope, 9))))
-                self.linearRegionTable.setCellWidget(i, 2, QtWidgets.QCheckBox())
+                self.linearRegionTable.setItem(row_idx, 1, QtWidgets.QTableWidgetItem(str(round(slope, 9))))
+                checkbox = QtWidgets.QCheckBox()
+                prominence_threshold = 0.5 * float(np.median(prominences)) if len(prominences) > 0 else 0
+                auto_select = bool((prominences[i] >= prominence_threshold) and (r_squared >= 0.75))
+                checkbox.setChecked(auto_select)
+                if auto_select:
+                    auto_selected_rows.append(row_idx)
+                checkbox.setToolTip(
+                    f"Prominence: {prominences[i]:.3e}\nR²: {r_squared:.3f}\nAuto-selected: {auto_select}"
+                )
+                self.linearRegionTable.setCellWidget(row_idx, 2, checkbox)
+                row_idx += 1
+
+            self.clear_linear_region_hover()
+
+            if self.linearRegionTable.rowCount() > 0 and len(auto_selected_rows) == 0:
+                strongest_idx = int(np.argmax(prominences))
+                strongest_row = min(strongest_idx, self.linearRegionTable.rowCount() - 1)
+                self.linearRegionTable.cellWidget(strongest_row, 2).setChecked(True)
 
             # if plot deriviate is true, plot it else, if false, clear deriv plot.
             if plot_derivative:
@@ -1037,7 +1468,8 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         self.res_freq = None
         self.dV = None
         self.df = None
-        uic.loadUi('scanningWindow.ui', self)  # Load the .ui file
+        uic.loadUi(ui_file('scanningWindow.ui'), self)  # Load the .ui file
+        apply_ui_polish(self)
         self.show()
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
         self.StageControl = window.stageController
@@ -1284,8 +1716,9 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                     # else return current voltage instead
                     if self.scan_averaging:
                         stream = window.LIAController.daq.poll(self.avg_time, 200, 1, True)
-                        self.voltageArr[0, j, i] = np.mean(stream['/dev4521/demods/0/sample']['x'])
-                        self.voltageArrSTD[0, j, i] = np.std(stream['/dev4521/demods/0/sample']['x'])
+                        sample_path = f"/{window.LIAController.device}/demods/0/sample"
+                        self.voltageArr[0, j, i] = np.mean(stream[sample_path]['x'])
+                        self.voltageArrSTD[0, j, i] = np.std(stream[sample_path]['x'])
                         emit_if_due(self.voltageArr)
                     else:
                         sample = window.LIAController.daq.getSample("/%s/demods/0/sample" % window.LIAController.device)

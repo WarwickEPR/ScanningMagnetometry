@@ -21,3 +21,5 @@ main.spec
 *.yml
 *.yml
 settings.yml
+*_config.yml
+configs/*.yml
