@@ -27,6 +27,7 @@ from stage_control import StageControl
 from rf_control import RfControl
 from lia_control import LIAControl
 from windows.fft_window import FFTGraphWindow
+from windows.lia_live_trace_window import LIALiveTraceWindow
 from windows.odmr_window import ODMRGraphWindow
 from windows.scanning_window import scanningImageWindow
 from ui_theme import apply_ui_polish
@@ -39,6 +40,8 @@ try:
     dark_theme = True
 except Exception as error:
     dark_theme = False
+
+
 class MainUI(QtWidgets.QMainWindow):
     """
     This is the main window class. All other windows with be children of this window. All class instances of
@@ -65,6 +68,7 @@ class MainUI(QtWidgets.QMainWindow):
         self.fft_graph_window = None
         self.vector_test_window = None
         self.scan_window = None
+        self.lia_live_trace_window = None
         self.a_matrix_values = copy.deepcopy(
             self.default_parameters["RF_Params"]["A_Matrix_Values"]
         )
@@ -128,7 +132,16 @@ class MainUI(QtWidgets.QMainWindow):
                 err_fn=self.show_error_message,
             )
         )
+
+        self.scalingFactorSpinBox.editingFinished.connect(self.on_lia_runtime_setting_changed)
+        self.timeConstantSpinBox.editingFinished.connect(self.on_lia_runtime_setting_changed)
+        self.rangeSelect.currentIndexChanged.connect(self.on_lia_runtime_setting_changed)
+        self.harmonicOrderSelect.currentIndexChanged.connect(self.on_lia_runtime_setting_changed)
+        self.acCoupleCheck.stateChanged.connect(self.on_lia_runtime_setting_changed)
+        self.fiftyOhmCheck.stateChanged.connect(self.on_lia_runtime_setting_changed)
+
         self.takeFFTButton.clicked.connect(self.open_fft_graph)
+        self.openLIALiveTraceButton.clicked.connect(self.open_lia_live_trace)
 
         #  RF ui controls
         self.takeODMRButton.clicked.connect(self.open_odmr_graph)
@@ -279,10 +292,21 @@ class MainUI(QtWidgets.QMainWindow):
 
     def open_fft_graph(self):
         """Opens the fast Fourier transform window for sensitivity measurements"""
+        if self.fft_graph_window is not None:
+            try:
+                if getattr(self.fft_graph_window, "worker_running", False):
+                    self.fft_graph_window.stop_fft()
+            except Exception:
+                pass
+            try:
+                self.fft_graph_window.close()
+            except Exception:
+                pass
         self.fft_graph_window = FFTGraphWindow(self)
 
     def open_odmr_graph(self):
         """Opens the ODMR graph window for ODMR sweeps and fitting parameters"""
+        self.stop_lia_live_trace()
         window.takeODMRButton.setEnabled(
             False
         )  # stops multiple windows being opened and causing strangness occuring
@@ -292,11 +316,34 @@ class MainUI(QtWidgets.QMainWindow):
         """Opens the scan window which shows any feedback/vector tracking graphs as well as showing a real-time image
         of the current scan.
         """
+        self.stop_lia_live_trace()
         self.scan_window = scanningImageWindow(self)
+
+    def open_lia_live_trace(self):
+        if (
+            self.lia_live_trace_window is None
+            or not self.lia_live_trace_window.isVisible()
+        ):
+            self.lia_live_trace_window = LIALiveTraceWindow(self)
+        else:
+            self.lia_live_trace_window.raise_()
+            self.lia_live_trace_window.activateWindow()
+
+    def stop_lia_live_trace(self):
+        if self.lia_live_trace_window is not None:
+            self.lia_live_trace_window.stop_stream()
 
     def open_data_viewer(self):
         self.data_viewer_window = data_viewer.DataViewer()
         return
+
+    def on_lia_runtime_setting_changed(self):
+        if not self.LIAController.LIA_connected:
+            return
+        self.LIAController.thread_function(
+            self.LIAController.apply_runtime_settings,
+            err_fn=self.show_error_message,
+        )
 
     def set_vector_matrx(self):
         self.vector_matrix_window = VectorMatrixWindow()
@@ -542,10 +589,10 @@ class MainUI(QtWidgets.QMainWindow):
         new_config["LIA_Params"]["Filter_Order"] = str(
             self.harmonicOrderSelect.currentIndex()
         )
-        new_config["LIA_Params"]["FFT_Average"] = str(self.odmrAqDurBox.value())
-        new_config["LIA_Params"]["FFT_Duration"] = str(self.fftAverageSpinBox.value())
+        new_config["LIA_Params"]["FFT_Average"] = str(self.fftAverageSpinBox.value())
+        new_config["LIA_Params"]["FFT_Duration"] = str(self.fftDurationSpinBox.value())
         new_config["LIA_Params"]["FFT_Sample_Rate"] = str(
-            self.fftDurationSpinBox.value()
+            self.sampleRateSpinBox.value()
         )
         new_config["LIA_Params"]["FFT_AC_Coupling"] = str(
             self.acCoupleCheck.isChecked()
@@ -816,6 +863,8 @@ class StageOptions(QtWidgets.QWidget):
 
     def apply_jerk_changes(self):
         return
+
+
 app = QtWidgets.QApplication(sys.argv)  # Create an instance of QtWidgets.QApplication
 if dark_theme:
     qdarktheme.setup_theme()

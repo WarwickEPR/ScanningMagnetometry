@@ -1582,6 +1582,19 @@
           <string>Take Fast-Fourier Transform</string>
          </property>
         </widget>
+        <widget class="QPushButton" name="openLIALiveTraceButton">
+         <property name="geometry">
+          <rect>
+           <x>10</x>
+           <y>130</y>
+           <width>381</width>
+           <height>24</height>
+          </rect>
+         </property>
+         <property name="text">
+          <string>Open Live Demod Time Trace</string>
+         </property>
+        </widget>
         <widget class="QSpinBox" name="scalingFactorSpinBox">
          <property name="geometry">
           <rect>

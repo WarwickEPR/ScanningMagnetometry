@@ -80,6 +80,7 @@ class LIAControl(ThreadedComponent):
             self.daq.set(f"/{self.device}/demods/0/enable", 1)  # enable demodulation
             self.clockbase = float(self.daq.getInt(f"/{self.device}/clockbase"))
             self.LIA_connected = True
+            self.apply_runtime_settings()
         except Exception as e:
             self.LIA_connected = False
             raise ConnectionError(
@@ -87,6 +88,41 @@ class LIAControl(ThreadedComponent):
                 f"Check LabOne is reachable at the given IP and use ID format like 'dev4521'. "
                 f"Original error: {e}"
             )
+
+    def apply_runtime_settings(self, *args, **kwargs):
+        """Apply current UI LIA settings to hardware immediately."""
+        if not self.LIA_connected or self.daq is None or self.device is None:
+            return
+
+        try:
+            range_text = str(self.window.rangeSelect.currentText()).strip()
+            if range_text:
+                v_range = float(range_text)
+            else:
+                v_range = float(self.window.rangeSelect.currentIndex())
+
+            order_text = str(self.window.harmonicOrderSelect.currentText()).strip()
+            if order_text and order_text.replace('.', '', 1).isdigit():
+                filter_order = int(float(order_text))
+            else:
+                filter_order = int(self.window.harmonicOrderSelect.currentIndex()) + 1
+            filter_order = max(1, filter_order)
+
+            time_constant = float(self.window.timeConstantSpinBox.value()) / 1e6
+            imp_fifty = int(self.window.fiftyOhmCheck.isChecked())
+            ac_coupled = int(self.window.acCoupleCheck.isChecked())
+            scaling = float(self.window.scalingFactorSpinBox.value())
+
+            self.daq.setInt(f"/{self.device}/sigins/0/imp50", imp_fifty)
+            self.daq.setInt(f"/{self.device}/sigins/0/ac", ac_coupled)
+            self.daq.setDouble(f"/{self.device}/sigins/0/range", v_range)
+            self.daq.setInt(f"/{self.device}/demods/0/order", filter_order)
+            self.daq.setDouble(f"/{self.device}/demods/0/timeconstant", time_constant)
+            self.daq.setDouble(f"/{self.device}/auxouts/0/scale", scaling)
+            self.daq.set(f"/{self.device}/demods/0/enable", 1)
+            self.scaling_Factor = scaling
+        except Exception as error:
+            raise RuntimeError(f"Failed to apply LIA runtime settings: {error}")
 
     def setup_sweep(self):
         """Set parameters and arm data acquisition module for ODMR sweep.
