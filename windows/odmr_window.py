@@ -1,13 +1,12 @@
 import time
-import traceback
 import numpy as np
 import pyqtgraph as pg
 from PyQt6 import QtCore, QtWidgets, uic
+from sklearn.linear_model import LinearRegression
 
 from threading_utils import ThreadedComponent
 from paths import ui_file
 from ui_theme import apply_ui_polish
-from analysis.odmr_fit import compute_odmr_linear_regions
 
 
 class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
@@ -32,12 +31,15 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         self.p1.vb.sigResized.connect(self.updateViews)
 
         self.odmr_plot = None
+        self.odmr_fit_plot = None
         self.odmr_deriv_plot = None
         self.odmr_linear_region_plot = None
         self.linear_region_list = None
         self.worker_running = False
         self.x = None
         self.y = None
+        self._selection_mode_active = False
+        self._selected_indices = []
         self._hovered_linear_row = None
         self._linear_region_default_pen = pg.mkPen(color=(255, 0, 0), width=5)
         self._linear_region_hover_pen = pg.mkPen(color=(255, 215, 0), width=7)
@@ -47,18 +49,14 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         self.linearRegionTable.cellEntered.connect(self.on_linear_region_table_hover)
         self.linearRegionTable.viewport().installEventFilter(self)
 
-        self.odmrRegionFitBox.valueChanged.connect(self._fit_from_ui)
-        self.showDerivativeCheckbox.stateChanged.connect(self._fit_from_ui)
-        self.smoothingCheckBox.stateChanged.connect(self._fit_from_ui)
-        self.polyorderSpinBox.valueChanged.connect(self._fit_from_ui)
-        self.smoothWindowBox.valueChanged.connect(self._fit_from_ui)
-        self.peakHeightSpinBox.valueChanged.connect(self._fit_from_ui)
-        self.peakDistanceSpinBox.valueChanged.connect(self._fit_from_ui)
-        self.peakPromSpinBox.valueChanged.connect(self._fit_from_ui)
-
         self.setODMRButton.clicked.connect(self.send_to_scan_table)
-        self.autoFitButton.clicked.connect(self.run_auto_fit)
+        self.autoFitButton.setText("Select Linear Region")
+        self.autoFitButton.clicked.connect(self.start_linear_region_selection)
+        self.autoFitButton.setEnabled(False)
+        self.autoFitAfterSweepCheckBox.hide()
+        self._hide_legacy_auto_fit_controls()
         self.stopSweepButton.clicked.connect(self.stop_odmr_sweep)
+        self.graphWidget.scene().sigMouseClicked.connect(self._on_plot_mouse_clicked)
 
         self.thread_function(
             self.main_window.rfController.setup_sweep,
@@ -74,20 +72,6 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
             progress_callback=None,
         )
 
-    def _fit_from_ui(self):
-        self.fit_linear_region(
-            self.x,
-            self.y,
-            self.odmrRegionFitBox.value(),
-            plot_derivative=self.showDerivativeCheckbox.isChecked(),
-            denoise=self.smoothingCheckBox.isChecked(),
-            window_length=self.smoothWindowBox.value(),
-            polyorder=self.polyorderSpinBox.value(),
-            peak_height=self.peakHeightSpinBox.value(),
-            peak_distance=self.peakDistanceSpinBox.value(),
-            peak_prom=self.peakPromSpinBox.value(),
-        )
-
     def execute_this_function(self, *args, **kwargs):
         self.main_window.takeODMRButton.setEnabled(True)
         self.worker_running = False
@@ -100,8 +84,10 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         )
         self.x = self.x[0 : len(self.y)]
         self.dummy_data(self.x, self.y)
-        if self.autoFitAfterSweepCheckBox.isChecked():
-            self.run_auto_fit()
+        self.autoFitButton.setEnabled(len(self.x) >= 3)
+        self._selection_mode_active = False
+        self._selected_indices = []
+        self.autoFitButton.setText("Select Linear Region")
 
     def progress_fn(self, results):
         self.y = results
@@ -112,32 +98,124 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         )
         self.x = self.x[0 : len(self.y)]
         self.dummy_data(self.x, self.y)
+        self.autoFitButton.setEnabled(False)
 
-    def run_auto_fit(self):
+    def start_linear_region_selection(self):
         if self.main_window.rfController.sweeping:
             return
-        if self.x is None or self.y is None or len(self.y) < 7:
+        if self.x is None or self.y is None or len(self.x) < 3:
             return
-        self.fit_linear_region(
-            self.x,
-            self.y,
-            self.odmrRegionFitBox.value(),
-            plot_derivative=self.showDerivativeCheckbox.isChecked(),
-            denoise=self.smoothingCheckBox.isChecked(),
-            window_length=self.smoothWindowBox.value(),
-            polyorder=self.polyorderSpinBox.value(),
-            peak_height=0,
-            peak_distance=0,
-            peak_prom=0,
-            force=True,
+        self._selection_mode_active = True
+        self._selected_indices = []
+        self.autoFitButton.setText("Select Point 1/2")
+
+    def _hide_legacy_auto_fit_controls(self):
+        legacy_widgets = [
+            self.odmrRegionFitBox,
+            self.showDerivativeCheckbox,
+            self.smoothingCheckBox,
+            self.polyorderSpinBox,
+            self.smoothWindowBox,
+            self.peakHeightSpinBox,
+            self.peakDistanceSpinBox,
+            self.peakPromSpinBox,
+            self.usePositiveGradientsCheckBox,
+        ]
+
+        for widget_name in [
+            "label",
+            "label_2",
+            "label_4",
+            "label_5",
+            "label_6",
+            "label_7",
+        ]:
+            widget = getattr(self, widget_name, None)
+            if widget is not None:
+                legacy_widgets.append(widget)
+
+        for widget in legacy_widgets:
+            try:
+                widget.hide()
+            except Exception:
+                pass
+
+    def _on_plot_mouse_clicked(self, event):
+        if not self._selection_mode_active:
+            return
+        if event.button() != QtCore.Qt.MouseButton.LeftButton:
+            return
+        if self.x is None or self.y is None or len(self.x) < 3:
+            self._selection_mode_active = False
+            self.autoFitButton.setText("Select Linear Region")
+            return
+
+        view_pos = self.p1.vb.mapSceneToView(event.scenePos())
+        clicked_x = float(view_pos.x())
+        nearest_idx = int(np.argmin(np.abs(self.x - clicked_x)))
+        self._selected_indices.append(nearest_idx)
+
+        if len(self._selected_indices) == 1:
+            self.autoFitButton.setText("Select Point 2/2")
+            return
+
+        idx_start, idx_end = sorted(self._selected_indices[:2])
+        self._selected_indices = []
+        self._selection_mode_active = False
+        self.autoFitButton.setText("Select Linear Region")
+
+        self._fit_manual_region(idx_start, idx_end)
+
+    def _fit_manual_region(self, idx_start, idx_end):
+        if self.x is None or self.y is None:
+            return
+
+        idx_start = max(0, int(idx_start))
+        idx_end = min(len(self.x) - 1, int(idx_end))
+        if idx_end - idx_start < 2:
+            return
+
+        x_linear = self.x[idx_start : idx_end + 1]
+        y_linear = self.y[idx_start : idx_end + 1]
+        if len(x_linear) < 3:
+            return
+
+        model = LinearRegression()
+        model.fit(x_linear.reshape(-1, 1), y_linear)
+        predicted = model.predict(x_linear.reshape(-1, 1))
+        slope = float(model.coef_[0])
+        center_freq = float(0.5 * (x_linear[0] + x_linear[-1]))
+
+        row_idx = self.linearRegionTable.rowCount()
+        self.linearRegionTable.insertRow(row_idx)
+        self.linearRegionTable.setItem(
+            row_idx,
+            0,
+            QtWidgets.QTableWidgetItem(str(round(center_freq, 9))),
         )
+        self.linearRegionTable.setItem(
+            row_idx,
+            1,
+            QtWidgets.QTableWidgetItem(str(round(slope, 9))),
+        )
+        checkbox = QtWidgets.QCheckBox()
+        checkbox.setChecked(True)
+        self.linearRegionTable.setCellWidget(row_idx, 2, checkbox)
+
+        if self.linear_region_list is None:
+            self.linear_region_list = []
+        line_plot = self.graphWidget.plot(x_linear, predicted, pen=self._linear_region_default_pen)
+        self.linear_region_list.append(line_plot)
 
     def closeEvent(self, event):
         self.main_window.rfController.sweeping = False
         self.worker_running = False
+        self._selection_mode_active = False
 
     def stop_odmr_sweep(self):
         self.worker_running = False
+        self._selection_mode_active = False
+        self.autoFitButton.setText("Select Linear Region")
 
     def updateViews(self):
         self.p2.setGeometry(self.p1.vb.sceneBoundingRect())
@@ -173,119 +251,6 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
             pass
         pen = pg.mkPen(style=QtCore.Qt.PenStyle.DashLine)
         self.odmr_plot = self.graphWidget.plot(x, y, pen=pen)
-        self.updateViews()
-
-    def fit_linear_region(
-        self,
-        x,
-        y,
-        linear_region_width=50,
-        window_length=50,
-        polyorder=3,
-        peak_height=-5,
-        peak_distance=100,
-        peak_prom=5,
-        plot_derivative=False,
-        denoise=False,
-        force=False,
-    ):
-        try:
-            if self.main_window.rfController.sweeping and not force:
-                return
-            if x is None or y is None:
-                return
-
-            fit_result = compute_odmr_linear_regions(
-                x=x,
-                y=y,
-                linear_region_width=linear_region_width,
-                window_length=window_length,
-                polyorder=polyorder,
-                peak_height=peak_height,
-                peak_distance=peak_distance,
-                peak_prom=peak_prom,
-                denoise=denoise,
-                use_positive_gradients=self.usePositiveGradientsCheckBox.isChecked(),
-            )
-            if fit_result is None:
-                return
-
-            y_for_fit = fit_result["y_for_fit"]
-            derivative = fit_result["derivative"]
-            regions = fit_result["regions"]
-            prominences = fit_result["prominences"]
-
-            try:
-                self.odmr_plot.clear()
-                self.dummy_data(fit_result["x"], y_for_fit)
-            except:
-                self.dummy_data(fit_result["x"], y_for_fit)
-
-            try:
-                for line in self.linear_region_list:
-                    line.clear()
-            except:
-                pass
-
-            self.linear_region_list = []
-            self.linearRegionTable.setRowCount(0)
-            auto_selected_rows = []
-
-            for row_idx, region in enumerate(regions):
-                self.odmr_linear_region_plot = self.graphWidget.plot(
-                    region["x_linear"], region["predicted"], pen=self._linear_region_default_pen
-                )
-                self.linear_region_list.append(self.odmr_linear_region_plot)
-
-                self.linearRegionTable.insertRow(row_idx)
-                self.linearRegionTable.setItem(
-                    row_idx,
-                    0,
-                    QtWidgets.QTableWidgetItem(str(round(region["center_freq"], 9))),
-                )
-                self.linearRegionTable.setItem(
-                    row_idx,
-                    1,
-                    QtWidgets.QTableWidgetItem(str(round(region["slope"], 9))),
-                )
-
-                checkbox = QtWidgets.QCheckBox()
-                prominence_threshold = 0.5 * float(np.median(prominences)) if len(prominences) > 0 else 0
-                auto_select = bool(
-                    (region["prominence"] >= prominence_threshold) and (region["r_squared"] >= 0.75)
-                )
-                checkbox.setChecked(auto_select)
-                if auto_select:
-                    auto_selected_rows.append(row_idx)
-                checkbox.setToolTip(
-                    f"Prominence: {region['prominence']:.3e}\nR²: {region['r_squared']:.3f}\nAuto-selected: {auto_select}"
-                )
-                self.linearRegionTable.setCellWidget(row_idx, 2, checkbox)
-
-            self.clear_linear_region_hover()
-
-            if self.linearRegionTable.rowCount() > 0 and len(auto_selected_rows) == 0:
-                strongest_row = int(np.argmax(prominences)) if len(prominences) > 0 else 0
-                strongest_row = min(strongest_row, self.linearRegionTable.rowCount() - 1)
-                self.linearRegionTable.cellWidget(strongest_row, 2).setChecked(True)
-
-            if plot_derivative:
-                try:
-                    self.p2.removeItem(self.odmr_deriv_plot)
-                except:
-                    pass
-                pen = pg.mkPen(color=(0, 255, 0), style=QtCore.Qt.PenStyle.DashDotLine)
-                self.odmr_deriv_plot = pg.PlotCurveItem(fit_result["x"], derivative, pen=pen)
-                self.p2.addItem(self.odmr_deriv_plot)
-            else:
-                try:
-                    self.p2.removeItem(self.odmr_deriv_plot)
-                except:
-                    pass
-
-        except Exception:
-            print(traceback.format_exc())
-
         self.updateViews()
 
     def send_to_scan_table(self):

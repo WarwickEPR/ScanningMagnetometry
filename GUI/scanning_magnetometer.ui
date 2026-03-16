@@ -165,7 +165,7 @@
           <double>1.000000000000000</double>
          </property>
          <property name="maximum">
-          <double>200.000000000000000</double>
+          <double>220.000000000000000</double>
          </property>
         </widget>
         <widget class="QLabel" name="label">
@@ -379,7 +379,7 @@
           <double>1.000000000000000</double>
          </property>
          <property name="maximum">
-          <double>200.000000000000000</double>
+          <double>220.000000000000000</double>
          </property>
         </widget>
         <widget class="QDoubleSpinBox" name="yStartSpinBox">
@@ -483,7 +483,7 @@
           <double>1.000000000000000</double>
          </property>
          <property name="maximum">
-          <double>200.000000000000000</double>
+          <double>220.000000000000000</double>
          </property>
         </widget>
         <widget class="QLabel" name="label_17">
