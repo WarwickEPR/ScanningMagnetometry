@@ -4,7 +4,7 @@ import pyqtgraph as pg
 from PyQt6 import QtCore, QtWidgets
 
 from threading_utils import ThreadedComponent
-from ui_theme import apply_ui_polish
+from windows.lia_live_trace_window_ui import LIALiveTraceWindowUIBuilder
 
 
 class LIALiveTraceWindow(QtWidgets.QWidget, ThreadedComponent):
@@ -22,64 +22,10 @@ class LIALiveTraceWindow(QtWidgets.QWidget, ThreadedComponent):
         self._time_data = []
 
         self._build_ui()
-        apply_ui_polish(self)
         self.show()
 
     def _build_ui(self):
-        self.setWindowTitle("LIA Live Demod Time Trace")
-        self.resize(950, 700)
-
-        root_layout = QtWidgets.QVBoxLayout(self)
-
-        button_row = QtWidgets.QHBoxLayout()
-        self.startButton = QtWidgets.QPushButton("Start")
-        self.stopButton = QtWidgets.QPushButton("Stop")
-        self.clearButton = QtWidgets.QPushButton("Clear")
-        self.timeWindowLabel = QtWidgets.QLabel("Window (s)")
-        self.timeWindowSpinBox = QtWidgets.QDoubleSpinBox()
-        self.timeWindowSpinBox.setDecimals(1)
-        self.timeWindowSpinBox.setMinimum(2.0)
-        self.timeWindowSpinBox.setMaximum(600.0)
-        self.timeWindowSpinBox.setSingleStep(1.0)
-        self.timeWindowSpinBox.setValue(self.time_window_seconds)
-        self.statusLabel = QtWidgets.QLabel("Idle")
-        self.statusLabel.setMinimumWidth(220)
-
-        button_row.addWidget(self.startButton)
-        button_row.addWidget(self.stopButton)
-        button_row.addWidget(self.clearButton)
-        button_row.addSpacing(8)
-        button_row.addWidget(self.timeWindowLabel)
-        button_row.addWidget(self.timeWindowSpinBox)
-        button_row.addStretch()
-        button_row.addWidget(self.statusLabel)
-
-        self.plotX = pg.PlotWidget()
-        self.plotY = pg.PlotWidget()
-        self.plotR = pg.PlotWidget()
-
-        self.plotX.setLabel("left", "Demod X (V)")
-        self.plotY.setLabel("left", "Demod Y (V)")
-        self.plotR.setLabel("left", "Demod R (V)")
-        self.plotR.setLabel("bottom", "Time (s)")
-        self.plotY.setXLink(self.plotX)
-        self.plotR.setXLink(self.plotX)
-
-        self.curveX = self.plotX.plot(pen=pg.mkPen("c", width=2))
-        self.curveY = self.plotY.plot(pen=pg.mkPen("m", width=2))
-        self.curveR = self.plotR.plot(pen=pg.mkPen("y", width=2))
-
-        root_layout.addLayout(button_row)
-        root_layout.addWidget(self.plotX)
-        root_layout.addWidget(self.plotY)
-        root_layout.addWidget(self.plotR)
-
-        self.startButton.clicked.connect(self.start_stream)
-        self.stopButton.clicked.connect(self.stop_stream)
-        self.clearButton.clicked.connect(self.clear_data)
-        self.timeWindowSpinBox.valueChanged.connect(self._on_time_window_changed)
-
-        self.stopButton.setEnabled(False)
+        LIALiveTraceWindowUIBuilder().setup(self)
 
     def clear_data(self):
         self._x_data.clear()

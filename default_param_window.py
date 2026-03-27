@@ -5,13 +5,9 @@ This is for accessing the data saved in the hdf5 files and for some surface leve
 selected datasets to easier to use csv or matlab files.
 """
 
-from PyQt6 import QtCore, QtWidgets, uic
-import pyqtgraph as pg
-import h5py
-import numpy as np
-import sys
+from PyQt6 import QtWidgets
 import yaml
-from paths import ui_file
+from default_param_window_ui import DefaultParamWindowUIBuilder
 
 
 class DefaultParamWindow(QtWidgets.QMainWindow):
@@ -19,7 +15,7 @@ class DefaultParamWindow(QtWidgets.QMainWindow):
         super(DefaultParamWindow, self).__init__()  # Call the inherited classes __init__ method
         self.selected_data = None
         self.f = None
-        uic.loadUi(ui_file('defaultParamWindow.ui'), self)  # Load the .ui file
+        DefaultParamWindowUIBuilder().setup(self)
         self.show()  # Show the GUI
 
         # populate text boxes with current parameters

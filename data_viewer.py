@@ -5,12 +5,17 @@ This is for accessing the data saved in the hdf5 files and for some surface leve
 selected datasets to easier to use csv or matlab files.
 """
 
-from PyQt6 import QtCore, QtWidgets, uic
-import pyqtgraph as pg
+from PyQt6 import QtWidgets
 import h5py
 import numpy as np
-import sys
-from paths import ui_file
+from data_viewer_ui import DataViewerUIBuilder
+from ui_theme import (
+    configure_pyqtgraph_defaults,
+    get_plot_pen,
+    style_image_view,
+    style_plot_labels,
+    style_plot_widget,
+)
 
 
 class DataViewer(QtWidgets.QMainWindow):
@@ -18,8 +23,13 @@ class DataViewer(QtWidgets.QMainWindow):
         super(DataViewer, self).__init__()  # Call the inherited classes __init__ method
         self.selected_data = None
         self.f = None
-        uic.loadUi(ui_file('data_viewer.ui'), self)  # Load the .ui file
+        configure_pyqtgraph_defaults()
+        DataViewerUIBuilder().setup(self)
         self.show()  # Show the GUI
+
+        style_plot_widget(self.dataGraph)
+        style_plot_labels(self.dataGraph, left="Value", bottom="Index")
+        style_image_view(self.imageWidget)
 
         self.statusBar = QtWidgets.QStatusBar()
         self.setStatusBar(self.statusBar)
@@ -66,7 +76,8 @@ class DataViewer(QtWidgets.QMainWindow):
         self.selected_data = self.data[int(item.text()) - 1]
         if len(self.selected_data.shape) == 1:
             #  data is 1D array, plot as line
-            self.dataGraph.plot(self.selected_data)
+            self.dataGraph.clear()
+            self.dataGraph.plot(self.selected_data, pen=get_plot_pen(0, width=2))
         elif len(self.selected_data.shape) == 2:
             self.imageWidget.setImage(self.selected_data)
             #  array is 2D, plot as image

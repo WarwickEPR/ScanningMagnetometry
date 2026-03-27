@@ -67,14 +67,13 @@ class StageControl:
         """
         try:
             self.ser = serial.Serial(port=com_port, baudrate=baud_rate)
-            msg = QtWidgets.QMessageBox(self.window)
-            msg.setText("Connected Successful to: " + str(com_port))
-            msg.exec()
             self.stage_connected = True
+            return True
         except Exception as error:
             error_dialog = QtWidgets.QErrorMessage(self.window)
             error_dialog.showMessage(str(error))
             self.stage_connected = False
+            return False
 
     def home_stage(self):
         """Start the stage homing process.

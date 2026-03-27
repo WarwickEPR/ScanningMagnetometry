@@ -1,4 +1,79 @@
-from PyQt6 import QtWidgets
+from PyQt6 import QtCore, QtWidgets
+import pyqtgraph as pg
+
+
+PLOT_BACKGROUND = "#f8fafc"
+PLOT_FOREGROUND = "#5f6b7a"
+PLOT_GRID = "#d8e1ea"
+PLOT_BORDER = "#d5dbe3"
+PLOT_PALETTE = [
+    "#1f5a82",
+    "#2ea043",
+    "#e67e22",
+    "#c0392b",
+    "#0f8b8d",
+    "#7c5cc4",
+    "#d4a72c",
+]
+
+
+def configure_pyqtgraph_defaults():
+    """Set global pyqtgraph defaults to match the app's light UI."""
+    pg.setConfigOptions(
+        antialias=True,
+        background=PLOT_BACKGROUND,
+        foreground=PLOT_FOREGROUND,
+    )
+
+
+def get_plot_pen(index=0, width=2, style=QtCore.Qt.PenStyle.SolidLine):
+    color = PLOT_PALETTE[index % len(PLOT_PALETTE)]
+    return pg.mkPen(color=color, width=width, style=style)
+
+
+def style_plot_widget(plot_widget, show_grid=True):
+    """Apply consistent axes, grid, and border styling to a PlotWidget."""
+    plot_widget.setBackground(PLOT_BACKGROUND)
+    plot_item = plot_widget.getPlotItem()
+    view_box = plot_item.getViewBox()
+    view_box.setBackgroundColor(PLOT_BACKGROUND)
+    view_box.setBorder(pg.mkPen(PLOT_BORDER, width=1))
+    if show_grid:
+        plot_item.showGrid(x=True, y=True, alpha=0.35)
+
+    axis_pen = pg.mkPen(PLOT_FOREGROUND, width=1)
+    for axis_name in ("left", "bottom", "top", "right"):
+        axis = plot_item.getAxis(axis_name)
+        axis.setPen(axis_pen)
+        axis.setTextPen(axis_pen)
+        axis.setTickPen(axis_pen)
+
+
+def style_plot_labels(plot_widget, **labels):
+    """Apply axis labels using the shared plot foreground color."""
+    label_style = {"color": PLOT_FOREGROUND, "font-size": "11pt"}
+    for axis, text in labels.items():
+        plot_widget.setLabel(axis=axis, text=text, **label_style)
+
+
+def build_image_colormap():
+    positions = [0.0, 0.18, 0.42, 0.68, 1.0]
+    colors = [
+        (14, 32, 52),
+        (31, 90, 130),
+        (44, 160, 143),
+        (231, 180, 92),
+        (250, 244, 230),
+    ]
+    return pg.ColorMap(positions, colors)
+
+
+def style_image_view(image_view):
+    """Style an ImageView to match the light card layout."""
+    image_view.setBackground(PLOT_BACKGROUND)
+    image_view.view.setBackgroundColor(PLOT_BACKGROUND)
+    image_view.view.setBorder(pg.mkPen(PLOT_BORDER, width=1))
+    image_view.setColorMap(build_image_colormap())
 
 
 def apply_ui_polish(widget):

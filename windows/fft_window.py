@@ -1,10 +1,10 @@
 import time
 import numpy as np
-from PyQt6 import QtCore, QtWidgets, uic
+from PyQt6 import QtCore, QtWidgets
 
 from threading_utils import ThreadedComponent
-from paths import ui_file
-from ui_theme import apply_ui_polish
+from ui_theme import configure_pyqtgraph_defaults, get_plot_pen, style_plot_labels, style_plot_widget
+from windows.fft_window_ui import FFTWindowUIBuilder
 
 
 class FFTGraphWindow(QtWidgets.QWidget, ThreadedComponent):
@@ -15,8 +15,8 @@ class FFTGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         super(FFTGraphWindow, self).__init__()
         self.main_window = main_window
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose, True)
-        uic.loadUi(ui_file("FFTGraphWindow.ui"), self)
-        apply_ui_polish(self)
+        configure_pyqtgraph_defaults()
+        FFTWindowUIBuilder().setup(self)
         self.show()
         self.samples = None
         self.fft_plot = None
@@ -28,8 +28,12 @@ class FFTGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         self.worker_running = False
         self._cancel_requested = False
 
-        self.graphWidget.setLabel(axis="left", text="Power Spectral Density nT/sqrt(Hz)")
-        self.graphWidget.setLabel(axis="bottom", text="Frequency Hz")
+        style_plot_widget(self.graphWidget)
+        style_plot_labels(
+            self.graphWidget,
+            left="Power Spectral Density nT/sqrt(Hz)",
+            bottom="Frequency Hz",
+        )
 
         self.fftProgressLabel = QtWidgets.QLabel("FFT Status: Idle")
         self.fftProgressLabel.setAlignment(QtCore.Qt.AlignmentFlag.AlignLeft)
@@ -236,7 +240,9 @@ class FFTGraphWindow(QtWidgets.QWidget, ThreadedComponent):
             self.fft_plot.clear()
         except Exception:
             pass
-        self.fft_plot = self.graphWidget.plot(self.x, self.calibrated_asd)
+        self.fft_plot = self.graphWidget.plot(
+            self.x, self.calibrated_asd, pen=get_plot_pen(0, width=2)
+        )
         self.graphWidget.setLogMode(True, True)
 
     def closeEvent(self, event):

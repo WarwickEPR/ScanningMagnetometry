@@ -1,12 +1,19 @@
 import time
 import numpy as np
 import pyqtgraph as pg
-from PyQt6 import QtCore, QtWidgets, uic
+from PyQt6 import QtCore, QtWidgets
 from sklearn.linear_model import LinearRegression
 
 from threading_utils import ThreadedComponent
-from paths import ui_file
-from ui_theme import apply_ui_polish
+from ui_theme import (
+    PLOT_BACKGROUND,
+    PLOT_FOREGROUND,
+    configure_pyqtgraph_defaults,
+    get_plot_pen,
+    style_plot_labels,
+    style_plot_widget,
+)
+from windows.odmr_window_ui import ODMRWindowUIBuilder
 
 
 class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
@@ -14,20 +21,25 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         super(ODMRGraphWindow, self).__init__(*args, **kwargs)
         self.main_window = main_window
 
-        uic.loadUi(ui_file("ODMRGraphWindow.ui"), self)
-        apply_ui_polish(self)
+        configure_pyqtgraph_defaults()
+        ODMRWindowUIBuilder().setup(self)
         self.show()
 
+        style_plot_widget(self.graphWidget)
         self.p1 = self.graphWidget.plotItem
-        self.p1.setLabels(left="Voltage (V)")
-        self.p1.setLabels(bottom="Frequency (GHz)")
+        style_plot_labels(self.graphWidget, left="Voltage (V)", bottom="Frequency (GHz)")
 
         self.p2 = pg.ViewBox()
         self.p1.showAxis("right")
         self.p1.scene().addItem(self.p2)
         self.p1.getAxis("right").linkToView(self.p2)
         self.p2.setXLink(self.p1)
-        self.p1.getAxis("right").setLabel("dV/df (V/MHz)", color="#0000ff")
+        self.p2.setBackgroundColor(PLOT_BACKGROUND)
+        right_axis = self.p1.getAxis("right")
+        right_axis.setPen(pg.mkPen(PLOT_FOREGROUND, width=1))
+        right_axis.setTextPen(pg.mkPen(PLOT_FOREGROUND, width=1))
+        right_axis.setTickPen(pg.mkPen(PLOT_FOREGROUND, width=1))
+        right_axis.setLabel("dV/df (V/MHz)", color=PLOT_FOREGROUND)
         self.p1.vb.sigResized.connect(self.updateViews)
 
         self.odmr_plot = None
@@ -41,8 +53,8 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         self._selection_mode_active = False
         self._selected_indices = []
         self._hovered_linear_row = None
-        self._linear_region_default_pen = pg.mkPen(color=(255, 0, 0), width=5)
-        self._linear_region_hover_pen = pg.mkPen(color=(255, 215, 0), width=7)
+        self._linear_region_default_pen = get_plot_pen(3, width=4)
+        self._linear_region_hover_pen = get_plot_pen(6, width=6)
 
         self.linearRegionTable.setMouseTracking(True)
         self.linearRegionTable.viewport().setMouseTracking(True)
@@ -249,7 +261,7 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
             self.odmr_plot.clear()
         except:
             pass
-        pen = pg.mkPen(style=QtCore.Qt.PenStyle.DashLine)
+        pen = get_plot_pen(0, width=2, style=QtCore.Qt.PenStyle.DashLine)
         self.odmr_plot = self.graphWidget.plot(x, y, pen=pen)
         self.updateViews()
 

@@ -7,7 +7,7 @@ also controls the flow of data between these bits of equipment and sorts out the
 data.
 """
 
-from PyQt6 import QtCore, QtWidgets, uic
+from PyQt6 import QtCore, QtWidgets
 import pyqtgraph as pg
 import os
 import copy
@@ -30,8 +30,13 @@ from windows.fft_window import FFTGraphWindow
 from windows.lia_live_trace_window import LIALiveTraceWindow
 from windows.odmr_window import ODMRGraphWindow
 from windows.scanning_window import scanningImageWindow
-from ui_theme import apply_ui_polish
-from paths import ui_file
+from windows.aux_windows_ui import (
+    VectorMatrixWindowUIBuilder,
+    VectorTestWindowUIBuilder,
+    StageOptionsUIBuilder,
+)
+from main_window_ui import MainWindowUIBuilder
+from ui_theme import configure_pyqtgraph_defaults, get_plot_pen, style_plot_labels, style_plot_widget
 
 # if dark theme is available then use by default
 try:
@@ -57,6 +62,7 @@ class MainUI(QtWidgets.QMainWindow):
 
     def __init__(self):
         super(MainUI, self).__init__()  # Call the inherited classes __init__ method
+        configure_pyqtgraph_defaults()
         self.base_dir = os.path.dirname(os.path.abspath(__file__))
         self.settings_file = os.path.join(self.base_dir, "configs", "settings.yml")
         self.fallback_config_file = os.path.join(
@@ -72,8 +78,7 @@ class MainUI(QtWidgets.QMainWindow):
         self.a_matrix_values = copy.deepcopy(
             self.default_parameters["RF_Params"]["A_Matrix_Values"]
         )
-        uic.loadUi(ui_file("scanning_magnetometer.ui"), self)  # Load the .ui file
-        apply_ui_polish(self)
+        MainWindowUIBuilder().setup(self)
         self.setMinimumSize(980, 620)
         self.setWindowTitle("Scanning Magnetometer")
         self.show()  # Show the GUI
@@ -83,6 +88,9 @@ class MainUI(QtWidgets.QMainWindow):
         )  # stage controller class instance
         self.rfController = RfControl(self)
         self.LIAController = LIAControl(self)
+        self._set_connection_indicator("stage", "disconnected")
+        self._set_connection_indicator("rf", "disconnected")
+        self._set_connection_indicator("lia", "disconnected")
 
         # try loading default default_config.yml to set default values if it exists in directory
         try:
@@ -99,9 +107,7 @@ class MainUI(QtWidgets.QMainWindow):
 
         # ------------------ UI elements are connected to their respective functions here ------------------ #
         #  stage ui controls
-        self.connectStageButton.clicked.connect(
-            lambda: self.stageController.connect_stage(self.comPortBox.currentText())
-        )
+        self.connectStageButton.clicked.connect(self.connect_stage)
         self.homeStageButton.clicked.connect(self.stageController.home_stage)
         self.setPositionButton.clicked.connect(
             lambda: self.stageController.set_stage_pos(
@@ -124,14 +130,7 @@ class MainUI(QtWidgets.QMainWindow):
         self.startScanButton.clicked.connect(self.open_scan_window)
 
         #  LIA ui controls
-        self.connectLIAButton.clicked.connect(
-            lambda: self.LIAController.thread_function(
-                self.LIAController.connect_lia,
-                device_id=self.LIANameBox.text(),
-                device_ip=self.LIAIPBox.text(),
-                err_fn=self.show_error_message,
-            )
-        )
+        self.connectLIAButton.clicked.connect(self.connect_lia)
 
         self.scalingFactorSpinBox.editingFinished.connect(self.on_lia_runtime_setting_changed)
         self.timeConstantSpinBox.editingFinished.connect(self.on_lia_runtime_setting_changed)
@@ -145,13 +144,7 @@ class MainUI(QtWidgets.QMainWindow):
 
         #  RF ui controls
         self.takeODMRButton.clicked.connect(self.open_odmr_graph)
-        self.connectMWSourceButton.clicked.connect(
-            lambda: self.rfController.thread_function(
-                self.rfController.connect_rf,
-                self.MWSourceIPAddressBox.text(),
-                err_fn=self.show_error_message,
-            )
-        )
+        self.connectMWSourceButton.clicked.connect(self.connect_rf)
         self.togglePwrChk.stateChanged.connect(
             lambda: self.rfController.power_on_off(self.togglePwrChk.isChecked())
         )
@@ -194,6 +187,95 @@ class MainUI(QtWidgets.QMainWindow):
         # developers
         # print('max %d threads' % self.threadpool.maxThreadCount())
         return
+
+    def _set_connection_indicator(self, prefix, state, text=None):
+        dot = getattr(self, f"{prefix}ConnectionDot", None)
+        label = getattr(self, f"{prefix}ConnectionLabel", None)
+        if dot is None or label is None:
+            return
+
+        state = state or "disconnected"
+        texts = {
+            "disconnected": "Disconnected",
+            "connecting": "Connecting...",
+            "connected": "Connected",
+            "error": "Connection failed",
+        }
+
+        dot.setProperty("connectionState", state)
+        label.setProperty("connectionState", state)
+        label.setText(text or texts.get(state, "Unknown"))
+
+        style = self.style()
+        style.unpolish(dot)
+        style.polish(dot)
+        style.unpolish(label)
+        style.polish(label)
+        dot.update()
+        label.update()
+
+    def connect_stage(self):
+        port = self.comPortBox.currentText().strip()
+        if not port:
+            self._set_connection_indicator("stage", "error", "No COM port selected")
+            return
+
+        self._set_connection_indicator("stage", "connecting", f"Connecting to {port}...")
+        connected = self.stageController.connect_stage(port)
+        if connected:
+            self._set_connection_indicator("stage", "connected", f"Connected: {port}")
+        else:
+            self._set_connection_indicator("stage", "error", f"Failed: {port}")
+
+    def connect_rf(self):
+        ip_address = self.MWSourceIPAddressBox.text().strip()
+        if not ip_address:
+            self._set_connection_indicator("rf", "error", "No IP address provided")
+            return
+
+        self._set_connection_indicator("rf", "connecting", f"Connecting to {ip_address}...")
+        self.rfController.thread_function(
+            self.rfController.connect_rf,
+            ip_address,
+            fin_fn=self._on_rf_connected,
+            err_fn=self._on_rf_connection_error,
+        )
+
+    def _on_rf_connected(self, _result):
+        ip_address = self.MWSourceIPAddressBox.text().strip()
+        self._set_connection_indicator("rf", "connected", f"Connected: {ip_address}")
+
+    def _on_rf_connection_error(self, error):
+        ip_address = self.MWSourceIPAddressBox.text().strip()
+        self._set_connection_indicator("rf", "error", f"Failed: {ip_address}")
+        self.show_error_message(error)
+
+    def connect_lia(self):
+        device_id = self.LIANameBox.text().strip()
+        device_ip = self.LIAIPBox.text().strip()
+        if not device_id or not device_ip:
+            self._set_connection_indicator("lia", "error", "Device ID/IP required")
+            return
+
+        self._set_connection_indicator(
+            "lia", "connecting", f"Connecting {device_id} @ {device_ip}..."
+        )
+        self.LIAController.thread_function(
+            self.LIAController.connect_lia,
+            device_id=device_id,
+            device_ip=device_ip,
+            fin_fn=self._on_lia_connected,
+            err_fn=self._on_lia_connection_error,
+        )
+
+    def _on_lia_connected(self, _result):
+        device_id = self.LIANameBox.text().strip()
+        self._set_connection_indicator("lia", "connected", f"Connected: {device_id}")
+
+    def _on_lia_connection_error(self, error):
+        device_id = self.LIANameBox.text().strip()
+        self._set_connection_indicator("lia", "error", f"Failed: {device_id}")
+        self.show_error_message(error)
 
     @staticmethod
     def _default_config_template():
@@ -616,8 +698,7 @@ class MainUI(QtWidgets.QMainWindow):
 class VectorMatrixWindow(QtWidgets.QWidget):
     def __init__(self):
         super(VectorMatrixWindow, self).__init__()
-        uic.loadUi(ui_file("vectorMatrixWindow.ui"), self)  # Load the .ui file
-        apply_ui_polish(self)
+        VectorMatrixWindowUIBuilder().setup(self)
         self.show()
 
         self.applyChangesButton.clicked.connect(self.apply_changes)
@@ -677,18 +758,25 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
     def __init__(self):
         # load the UI for the vector test window
         super(VectorTest, self).__init__()
-        uic.loadUi(ui_file("vectorTestWindow.ui"), self)  # Load the .ui file
-        apply_ui_polish(self)
+        VectorTestWindowUIBuilder().setup(self)
         self.show()
         self.scanning = True  # when set to false it will stop threading the function
 
         # configure the layout of the axes for the two graphs
-        self.graphWidget.setLabel(axis="left", text="RF Frequency (GHz)")
-        self.graphWidget.setLabel(axis="bottom", text="Index")
-        self.graphWidget.setLabel(axis="top", text="RF Frequency Shift (GHz)")
-        self.graphWidget_2.setLabel(axis="left", text="Voltage (V)")
-        self.graphWidget_2.setLabel(axis="bottom", text="Index")
-        self.graphWidget_2.setLabel(axis="top", text="Measured Voltage (V)")
+        style_plot_widget(self.graphWidget)
+        style_plot_widget(self.graphWidget_2)
+        style_plot_labels(
+            self.graphWidget,
+            left="RF Frequency (GHz)",
+            bottom="Index",
+            top="RF Frequency Shift (GHz)",
+        )
+        style_plot_labels(
+            self.graphWidget_2,
+            left="Voltage (V)",
+            bottom="Index",
+            top="Measured Voltage (V)",
+        )
 
         # calls pyqtgraph.PlotItem.plot() and creates a new plot window showing the data (which to start with is empty)
         self.vc1 = self.graphWidget.plot()
@@ -824,15 +912,15 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
         :param arrs: Lists of the measured voltage and frequencies over time to plot to the debug graph widgets
         :return:
         """
-        self.vc1.setData(arrs[0][0], pen=pg.mkPen("b"))
-        self.vc2.setData(arrs[0][1], pen=pg.mkPen("g"))
-        self.vc3.setData(arrs[0][2], pen=pg.mkPen("r"))
-        self.vc4.setData(arrs[0][3], pen=pg.mkPen("y"))
+        self.vc1.setData(arrs[0][0], pen=get_plot_pen(0))
+        self.vc2.setData(arrs[0][1], pen=get_plot_pen(1))
+        self.vc3.setData(arrs[0][2], pen=get_plot_pen(2))
+        self.vc4.setData(arrs[0][3], pen=get_plot_pen(3))
 
-        self.fc1.setData(arrs[1][0], pen=pg.mkPen("b"))
-        self.fc2.setData(arrs[1][1], pen=pg.mkPen("g"))
-        self.fc3.setData(arrs[1][2], pen=pg.mkPen("r"))
-        self.fc4.setData(arrs[1][3], pen=pg.mkPen("y"))
+        self.fc1.setData(arrs[1][0], pen=get_plot_pen(0))
+        self.fc2.setData(arrs[1][1], pen=get_plot_pen(1))
+        self.fc3.setData(arrs[1][2], pen=get_plot_pen(2))
+        self.fc4.setData(arrs[1][3], pen=get_plot_pen(3))
         return
 
     def closeEvent(self, event):
@@ -848,8 +936,7 @@ class StageOptions(QtWidgets.QWidget):
         super(
             StageOptions, self
         ).__init__()  # Call the inherited classes __init__ method
-        uic.loadUi(ui_file("stage_options.ui"), self)  # Load the .ui file
-        apply_ui_polish(self)
+        StageOptionsUIBuilder().setup(self)
         self.show()
 
     def apply_position_changes(self):

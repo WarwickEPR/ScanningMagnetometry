@@ -5,11 +5,17 @@ import cv2
 import numpy as np
 import pyqtgraph as pg
 from PIL import Image
-from PyQt6 import QtCore, QtWidgets, uic
+from PyQt6 import QtCore, QtWidgets
 
 from threading_utils import ThreadedComponent
-from paths import ui_file
-from ui_theme import apply_ui_polish
+from ui_theme import (
+    configure_pyqtgraph_defaults,
+    get_plot_pen,
+    style_image_view,
+    style_plot_labels,
+    style_plot_widget,
+)
+from windows.scanning_window_ui import ScanningWindowUIBuilder
 
 
 class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
@@ -22,18 +28,30 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         self.res_freq = None
         self.dV = None
         self.df = None
-        uic.loadUi(ui_file("scanningWindow.ui"), self)
-        apply_ui_polish(self)
+        configure_pyqtgraph_defaults()
+        ScanningWindowUIBuilder().setup(self)
         self.show()
         self.setAttribute(QtCore.Qt.WidgetAttribute.WA_DeleteOnClose)
         self.StageControl = self.main_window.stageController
 
-        self.graphWidget.setLabel(axis="left", text="RF Frequency (GHz)")
-        self.graphWidget.setLabel(axis="bottom", text="Index")
-        self.graphWidget.setLabel(axis="top", text="RF Frequency Shift (GHz)")
-        self.graphWidget_2.setLabel(axis="left", text="Voltage (V)")
-        self.graphWidget_2.setLabel(axis="bottom", text="Index")
-        self.graphWidget_2.setLabel(axis="top", text="Measured Voltage (V)")
+        style_plot_widget(self.graphWidget)
+        style_plot_widget(self.graphWidget_2)
+        style_plot_labels(
+            self.graphWidget,
+            left="RF Frequency (GHz)",
+            bottom="Index",
+            top="RF Frequency Shift (GHz)",
+        )
+        style_plot_labels(
+            self.graphWidget_2,
+            left="Voltage (V)",
+            bottom="Index",
+            top="Measured Voltage (V)",
+        )
+        style_image_view(self.imageWidget)
+        style_image_view(self.imageWidget_2)
+        style_image_view(self.imageWidget_3)
+        style_image_view(self.imageWidget_4)
 
         self.xCoords = np.arange(
             self.main_window.xStartSpinBox.value(),
@@ -378,15 +396,15 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
 
     def debug_plot(self, arrs):
         if self.vector:
-            self.vc1.setData(arrs[0][0], pen=pg.mkPen("b"))
-            self.vc2.setData(arrs[0][1], pen=pg.mkPen("g"))
-            self.vc3.setData(arrs[0][2], pen=pg.mkPen("r"))
-            self.vc4.setData(arrs[0][3], pen=pg.mkPen("y"))
+            self.vc1.setData(arrs[0][0], pen=get_plot_pen(0))
+            self.vc2.setData(arrs[0][1], pen=get_plot_pen(1))
+            self.vc3.setData(arrs[0][2], pen=get_plot_pen(2))
+            self.vc4.setData(arrs[0][3], pen=get_plot_pen(3))
 
-            self.fc1.setData(arrs[1][0], pen=pg.mkPen("b"))
-            self.fc2.setData(arrs[1][1], pen=pg.mkPen("g"))
-            self.fc3.setData(arrs[1][2], pen=pg.mkPen("r"))
-            self.fc4.setData(arrs[1][3], pen=pg.mkPen("y"))
+            self.fc1.setData(arrs[1][0], pen=get_plot_pen(0))
+            self.fc2.setData(arrs[1][1], pen=get_plot_pen(1))
+            self.fc3.setData(arrs[1][2], pen=get_plot_pen(2))
+            self.fc4.setData(arrs[1][3], pen=get_plot_pen(3))
 
     def export_data(self):
         folderpath = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Folder")
