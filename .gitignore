@@ -23,3 +23,5 @@ main.spec
 settings.yml
 *_config.yml
 configs/*.yml
+*.zip
+
