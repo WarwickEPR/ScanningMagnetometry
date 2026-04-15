@@ -138,6 +138,12 @@ class MainUI(QtWidgets.QMainWindow):
         self.harmonicOrderSelect.currentIndexChanged.connect(self.on_lia_runtime_setting_changed)
         self.acCoupleCheck.stateChanged.connect(self.on_lia_runtime_setting_changed)
         self.fiftyOhmCheck.stateChanged.connect(self.on_lia_runtime_setting_changed)
+        self.referenceInputTypeSelect.currentIndexChanged.connect(
+            self.on_lia_reference_type_changed
+        )
+        self.externalRefSignalPathSelect.currentIndexChanged.connect(
+            self.on_lia_external_ref_signal_path_changed
+        )
 
         self.takeFFTButton.clicked.connect(self.open_fft_graph)
         self.openLIALiveTraceButton.clicked.connect(self.open_lia_live_trace)
@@ -271,6 +277,10 @@ class MainUI(QtWidgets.QMainWindow):
     def _on_lia_connected(self, _result):
         device_id = self.LIANameBox.text().strip()
         self._set_connection_indicator("lia", "connected", f"Connected: {device_id}")
+        self.on_lia_reference_type_changed(self.referenceInputTypeSelect.currentIndex())
+        self.on_lia_external_ref_signal_path_changed(
+            self.externalRefSignalPathSelect.currentIndex()
+        )
 
     def _on_lia_connection_error(self, error):
         device_id = self.LIANameBox.text().strip()
@@ -318,6 +328,8 @@ class MainUI(QtWidgets.QMainWindow):
             "LIA_Params": {
                 "Burst_Dur": "0.005",
                 "Duration": "10",
+                "Ref_Input_Type": "internal",
+                "Ext_Ref_Signal_Path": "8",
                 "FFT_50_Ohm": "False",
                 "FFT_AC_Coupling": "False",
                 "FFT_Average": "5",
@@ -424,6 +436,33 @@ class MainUI(QtWidgets.QMainWindow):
             return
         self.LIAController.thread_function(
             self.LIAController.apply_runtime_settings,
+            err_fn=self.show_error_message,
+        )
+
+    def on_lia_reference_type_changed(self, _index):
+        reference_type = self.referenceInputTypeSelect.currentText().strip().lower()
+        is_external = reference_type == "external"
+        self.externalRefSignalPathSelect.setEnabled(is_external)
+
+        if not self.LIAController.LIA_connected:
+            return
+        self.LIAController.thread_function(
+            self.LIAController.set_reference_input_type,
+            reference_type,
+            err_fn=self.show_error_message,
+        )
+
+    def on_lia_external_ref_signal_path_changed(self, value):
+        if self.referenceInputTypeSelect.currentText().strip().lower() != "external":
+            return
+        if not self.LIAController.LIA_connected:
+            return
+        signal_path_integer = self.externalRefSignalPathSelect.currentData()
+        if signal_path_integer is None:
+            return
+        self.LIAController.thread_function(
+            self.LIAController.set_external_reference_signal_path,
+            int(signal_path_integer),
             err_fn=self.show_error_message,
         )
 
@@ -604,6 +643,20 @@ class MainUI(QtWidgets.QMainWindow):
             self.fiftyOhmCheck.setChecked(
                 eval(self.default_parameters["LIA_Params"]["FFT_50_Ohm"])
             )
+
+            ref_input_type = str(
+                self.default_parameters["LIA_Params"].get("Ref_Input_Type", "internal")
+            ).strip().lower()
+            ref_index = 0 if ref_input_type == "internal" else 1
+            self.referenceInputTypeSelect.setCurrentIndex(ref_index)
+            ext_ref_signal_path = int(
+                self.default_parameters["LIA_Params"].get("Ext_Ref_Signal_Path", 8)
+            )
+            ext_ref_index = self.externalRefSignalPathSelect.findData(ext_ref_signal_path)
+            if ext_ref_index < 0:
+                ext_ref_index = self.externalRefSignalPathSelect.findData(8)
+            self.externalRefSignalPathSelect.setCurrentIndex(ext_ref_index)
+            self.externalRefSignalPathSelect.setEnabled(ref_input_type == "external")
         except Exception as error:
             print(error)
         return
@@ -680,6 +733,15 @@ class MainUI(QtWidgets.QMainWindow):
             self.acCoupleCheck.isChecked()
         )
         new_config["LIA_Params"]["FFT_50_Ohm"] = str(self.fiftyOhmCheck.isChecked())
+        new_config["LIA_Params"]["Ref_Input_Type"] = str(
+            self.referenceInputTypeSelect.currentText().strip().lower()
+        )
+        ext_ref_signal_path = self.externalRefSignalPathSelect.currentData()
+        if ext_ref_signal_path is None:
+            ext_ref_signal_path = 8
+        new_config["LIA_Params"]["Ext_Ref_Signal_Path"] = str(
+            int(ext_ref_signal_path)
+        )
 
         default_save_path = os.path.join(self.base_dir, "configs", "config.yml")
         filepath = QtWidgets.QFileDialog.getSaveFileName(

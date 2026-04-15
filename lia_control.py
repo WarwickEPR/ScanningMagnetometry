@@ -242,3 +242,63 @@ class LIAControl(ThreadedComponent):
             self.daq_module.subscribe(signal_path)
             self.data[signal_path] = []
         return
+    
+    def set_reference_input_type(self, *args, **kwargs):
+        """Set the reference input type for the LIA.
+
+        :param input_type: (str) Type of reference input (e.g. "internal", "external")
+        :return:
+        """
+        if not self.LIA_connected or self.daq is None or self.device is None:
+            return
+
+        try:
+            # ThreadedComponent passes wrapped args as (args_tuple, kwargs_dict).
+            if len(args) >= 1 and isinstance(args[0], tuple):
+                input_type = args[0][0]
+            elif len(args) >= 1:
+                input_type = args[0]
+            else:
+                input_type = kwargs.get("input_type")
+
+            if input_type is None:
+                raise ValueError("Reference input type was not provided")
+
+            input_type = str(input_type).strip().lower()
+            if input_type == "internal":
+                self.daq.setInt(f"/{self.device}/extrefs/0/enable", 0)
+            elif input_type == "external":
+                self.daq.setInt(f"/{self.device}/extrefs/0/enable", 1)
+            else:
+                raise ValueError(f"Invalid reference input type: {input_type}")
+        except Exception as error:
+            raise RuntimeError(f"Failed to set reference input type: {error}")
+        
+    def set_external_reference_signal_path(self, *args, **kwargs):
+        """Set the external reference input signal for the LIA. Can choose from signal inputs, aux inputs, triggers etc. 
+        :param signal_path: (integer) The signal path related integer, check Zurich LIA docs for correct values. 
+                                        For example, 0-7 for signal inputs, 8-15 for aux inputs, etc.
+        :return:
+        """
+        if not self.LIA_connected or self.daq is None or self.device is None:
+            return
+        
+        try:
+            # ThreadedComponent passes wrapped args as (args_tuple, kwargs_dict).
+            if len(args) >= 1 and isinstance(args[0], tuple):
+                signal_path_integer = args[0][0]
+            elif len(args) >= 1:
+                signal_path_integer = args[0]
+            else:
+                signal_path_integer = kwargs.get("signal_path_integer")
+
+            if signal_path_integer is None:
+                raise ValueError("External reference signal path was not provided")
+
+            signal_path_integer = int(signal_path_integer)
+            if signal_path_integer < 0:
+                raise ValueError(f"Signal path integer must be non-negative. Got: {signal_path_integer}")
+            else:
+                self.daq.setInt(f"/{self.device}/demods/1/adcselect", signal_path_integer)
+        except Exception as error:
+            raise RuntimeError(f"Failed to set external reference signal path: {error}")
