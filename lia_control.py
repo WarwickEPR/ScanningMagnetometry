@@ -157,7 +157,10 @@ class LIAControl(ThreadedComponent):
             self.daq_module.set('triggernode', self.demod_path + '.TrigIn1')
             self.daq_module.set("duration", self.burst_duration)
             self.daq_module.set('edge', 0)
-            self.daq_module.set("count", self.window.pointsBox.value())
+            effective_count = int(
+                getattr(self.window.rfController, "num_points", self.window.pointsBox.value())
+            )
+            self.daq_module.set("count", max(1, effective_count))
             self.daq_module.set("grid/cols", max(1, self.num_cols))
             self.daq_module.set('holdoff/time', 0.001)
             self.daq_module.set('delay', 0)

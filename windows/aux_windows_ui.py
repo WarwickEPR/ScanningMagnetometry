@@ -144,7 +144,7 @@ class VectorTestWindowUIBuilder:
 
     def setup(self, window: QtWidgets.QWidget):
         window.setObjectName("VectorTestWindow")
-        window.resize(760, 560)
+        window.resize(860, 680)
         window.setWindowTitle("Vector Debug Plot")
 
         root = QtWidgets.QVBoxLayout(window)
@@ -155,6 +155,151 @@ class VectorTestWindowUIBuilder:
         window.graphWidget_2.setObjectName("graphWidget_2")
         window.graphWidget = pg.PlotWidget()
         window.graphWidget.setObjectName("graphWidget")
+
+        controls_card = QtWidgets.QFrame()
+        controls_card.setObjectName("vectorControlsCard")
+        controls_layout = QtWidgets.QGridLayout(controls_card)
+        controls_layout.setContentsMargins(10, 10, 10, 10)
+        controls_layout.setHorizontalSpacing(10)
+        controls_layout.setVerticalSpacing(6)
+
+        controls_title = QtWidgets.QLabel("Feedback Controls")
+        controls_title.setObjectName("vectorControlsTitle")
+
+        window.vectorTrackingModeCombo = QtWidgets.QComboBox()
+        window.vectorTrackingModeCombo.setObjectName("vectorTrackingModeCombo")
+        window.vectorTrackingModeCombo.addItems(["Four resonances", "Single resonance"])
+
+        window.vectorTrackedResonanceCombo = QtWidgets.QComboBox()
+        window.vectorTrackedResonanceCombo.setObjectName("vectorTrackedResonanceCombo")
+        window.vectorTrackedResonanceCombo.addItems([
+            "Resonance 1",
+            "Resonance 2",
+            "Resonance 3",
+            "Resonance 4",
+        ])
+
+        window.vectorStartButton = QtWidgets.QPushButton("Start Tracking")
+        window.vectorStartButton.setObjectName("vectorStartButton")
+
+        window.vectorStopButton = QtWidgets.QPushButton("Stop Tracking")
+        window.vectorStopButton.setObjectName("vectorStopButton")
+        window.vectorStopButton.setEnabled(False)
+
+        window.vectorAvgSamplesSpinBox = QtWidgets.QSpinBox()
+        window.vectorAvgSamplesSpinBox.setObjectName("vectorAvgSamplesSpinBox")
+        window.vectorAvgSamplesSpinBox.setRange(1, 20)
+
+        window.vectorSampleSpacingSpinBox = QtWidgets.QDoubleSpinBox()
+        window.vectorSampleSpacingSpinBox.setObjectName("vectorSampleSpacingSpinBox")
+        window.vectorSampleSpacingSpinBox.setDecimals(3)
+        window.vectorSampleSpacingSpinBox.setRange(0.0, 1.0)
+        window.vectorSampleSpacingSpinBox.setSingleStep(0.005)
+        window.vectorSampleSpacingSpinBox.setSuffix(" s")
+
+        window.vectorMaxDfStepSpinBox = QtWidgets.QDoubleSpinBox()
+        window.vectorMaxDfStepSpinBox.setObjectName("vectorMaxDfStepSpinBox")
+        window.vectorMaxDfStepSpinBox.setDecimals(3)
+        window.vectorMaxDfStepSpinBox.setRange(0.001, 100.0)
+        window.vectorMaxDfStepSpinBox.setSingleStep(0.05)
+        window.vectorMaxDfStepSpinBox.setSuffix(" MHz")
+
+        window.vectorMaxTrackingOffsetSpinBox = QtWidgets.QDoubleSpinBox()
+        window.vectorMaxTrackingOffsetSpinBox.setObjectName("vectorMaxTrackingOffsetSpinBox")
+        window.vectorMaxTrackingOffsetSpinBox.setDecimals(2)
+        window.vectorMaxTrackingOffsetSpinBox.setRange(0.1, 500.0)
+        window.vectorMaxTrackingOffsetSpinBox.setSingleStep(1.0)
+        window.vectorMaxTrackingOffsetSpinBox.setSuffix(" MHz")
+
+        window.vectorEmitIntervalSpinBox = QtWidgets.QDoubleSpinBox()
+        window.vectorEmitIntervalSpinBox.setObjectName("vectorEmitIntervalSpinBox")
+        window.vectorEmitIntervalSpinBox.setDecimals(3)
+        window.vectorEmitIntervalSpinBox.setRange(0.01, 2.0)
+        window.vectorEmitIntervalSpinBox.setSingleStep(0.01)
+        window.vectorEmitIntervalSpinBox.setSuffix(" s")
+
+        window.vectorUseScaledFeedbackCheckBox = QtWidgets.QCheckBox(
+            "Use scaled LIA voltage for feedback"
+        )
+        window.vectorUseScaledFeedbackCheckBox.setObjectName("vectorUseScaledFeedbackCheckBox")
+        window.vectorUseScaledFeedbackCheckBox.setChecked(False)
+
+        window.vectorDeadbandSpinBox = QtWidgets.QDoubleSpinBox()
+        window.vectorDeadbandSpinBox.setObjectName("vectorDeadbandSpinBox")
+        window.vectorDeadbandSpinBox.setDecimals(6)
+        window.vectorDeadbandSpinBox.setRange(0.0, 1000.0)
+        window.vectorDeadbandSpinBox.setSingleStep(0.001)
+
+        window.vectorBaselineAdaptCheckBox = QtWidgets.QCheckBox("Enable baseline adaptation")
+        window.vectorBaselineAdaptCheckBox.setObjectName("vectorBaselineAdaptCheckBox")
+        window.vectorBaselineAdaptCheckBox.setChecked(False)
+
+        window.vectorBaselineAdaptAlphaSpinBox = QtWidgets.QDoubleSpinBox()
+        window.vectorBaselineAdaptAlphaSpinBox.setObjectName("vectorBaselineAdaptAlphaSpinBox")
+        window.vectorBaselineAdaptAlphaSpinBox.setDecimals(4)
+        window.vectorBaselineAdaptAlphaSpinBox.setRange(0.0, 0.2)
+        window.vectorBaselineAdaptAlphaSpinBox.setSingleStep(0.001)
+
+        controls_layout.addWidget(controls_title, 0, 0, 1, 4)
+        controls_layout.addWidget(QtWidgets.QLabel("Tracking mode"), 1, 0)
+        controls_layout.addWidget(window.vectorTrackingModeCombo, 1, 1)
+        controls_layout.addWidget(QtWidgets.QLabel("Tracked resonance"), 1, 2)
+        controls_layout.addWidget(window.vectorTrackedResonanceCombo, 1, 3)
+        controls_layout.addWidget(window.vectorStartButton, 2, 0, 1, 2)
+        controls_layout.addWidget(window.vectorStopButton, 2, 2, 1, 2)
+        controls_layout.addWidget(QtWidgets.QLabel("Avg samples"), 3, 0)
+        controls_layout.addWidget(window.vectorAvgSamplesSpinBox, 3, 1)
+        controls_layout.addWidget(QtWidgets.QLabel("Sample spacing"), 3, 2)
+        controls_layout.addWidget(window.vectorSampleSpacingSpinBox, 3, 3)
+        controls_layout.addWidget(QtWidgets.QLabel("Max df step"), 4, 0)
+        controls_layout.addWidget(window.vectorMaxDfStepSpinBox, 4, 1)
+        controls_layout.addWidget(QtWidgets.QLabel("Max tracking offset"), 4, 2)
+        controls_layout.addWidget(window.vectorMaxTrackingOffsetSpinBox, 4, 3)
+        controls_layout.addWidget(QtWidgets.QLabel("Plot update interval"), 5, 0)
+        controls_layout.addWidget(window.vectorEmitIntervalSpinBox, 5, 1)
+        controls_layout.addWidget(window.vectorUseScaledFeedbackCheckBox, 5, 2, 1, 2)
+        controls_layout.addWidget(QtWidgets.QLabel("Deadband |dV|"), 6, 0)
+        controls_layout.addWidget(window.vectorDeadbandSpinBox, 6, 1)
+        controls_layout.addWidget(window.vectorBaselineAdaptCheckBox, 6, 2)
+        controls_layout.addWidget(QtWidgets.QLabel("Baseline adapt alpha"), 7, 0)
+        controls_layout.addWidget(window.vectorBaselineAdaptAlphaSpinBox, 7, 1)
+
+        diagnostics_card = QtWidgets.QFrame()
+        diagnostics_card.setObjectName("vectorDiagnosticsCard")
+        diagnostics_layout = QtWidgets.QGridLayout(diagnostics_card)
+        diagnostics_layout.setContentsMargins(10, 8, 10, 8)
+        diagnostics_layout.setHorizontalSpacing(10)
+        diagnostics_layout.setVerticalSpacing(4)
+
+        diagnostics_title = QtWidgets.QLabel("Live Diagnostics")
+        diagnostics_title.setObjectName("vectorDiagnosticsTitle")
+        diagnostics_layout.addWidget(diagnostics_title, 0, 0, 1, 4)
+        diagnostics_layout.addWidget(QtWidgets.QLabel("Resonance"), 1, 0)
+        diagnostics_layout.addWidget(QtWidgets.QLabel("dV"), 1, 1)
+        diagnostics_layout.addWidget(QtWidgets.QLabel("df (MHz)"), 1, 2)
+        diagnostics_layout.addWidget(QtWidgets.QLabel("Deadband"), 1, 3)
+
+        window.vectorDiagDvLabels = []
+        window.vectorDiagDfLabels = []
+        window.vectorDiagDbLabels = []
+        for row in range(4):
+            diagnostics_layout.addWidget(QtWidgets.QLabel(f"R{row + 1}"), row + 2, 0)
+
+            dv_label = QtWidgets.QLabel("-")
+            dv_label.setObjectName(f"vectorDiagDv{row + 1}")
+            diagnostics_layout.addWidget(dv_label, row + 2, 1)
+
+            df_label = QtWidgets.QLabel("-")
+            df_label.setObjectName(f"vectorDiagDf{row + 1}")
+            diagnostics_layout.addWidget(df_label, row + 2, 2)
+
+            db_label = QtWidgets.QLabel("-")
+            db_label.setObjectName(f"vectorDiagDb{row + 1}")
+            diagnostics_layout.addWidget(db_label, row + 2, 3)
+
+            window.vectorDiagDvLabels.append(dv_label)
+            window.vectorDiagDfLabels.append(df_label)
+            window.vectorDiagDbLabels.append(db_label)
 
         top_card = QtWidgets.QFrame()
         top_card.setObjectName("vectorTopCard")
@@ -168,6 +313,8 @@ class VectorTestWindowUIBuilder:
         bottom_layout.setContentsMargins(8, 8, 8, 8)
         bottom_layout.addWidget(window.graphWidget)
 
+        root.addWidget(controls_card, 0)
+        root.addWidget(diagnostics_card, 0)
         root.addWidget(top_card, 1)
         root.addWidget(bottom_card, 1)
         self._apply_styles(window)
@@ -185,6 +332,24 @@ class VectorTestWindowUIBuilder:
                 background: #ffffff;
                 border: 1px solid #d5dbe3;
                 border-radius: 10px;
+            }
+            QFrame#vectorControlsCard {
+                background: #ffffff;
+                border: 1px solid #d5dbe3;
+                border-radius: 10px;
+            }
+            QFrame#vectorDiagnosticsCard {
+                background: #ffffff;
+                border: 1px solid #d5dbe3;
+                border-radius: 10px;
+            }
+            QLabel#vectorControlsTitle {
+                font-weight: 700;
+                color: #111827;
+            }
+            QLabel#vectorDiagnosticsTitle {
+                font-weight: 700;
+                color: #111827;
             }
             """
         )

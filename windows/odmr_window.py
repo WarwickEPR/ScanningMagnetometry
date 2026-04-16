@@ -84,17 +84,30 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
             progress_callback=None,
         )
 
+    def _get_frequency_axis_for_len(self, target_len):
+        axis = getattr(self.main_window.rfController, "frequency_axis", None)
+        if axis is None or len(axis) == 0:
+            points = max(2, int(getattr(self.main_window.rfController, "num_points", 2)))
+            axis = np.linspace(
+                self.main_window.rfController.start_freq,
+                self.main_window.rfController.stop_freq,
+                points,
+            )
+        if target_len <= len(axis):
+            return axis[:target_len]
+        # If data count exceeds current axis estimate, stretch to data length as fallback.
+        return np.linspace(
+            self.main_window.rfController.start_freq,
+            self.main_window.rfController.stop_freq,
+            target_len,
+        )
+
     def execute_this_function(self, *args, **kwargs):
         self.main_window.takeODMRButton.setEnabled(True)
         self.worker_running = False
         self.y = self.main_window.rfController.samples
 
-        self.x = np.linspace(
-            self.main_window.rfController.start_freq,
-            self.main_window.rfController.stop_freq,
-            self.main_window.rfController.num_points,
-        )
-        self.x = self.x[0 : len(self.y)]
+        self.x = self._get_frequency_axis_for_len(len(self.y))
         self.dummy_data(self.x, self.y)
         self.autoFitButton.setEnabled(len(self.x) >= 3)
         self._selection_mode_active = False
@@ -103,12 +116,7 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
 
     def progress_fn(self, results):
         self.y = results
-        self.x = np.linspace(
-            self.main_window.rfController.start_freq,
-            self.main_window.rfController.stop_freq,
-            self.main_window.rfController.num_points,
-        )
-        self.x = self.x[0 : len(self.y)]
+        self.x = self._get_frequency_axis_for_len(len(self.y))
         self.dummy_data(self.x, self.y)
         self.autoFitButton.setEnabled(False)
 

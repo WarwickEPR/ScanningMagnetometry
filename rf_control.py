@@ -34,6 +34,9 @@ class RfControl(ThreadedComponent):
         self.num_points = None
         self.stop_freq = None
         self.start_freq = None
+        self.frequency_axis = None
+        self.sweep_mode = None
+        self.sweep_step_khz = None
         self.worker_running = None
         self.samples = None
         self.mw_power_on = False
@@ -42,6 +45,33 @@ class RfControl(ThreadedComponent):
         self.inst = None
         self.rm = None
         self.sweeping = False
+
+    @staticmethod
+    def _estimate_points_from_step(start_ghz, stop_ghz, step_khz):
+        step_ghz = abs(float(step_khz)) / 1e6
+        if step_ghz <= 0:
+            return 2
+        span_ghz = abs(float(stop_ghz) - float(start_ghz))
+        return max(2, int(np.floor(span_ghz / step_ghz)) + 1)
+
+    def _refresh_effective_sweep_axis(self):
+        """Build the best-known frequency axis (GHz) for plotting ODMR data."""
+        if self.start_freq is None or self.stop_freq is None or self.num_points is None:
+            self.frequency_axis = None
+            return
+        points = max(2, int(self.num_points))
+        self.frequency_axis = np.linspace(float(self.start_freq), float(self.stop_freq), points)
+
+    def _query_instrument_sweep_points(self):
+        """Query instrument for effective sweep point count, if supported."""
+        try:
+            reported = self.inst.query(':SWE:POINTS?')
+            value = int(round(float(str(reported).strip())))
+            if value >= 2:
+                return value
+        except Exception:
+            pass
+        return None
 
     def connect_rf(self, *args, **kwargs):
         """Connect to the RF source via network address.
@@ -186,11 +216,13 @@ class RfControl(ThreadedComponent):
         self.worker_running = True
         self.window.LIAController.odmr_sweep = True
         self.sweeping = True
-        self.start_freq = args[0][0]  # Start frequency in Hz
-        self.stop_freq = args[0][1]   # Stop frequency in Hz
-        self.num_points = args[0][2]  # Number of frequency points
+        self.start_freq = float(args[0][0])  # Start frequency in GHz
+        self.stop_freq = float(args[0][1])   # Stop frequency in GHz
+        self.num_points = int(args[0][2])  # Number of frequency points
         dwell_time = args[0][3] / 1000
-        sweep_step = args[0][4]
+        sweep_step = float(args[0][4])
+        self.sweep_step_khz = sweep_step
+        self.sweep_mode = self.window.sweepDefBox.currentText()
 
         # Set RF source parameters
         self.inst.write(':INIT:CONT OFF')
@@ -200,14 +232,26 @@ class RfControl(ThreadedComponent):
         self.inst.write(':SOURce:FREQuency:MODE LIST')
         self.inst.write(f':SWE:DWELL {dwell_time}')
         
-        if self.window.sweepDefBox.currentText() == 'Points':
+        if self.sweep_mode == 'Points':
             self.inst.write(f':SWE:POINTS {self.num_points}')
-        elif self.window.sweepDefBox.currentText() == 'Step Size':
+        elif self.sweep_mode == 'Step Size':
             self.inst.write(f':SWE:STEP {sweep_step} kHz')
+            self.num_points = self._estimate_points_from_step(
+                self.start_freq,
+                self.stop_freq,
+                sweep_step,
+            )
         
         self.inst.write(f':SOURce:FREQuency:STARt {self.start_freq} GHz')
         self.inst.write(f':SOURce:FREQuency:STOP {self.stop_freq} GHz')
         self.inst.write('TSWeep')
+
+        # Prefer instrument-reported effective points to keep axis exactly aligned.
+        reported_points = self._query_instrument_sweep_points()
+        if reported_points is not None:
+            self.num_points = reported_points
+
+        self._refresh_effective_sweep_axis()
         
         # Setup LIA for data acquisition
         self.window.LIAController.setup_sweep()

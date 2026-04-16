@@ -22,6 +22,7 @@ import zhinst.core
 import data_viewer
 import default_param_window
 import yaml
+import socket
 from threading_utils import Worker, WorkerSignals, ThreadedComponent
 from stage_control import StageControl
 from rf_control import RfControl
@@ -82,6 +83,13 @@ class MainUI(QtWidgets.QMainWindow):
         self.setMinimumSize(980, 620)
         self.setWindowTitle("Scanning Magnetometer")
         self.show()  # Show the GUI
+        self._discovered_lia_ids = []
+        self._discovered_lia_ips = []
+        self._discovered_rf_ips = []
+        self._set_rf_input_mode(False)
+        self.useDiscoveredRfCheck.toggled.connect(self._set_rf_input_mode)
+        self._set_lia_input_mode(False)
+        self.useDiscoveredLiaCheck.toggled.connect(self._set_lia_input_mode)
 
         self.stageController = StageControl(
             self, StageOptions
@@ -104,6 +112,8 @@ class MainUI(QtWidgets.QMainWindow):
         except Exception as error:
             print(error)
             self.load_config(config_file_name=self.fallback_config_file)
+
+        # Device discovery is now user-triggered via button click.
 
         # ------------------ UI elements are connected to their respective functions here ------------------ #
         #  stage ui controls
@@ -128,6 +138,7 @@ class MainUI(QtWidgets.QMainWindow):
         self.actionSaveConfig.triggered.connect(self.save_config)
 
         self.startScanButton.clicked.connect(self.open_scan_window)
+        self.autoDiscoverDevicesButton.clicked.connect(self.auto_discover_devices)
 
         #  LIA ui controls
         self.connectLIAButton.clicked.connect(self.connect_lia)
@@ -174,15 +185,17 @@ class MainUI(QtWidgets.QMainWindow):
         self.vectorTestButton.clicked.connect(self.vectorTest)
 
         try:
-            ports = serial.tools.list_ports.comports()
+            # ports = serial.tools.list_ports.comports() 
+            #filter to usb only, USB devices has vendor IDs, filter by vid to get only USB - more robust incase OS/naming convention changes
+            ports = [p.device for p in serial.tools.list_ports.comports() if p.vid is not None]
             available_ports = []
-            for port, desc, hwid in sorted(ports):
+            for port in sorted(ports):
                 available_ports.append("{}".format(port))
             test = self.comPortBox
             test.addItems(available_ports)
         except Exception as error:
             error_dialog = QtWidgets.QMessageBox(self)
-            error_dialog.setText("ERROR: Could not populate COM port list")
+            error_dialog.setText(f"ERROR: Could not populate COM port list. {str(error)}")
             error_dialog.exec()
         # ------------------ UI ELEMENTS FINISH HERE ------------------ #
 
@@ -193,6 +206,74 @@ class MainUI(QtWidgets.QMainWindow):
         # developers
         # print('max %d threads' % self.threadpool.maxThreadCount())
         return
+    
+    def auto_discover_devices(self):
+        found = []
+        zurich_ip = None
+        zurich_id = None
+        discovered_lia_ids = []
+        discovered_lia_ips = []
+        discovered_rf_ips = []
+        rf_ip = None
+        base_ip = "192.168.1."
+        # print("Zurich open", self.is_port_open("192.168.1.101", port=8004, timeout=0.1))
+        for i in range(1,255):
+            ip = base_ip + str(i)
+            # print(f"Scanning {ip} for devices...")
+            if self.is_port_open(ip, timeout=0.1):  # common port for RF sources
+                # self.MWSourceIPAddressBox.setText(ip)
+                found.append(ip)
+                # print(f"Found responsive device at {ip}")
+            elif self.is_port_open(ip, port=8004, timeout=0.1):  # common port for Zurich LIAs
+                lia_test = self.test_lia_connection(ip)
+                if lia_test["Connected"]:
+                    print(f"Found responsive Zurich LIA at {ip}")
+                    discovered_lia_ips.append(ip)
+                    zurich_ip = ip
+                    devices = lia_test.get("Devices") or []
+                    if devices:
+                        discovered_lia_ids.extend(devices)
+                        zurich_id = devices[0]
+                    # print(f"Zurich LIA details: ID={zurich_id}, IP={zurich_ip}")
+
+                
+        # print(f"Auto-discovery complete. Found devices at: {found}")
+
+        rm = pyvisa.ResourceManager()
+        # look for agilent
+        for ip in found:
+            try:
+                inst = rm.open_resource(f"TCPIP::{ip}::INSTR")
+                idn = inst.query("*IDN?")
+                print(f"Device at {ip} responded to *IDN? with: {idn}")
+                if "Agilent" in idn or "Keysight" in idn or "N5171B" in idn:
+                    print(f"Found compatible RF source at {ip}")
+                    discovered_rf_ips.append(ip)
+                    rf_ip = ip
+            except:
+                pass
+
+        self._update_rf_discovered_values(device_ips=discovered_rf_ips)
+        
+        self._update_lia_discovered_values(
+            device_ips=discovered_lia_ips, device_ids=discovered_lia_ids
+        )
+
+        if zurich_ip:
+            self.LIAIPBox.setText(zurich_ip)
+            if zurich_id:
+                self.LIANameBox.setText(zurich_id)
+        if rf_ip:
+            self.MWSourceIPAddressBox.setText(rf_ip)
+
+        return 
+    
+    def is_port_open(self, ip, port=5025, timeout=1):
+        try:
+            with socket.create_connection((ip, port), timeout=timeout):
+                return True
+        except (socket.timeout, ConnectionRefusedError, OSError):
+            return False
 
     def _set_connection_indicator(self, prefix, state, text=None):
         dot = getattr(self, f"{prefix}ConnectionDot", None)
@@ -220,6 +301,105 @@ class MainUI(QtWidgets.QMainWindow):
         dot.update()
         label.update()
 
+    def _set_lia_input_mode(self, use_dropdown_values):
+        use_dropdown = bool(use_dropdown_values)
+        self.liaDiscoveredIdCombo.setEnabled(use_dropdown)
+        self.liaDiscoveredIpCombo.setEnabled(use_dropdown)
+        self.LIANameBox.setEnabled(not use_dropdown)
+        self.LIAIPBox.setEnabled(not use_dropdown)
+
+    def _set_rf_input_mode(self, use_dropdown_values):
+        use_dropdown = bool(use_dropdown_values)
+        self.rfDiscoveredIpCombo.setEnabled(use_dropdown)
+        self.MWSourceIPAddressBox.setEnabled(not use_dropdown)
+
+    def _update_rf_discovered_values(self, device_ips=None):
+        device_ips = device_ips or []
+        current_ip = self.rfDiscoveredIpCombo.currentText().strip()
+
+        for ip in device_ips:
+            ip_text = str(ip).strip()
+            if not ip_text:
+                continue
+            if self.rfDiscoveredIpCombo.findText(ip_text) < 0:
+                self.rfDiscoveredIpCombo.addItem(ip_text)
+
+        if current_ip:
+            ip_index = self.rfDiscoveredIpCombo.findText(current_ip)
+            if ip_index >= 0:
+                self.rfDiscoveredIpCombo.setCurrentIndex(ip_index)
+        elif self.rfDiscoveredIpCombo.count() > 0:
+            self.rfDiscoveredIpCombo.setCurrentIndex(0)
+
+        self._discovered_rf_ips = [
+            self.rfDiscoveredIpCombo.itemText(i)
+            for i in range(self.rfDiscoveredIpCombo.count())
+        ]
+
+    def _current_rf_connection_ip(self):
+        if self.useDiscoveredRfCheck.isChecked():
+            ip_address = self.rfDiscoveredIpCombo.currentText().strip()
+            source = "dropdown"
+        else:
+            ip_address = self.MWSourceIPAddressBox.text().strip()
+            source = "manual"
+        return ip_address, source
+
+    def _update_lia_discovered_values(self, device_ips=None, device_ids=None):
+        device_ips = device_ips or []
+        device_ids = device_ids or []
+
+        current_ip = self.liaDiscoveredIpCombo.currentText().strip()
+        current_id = self.liaDiscoveredIdCombo.currentText().strip()
+
+        for ip in device_ips:
+            ip_text = str(ip).strip()
+            if not ip_text:
+                continue
+            if self.liaDiscoveredIpCombo.findText(ip_text) < 0:
+                self.liaDiscoveredIpCombo.addItem(ip_text)
+
+        for dev_id in device_ids:
+            dev_id_text = str(dev_id).strip()
+            if not dev_id_text:
+                continue
+            if self.liaDiscoveredIdCombo.findText(dev_id_text) < 0:
+                self.liaDiscoveredIdCombo.addItem(dev_id_text)
+
+        if current_ip:
+            ip_index = self.liaDiscoveredIpCombo.findText(current_ip)
+            if ip_index >= 0:
+                self.liaDiscoveredIpCombo.setCurrentIndex(ip_index)
+        elif self.liaDiscoveredIpCombo.count() > 0:
+            self.liaDiscoveredIpCombo.setCurrentIndex(0)
+
+        if current_id:
+            id_index = self.liaDiscoveredIdCombo.findText(current_id)
+            if id_index >= 0:
+                self.liaDiscoveredIdCombo.setCurrentIndex(id_index)
+        elif self.liaDiscoveredIdCombo.count() > 0:
+            self.liaDiscoveredIdCombo.setCurrentIndex(0)
+
+        self._discovered_lia_ips = [
+            self.liaDiscoveredIpCombo.itemText(i)
+            for i in range(self.liaDiscoveredIpCombo.count())
+        ]
+        self._discovered_lia_ids = [
+            self.liaDiscoveredIdCombo.itemText(i)
+            for i in range(self.liaDiscoveredIdCombo.count())
+        ]
+
+    def _current_lia_connection_values(self):
+        if self.useDiscoveredLiaCheck.isChecked():
+            device_id = self.liaDiscoveredIdCombo.currentText().strip()
+            device_ip = self.liaDiscoveredIpCombo.currentText().strip()
+            source = "dropdown"
+        else:
+            device_id = self.LIANameBox.text().strip()
+            device_ip = self.LIAIPBox.text().strip()
+            source = "manual"
+        return device_id, device_ip, source
+
     def connect_stage(self):
         port = self.comPortBox.currentText().strip()
         if not port:
@@ -234,9 +414,12 @@ class MainUI(QtWidgets.QMainWindow):
             self._set_connection_indicator("stage", "error", f"Failed: {port}")
 
     def connect_rf(self):
-        ip_address = self.MWSourceIPAddressBox.text().strip()
+        ip_address, source = self._current_rf_connection_ip()
         if not ip_address:
-            self._set_connection_indicator("rf", "error", "No IP address provided")
+            if source == "dropdown":
+                self._set_connection_indicator("rf", "error", "Select RF IP from dropdown")
+            else:
+                self._set_connection_indicator("rf", "error", "No IP address provided")
             return
 
         self._set_connection_indicator("rf", "connecting", f"Connecting to {ip_address}...")
@@ -248,19 +431,23 @@ class MainUI(QtWidgets.QMainWindow):
         )
 
     def _on_rf_connected(self, _result):
-        ip_address = self.MWSourceIPAddressBox.text().strip()
+        ip_address, _source = self._current_rf_connection_ip()
         self._set_connection_indicator("rf", "connected", f"Connected: {ip_address}")
 
     def _on_rf_connection_error(self, error):
-        ip_address = self.MWSourceIPAddressBox.text().strip()
+        ip_address, _source = self._current_rf_connection_ip()
         self._set_connection_indicator("rf", "error", f"Failed: {ip_address}")
         self.show_error_message(error)
 
     def connect_lia(self):
-        device_id = self.LIANameBox.text().strip()
-        device_ip = self.LIAIPBox.text().strip()
+        device_id, device_ip, source = self._current_lia_connection_values()
         if not device_id or not device_ip:
-            self._set_connection_indicator("lia", "error", "Device ID/IP required")
+            if source == "dropdown":
+                self._set_connection_indicator(
+                    "lia", "error", "Select Device ID and IP from dropdowns"
+                )
+            else:
+                self._set_connection_indicator("lia", "error", "Device ID/IP required")
             return
 
         self._set_connection_indicator(
@@ -273,9 +460,18 @@ class MainUI(QtWidgets.QMainWindow):
             fin_fn=self._on_lia_connected,
             err_fn=self._on_lia_connection_error,
         )
+    
+    def test_lia_connection(self, ip):
+        try:
+            daq = zhinst.core.ziDAQServer(ip, 8004, 6)
+            ziDisc = zhinst.core.ziDiscovery()
+            devices = ziDisc.findAll()
+            return {"Connected": True, "Devices": devices, "Error": None}
+        except Exception as error:
+            return {"Connected": False, "Devices": None, "Error": str(error)}
 
     def _on_lia_connected(self, _result):
-        device_id = self.LIANameBox.text().strip()
+        device_id, _device_ip, _source = self._current_lia_connection_values()
         self._set_connection_indicator("lia", "connected", f"Connected: {device_id}")
         self.on_lia_reference_type_changed(self.referenceInputTypeSelect.currentIndex())
         self.on_lia_external_ref_signal_path_changed(
@@ -283,7 +479,7 @@ class MainUI(QtWidgets.QMainWindow):
         )
 
     def _on_lia_connection_error(self, error):
-        device_id = self.LIANameBox.text().strip()
+        device_id, _device_ip, _source = self._current_lia_connection_values()
         self._set_connection_indicator("lia", "error", f"Failed: {device_id}")
         self.show_error_message(error)
 
@@ -517,8 +713,15 @@ class MainUI(QtWidgets.QMainWindow):
             self.LIANameBox.setText(
                 self.default_parameters["Connection_Params"]["Device_ID"]
             )
+            self._update_lia_discovered_values(
+                device_ips=[self.LIAIPBox.text().strip()],
+                device_ids=[self.LIANameBox.text().strip()],
+            )
             self.MWSourceIPAddressBox.setText(
                 self.default_parameters["Connection_Params"]["RF_IP"]
+            )
+            self._update_rf_discovered_values(
+                device_ips=[self.MWSourceIPAddressBox.text().strip()]
             )
 
             # set stage scanning parameter values
@@ -669,7 +872,8 @@ class MainUI(QtWidgets.QMainWindow):
         # set connection default values
         new_config["Connection_Params"]["Device_IP"] = str(self.LIAIPBox.text())
         new_config["Connection_Params"]["Device_ID"] = str(self.LIANameBox.text())
-        new_config["Connection_Params"]["RF_IP"] = str(self.MWSourceIPAddressBox.text())
+        rf_ip, _source = self._current_rf_connection_ip()
+        new_config["Connection_Params"]["RF_IP"] = str(rf_ip)
 
         # set stage scanning parameter values
         new_config["Stage_Params"]["Avg_Time"] = str(
@@ -777,9 +981,9 @@ class VectorMatrixWindow(QtWidgets.QWidget):
         self.df3dby.setValue(window.a_matrix_values[2][1])
         self.df3dbz.setValue(window.a_matrix_values[2][2])
 
-        self.df3dbx.setValue(window.a_matrix_values[3][0])
-        self.df3dby.setValue(window.a_matrix_values[3][1])
-        self.df3dbz.setValue(window.a_matrix_values[3][2])
+        self.df4dbx.setValue(window.a_matrix_values[3][0])
+        self.df4dby.setValue(window.a_matrix_values[3][1])
+        self.df4dbz.setValue(window.a_matrix_values[3][2])
 
     def apply_changes(self):
         window.a_matrix_values[0][0] = float(self.df1dbx.value())
@@ -822,16 +1026,41 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
         super(VectorTest, self).__init__()
         VectorTestWindowUIBuilder().setup(self)
         self.show()
-        self.scanning = True  # when set to false it will stop threading the function
+        self.scanning = False  # when set to false it will stop threading the function
+        self.worker_running = False
+        self.feedback_started = False
+        self.feedback_voltage_avg_samples = 3
+        self.feedback_voltage_sample_spacing_s = 0.01
+        self.max_df_step_mhz = 0.4
+        self.max_tracking_offset_mhz = 25.0
+        self.min_gradient_abs = 1e-6
+        self.max_history_points = 100
+        self.emit_interval_s = 0.1
+        self.use_scaled_feedback_voltage = False
+        self.deadband_voltage = 0.0
+        self.enable_baseline_adaptation = False
+        self.baseline_adapt_alpha = 0.0
+        self._load_feedback_controls()
+        self._update_live_diagnostics({})
+        if hasattr(self, "vectorTrackedResonanceCombo"):
+            self.vectorTrackedResonanceCombo.setEnabled(False)
+        if hasattr(self, "vectorTrackingModeCombo"):
+            self.vectorTrackingModeCombo.currentIndexChanged.connect(
+                self._on_tracking_mode_changed
+            )
+        if hasattr(self, "vectorStartButton"):
+            self.vectorStartButton.clicked.connect(self.start_tracking)
+        if hasattr(self, "vectorStopButton"):
+            self.vectorStopButton.clicked.connect(self.stop_tracking)
 
         # configure the layout of the axes for the two graphs
         style_plot_widget(self.graphWidget)
         style_plot_widget(self.graphWidget_2)
         style_plot_labels(
             self.graphWidget,
-            left="RF Frequency (GHz)",
+            left="Frequency Shift (MHz)",
             bottom="Index",
-            top="RF Frequency Shift (GHz)",
+            top="Relative Shift from Start",
         )
         style_plot_labels(
             self.graphWidget_2,
@@ -851,27 +1080,13 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
         self.fc3 = self.graphWidget_2.plot()
         self.fc4 = self.graphWidget_2.plot()
 
-        self.vector_freqs = []
-        self.vector_grads = []
-        for i in range(4):
-            try:
-                self.vector_freqs.append(
-                    float(window.scanODMRPropertiesTable.item(i, 0).text())
-                )
-                self.vector_grads.append(
-                    float(window.scanODMRPropertiesTable.item(i, 1).text())
-                )  # gradient used for feedback with vector
-            except:
-                # if table element is empty, skip it
-                pass
+        self.vector_freqs = [None, None, None, None]
+        self.vector_grads = [None, None, None, None]
+        self._reload_vector_feedback_targets()
 
-        # starts the multi-thread for the vector feedback - prevents other ui elements and calculations being
-        # interrupted
-        self.thread_function(
-            self.initialise_vector_feedback,
-            err_fn=window.show_error_message,
-            prg_fn=self.debug_plot,
-        )
+        self._on_tracking_mode_changed(0)
+        self._get_active_tracking_indices(validate=True)
+        self.initial_vector_freqs = list(self.vector_freqs)
 
         # initial starting frequencies to use for vector tracking/measurements - change these to the desired values
         # f1 = 2.7766
@@ -892,6 +1107,221 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
 
         return
 
+    def _reload_vector_feedback_targets(self):
+        self.vector_freqs = [None, None, None, None]
+        self.vector_grads = [None, None, None, None]
+        for i in range(4):
+            try:
+                freq_item = window.scanODMRPropertiesTable.item(i, 0)
+                grad_item = window.scanODMRPropertiesTable.item(i, 1)
+                if freq_item is None or grad_item is None:
+                    continue
+                self.vector_freqs[i] = float(freq_item.text())
+                self.vector_grads[i] = float(grad_item.text())
+            except Exception:
+                pass
+
+    def start_tracking(self):
+        if self.worker_running:
+            return
+
+        self._reload_vector_feedback_targets()
+        self._get_active_tracking_indices(validate=True)
+        self.initial_vector_freqs = list(self.vector_freqs)
+        self._update_live_diagnostics({})
+        self.debug_plot([
+            [[], [], [], []],
+            [[], [], [], []],
+            {"active_indices": self._get_active_tracking_indices(validate=False)},
+        ])
+
+        self.scanning = True
+        self.feedback_started = False
+        self.worker_running = True
+        if hasattr(self, "vectorStartButton"):
+            self.vectorStartButton.setEnabled(False)
+        if hasattr(self, "vectorStopButton"):
+            self.vectorStopButton.setEnabled(True)
+
+        self.thread_function(
+            self.initialise_vector_feedback,
+            err_fn=window.show_error_message,
+            prg_fn=self.debug_plot,
+        )
+        if hasattr(self, "worker"):
+            self.worker.signals.finished.connect(self._on_tracking_finished)
+
+    def stop_tracking(self):
+        self.scanning = False
+        self.feedback_started = False
+        if hasattr(self, "vectorStopButton"):
+            self.vectorStopButton.setEnabled(False)
+
+    def _on_tracking_finished(self):
+        self.scanning = False
+        self.feedback_started = False
+        self.worker_running = False
+        if hasattr(self, "vectorStartButton"):
+            self.vectorStartButton.setEnabled(True)
+        if hasattr(self, "vectorStopButton"):
+            self.vectorStopButton.setEnabled(False)
+
+    @staticmethod
+    def _sleep_with_stop_flag(instance, duration_s, chunk_s=0.01):
+        end_t = time.monotonic() + max(0.0, float(duration_s))
+        while time.monotonic() < end_t:
+            if not instance.scanning:
+                return False
+            time.sleep(min(chunk_s, end_t - time.monotonic()))
+        return True
+
+    @staticmethod
+    def _set_rf_frequency_ghz(rf_inst, frequency_ghz):
+        rf_inst.write("FREQ " + str(round(float(frequency_ghz) * 1e9, 12)))
+
+    def _on_tracking_mode_changed(self, _index):
+        if hasattr(self, "vectorTrackedResonanceCombo"):
+            single_mode = (
+                hasattr(self, "vectorTrackingModeCombo")
+                and self.vectorTrackingModeCombo.currentText() == "Single resonance"
+            )
+            self.vectorTrackedResonanceCombo.setEnabled(single_mode)
+
+    def _get_active_tracking_indices(self, validate=False):
+        mode = (
+            self.vectorTrackingModeCombo.currentText()
+            if hasattr(self, "vectorTrackingModeCombo")
+            else "Four resonances"
+        )
+        available_indices = [
+            i
+            for i, (freq, grad) in enumerate(zip(self.vector_freqs, self.vector_grads))
+            if freq is not None and grad is not None
+        ]
+
+        if not available_indices:
+            if validate:
+                raise ValueError("No resonance frequency/gradient pairs are available.")
+            return []
+
+        if mode == "Single resonance":
+            selected_index = (
+                self.vectorTrackedResonanceCombo.currentIndex()
+                if hasattr(self, "vectorTrackedResonanceCombo")
+                else 0
+            )
+            if selected_index not in available_indices:
+                if validate:
+                    raise ValueError(
+                        f"Selected resonance {selected_index + 1} does not have a valid frequency/gradient pair."
+                    )
+                return []
+            return [selected_index]
+
+        if validate and len(available_indices) < 4:
+            raise ValueError(
+                "Four resonance mode requires 4 frequency/gradient pairs in the feedback table."
+            )
+        return available_indices
+
+    def _load_feedback_controls(self):
+        # Seed UI controls with current defaults and sync internal values.
+        if hasattr(self, "vectorAvgSamplesSpinBox"):
+            self.vectorAvgSamplesSpinBox.setValue(int(self.feedback_voltage_avg_samples))
+        if hasattr(self, "vectorSampleSpacingSpinBox"):
+            self.vectorSampleSpacingSpinBox.setValue(float(self.feedback_voltage_sample_spacing_s))
+        if hasattr(self, "vectorMaxDfStepSpinBox"):
+            self.vectorMaxDfStepSpinBox.setValue(float(self.max_df_step_mhz))
+        if hasattr(self, "vectorMaxTrackingOffsetSpinBox"):
+            self.vectorMaxTrackingOffsetSpinBox.setValue(float(self.max_tracking_offset_mhz))
+        if hasattr(self, "vectorEmitIntervalSpinBox"):
+            self.vectorEmitIntervalSpinBox.setValue(float(self.emit_interval_s))
+        if hasattr(self, "vectorUseScaledFeedbackCheckBox"):
+            self.vectorUseScaledFeedbackCheckBox.setChecked(
+                bool(self.use_scaled_feedback_voltage)
+            )
+        if hasattr(self, "vectorDeadbandSpinBox"):
+            self.vectorDeadbandSpinBox.setValue(float(self.deadband_voltage))
+        if hasattr(self, "vectorBaselineAdaptCheckBox"):
+            self.vectorBaselineAdaptCheckBox.setChecked(
+                bool(self.enable_baseline_adaptation)
+            )
+        if hasattr(self, "vectorBaselineAdaptAlphaSpinBox"):
+            self.vectorBaselineAdaptAlphaSpinBox.setValue(float(self.baseline_adapt_alpha))
+        self._on_tracking_mode_changed(0)
+        self._refresh_feedback_settings_from_ui()
+
+    def _refresh_feedback_settings_from_ui(self):
+        # Read user-adjusted control loop settings from UI.
+        if hasattr(self, "vectorAvgSamplesSpinBox"):
+            self.feedback_voltage_avg_samples = max(1, int(self.vectorAvgSamplesSpinBox.value()))
+        if hasattr(self, "vectorSampleSpacingSpinBox"):
+            self.feedback_voltage_sample_spacing_s = max(
+                0.0, float(self.vectorSampleSpacingSpinBox.value())
+            )
+        if hasattr(self, "vectorMaxDfStepSpinBox"):
+            self.max_df_step_mhz = max(1e-6, float(self.vectorMaxDfStepSpinBox.value()))
+        if hasattr(self, "vectorMaxTrackingOffsetSpinBox"):
+            self.max_tracking_offset_mhz = max(
+                1e-6, float(self.vectorMaxTrackingOffsetSpinBox.value())
+            )
+        if hasattr(self, "vectorEmitIntervalSpinBox"):
+            self.emit_interval_s = max(0.01, float(self.vectorEmitIntervalSpinBox.value()))
+        if hasattr(self, "vectorUseScaledFeedbackCheckBox"):
+            self.use_scaled_feedback_voltage = bool(
+                self.vectorUseScaledFeedbackCheckBox.isChecked()
+            )
+        if hasattr(self, "vectorDeadbandSpinBox"):
+            self.deadband_voltage = max(0.0, float(self.vectorDeadbandSpinBox.value()))
+        if hasattr(self, "vectorBaselineAdaptCheckBox"):
+            self.enable_baseline_adaptation = bool(
+                self.vectorBaselineAdaptCheckBox.isChecked()
+            )
+        if hasattr(self, "vectorBaselineAdaptAlphaSpinBox"):
+            self.baseline_adapt_alpha = min(
+                0.2, max(0.0, float(self.vectorBaselineAdaptAlphaSpinBox.value()))
+            )
+
+    def _read_lia_voltage_average(self, lia_daq, lia_device, scale):
+        self._refresh_feedback_settings_from_ui()
+        samples = []
+        demod_path = f"/{lia_device}/demods/0/sample"
+        for sample_index in range(max(1, int(self.feedback_voltage_avg_samples))):
+            sample = lia_daq.getSample(demod_path)
+            samples.append(float(sample["x"][0]) * float(scale))
+            if sample_index < int(self.feedback_voltage_avg_samples) - 1:
+                if not self._sleep_with_stop_flag(
+                    self, self.feedback_voltage_sample_spacing_s
+                ):
+                    break
+        if not samples:
+            raise RuntimeError("Failed to read LIA sample for vector feedback.")
+        return float(np.mean(samples))
+
+    def _update_live_diagnostics(self, diag):
+        dv_values = diag.get("dV", []) if isinstance(diag, dict) else []
+        df_values = diag.get("df", []) if isinstance(diag, dict) else []
+        db_flags = diag.get("deadband", []) if isinstance(diag, dict) else []
+
+        dv_labels = getattr(self, "vectorDiagDvLabels", [])
+        df_labels = getattr(self, "vectorDiagDfLabels", [])
+        db_labels = getattr(self, "vectorDiagDbLabels", [])
+        for i in range(min(4, len(dv_labels), len(df_labels), len(db_labels))):
+            if i < len(dv_values) and dv_values[i] is not None:
+                dv_labels[i].setText(f"{float(dv_values[i]):+.4g}")
+            else:
+                dv_labels[i].setText("-")
+
+            if i < len(df_values) and df_values[i] is not None:
+                df_labels[i].setText(f"{float(df_values[i]):+.4g}")
+            else:
+                df_labels[i].setText("-")
+
+            if i < len(db_flags):
+                db_labels[i].setText("ON" if bool(db_flags[i]) else "OFF")
+            else:
+                db_labels[i].setText("-")
+
     def initialise_vector_feedback(self, *args, **kwargs):
         """Starts the vector feedback to keep adjusting the microwave frequencies for 4 ODMR peaks to allow for
         calculation of the magnetic field vector
@@ -901,68 +1331,155 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
                         thread_function
         :return:
         """
-        ini_voltage = []
+        rf_inst = getattr(window.rfController, "inst", None)
+        lia_daq = getattr(window.LIAController, "daq", None)
+        lia_device = getattr(window.LIAController, "device", None)
+        if rf_inst is None:
+            raise RuntimeError("RF source is not connected. Connect RF before vector test.")
+        if lia_daq is None or lia_device is None:
+            raise RuntimeError("LIA is not connected. Connect LIA before vector test.")
 
-        scale = 750  # Scale set on the lock-in, the outputted data isn't scaled so need to do this manually afterward.
+        runtime_scale = float(
+            getattr(window.LIAController, "scaling_Factor", None)
+            or window.scalingFactorSpinBox.value()
+            or 1.0
+        )
+        scale = runtime_scale if self.use_scaled_feedback_voltage else 1.0
+        active_indices = self._get_active_tracking_indices(validate=True)
+
+        weak_gradient_rows = [
+            str(i + 1)
+            for i in active_indices
+            if abs(float(self.vector_grads[i])) < max(self.min_gradient_abs, 1e-3)
+        ]
+        if weak_gradient_rows:
+            print(
+                "[VectorTest] Warning: very small gradient magnitude in rows "
+                + ", ".join(weak_gradient_rows)
+                + ". This can cause runaway tracking."
+            )
+
+        active_gradients = [float(self.vector_grads[i]) for i in active_indices]
+        if all(g >= 0 for g in active_gradients) or all(g <= 0 for g in active_gradients):
+            print(
+                "[VectorTest] Warning: all gradient signs are identical. "
+                "Check resonance slope sign for each tracked point."
+            )
+        settle_time_s = max(
+            0.03,
+            min(
+                0.3,
+                3.0 * (float(window.timeConstantSpinBox.value()) / 1e6),
+            ),
+        )
+        ini_voltage = [None, None, None, None]
 
         #  iterate through the starting frequency list, set the RF source to that value and get the voltage value
         # this will be used as the set-point for the feedback, these are appended to list ini_voltage
-        for i in range(len(self.vector_freqs)):
-            window.rfController.inst.write(
-                "FREQ " + str(round(float(self.vector_freqs[i]) * 1e9, 12))
+        for i in [index for index, value in enumerate(self.vector_freqs) if value is not None]:
+            if not self.scanning:
+                return
+            self._set_rf_frequency_ghz(rf_inst, self.vector_freqs[i])
+            if not self._sleep_with_stop_flag(self, settle_time_s):
+                return
+            ini_voltage[i] = (
+                self._read_lia_voltage_average(lia_daq, lia_device, scale)
             )
-            time.sleep(1)
-            sample = window.LIAController.daq.getSample(
-                "/%s/demods/0/sample" % window.LIAController.device
-            )
-            ini_voltage.append(sample["x"][0] * scale)
         self.feedback_started = True  # check if the feedback is on or off and stop the thread if set to false
         df_arr = [[], [], [], []]
         dV_arr = [[], [], [], []]
         res_freq_arr = [[], [], [], []]
+        shift_mhz_arr = [[], [], [], []]
+        latest_dv = [None, None, None, None]
+        latest_df = [None, None, None, None]
+        latest_db = [False for _ in range(len(self.vector_freqs))]
         last_emit = 0.0
-        loop = 0
         while self.scanning:
-            loop += 1
+            self._refresh_feedback_settings_from_ui()
+            active_indices = self._get_active_tracking_indices(validate=True)
             # iterate over the 4 freqs in the list and calculate the difference between the voltage now and its
             # respective set-point voltage. This difference in voltage, along with the given calib const. (V/MHz) is
             # used to calculate the field vectors.
             for i in range(len(self.vector_freqs)):
-                window.rfController.inst.write(
-                    "FREQ " + str(round(float(self.vector_freqs[i]) * 1e9, 12))
+                if i not in active_indices:
+                    latest_dv[i] = None
+                    latest_df[i] = None
+                    latest_db[i] = False
+                    continue
+                if not self.scanning:
+                    break
+                self._set_rf_frequency_ghz(rf_inst, self.vector_freqs[i])
+
+                if not self._sleep_with_stop_flag(self, settle_time_s):
+                    break
+
+                voltage_now = self._read_lia_voltage_average(
+                    lia_daq, lia_device, scale
+                )
+                self.dV = voltage_now - ini_voltage[i]
+                gradient = float(self.vector_grads[i])
+                if abs(gradient) < self.min_gradient_abs:
+                    raise ValueError(
+                        f"Gradient for resonance {i + 1} is too close to zero ({gradient})."
+                    )
+
+                if abs(self.dV) < self.deadband_voltage:
+                    raw_df = 0.0
+                    latest_db[i] = True
+                else:
+                    raw_df = (1.0 / gradient) * (-self.dV)  # freq. shift in MHz
+                    latest_db[i] = False
+                self.df = float(
+                    np.clip(raw_df, -self.max_df_step_mhz, self.max_df_step_mhz)
                 )
 
-                time.sleep(
-                    0.08
-                )  # wait for LIA to calm down after changing RF frequency before measuring voltage
-                sample = window.LIAController.daq.getSample(
-                    "/%s/demods/0/sample" % window.LIAController.device
-                )
-                voltage_now = (
-                    sample["x"][0] * scale
-                )  # Scale the LIA output to match the measured calib. constants.
-                self.dV = voltage_now - ini_voltage[i]
-                self.df = (1 / self.vector_grads[i]) * (-self.dV)  # freq. shift in MHz
-                self.vector_freqs[i] = self.vector_freqs[i] + self.df / 1e3
+                candidate_freq = self.vector_freqs[i] + self.df / 1e3
+                base_freq = self.initial_vector_freqs[i]
+                min_freq = base_freq - (self.max_tracking_offset_mhz / 1e3)
+                max_freq = base_freq + (self.max_tracking_offset_mhz / 1e3)
+                self.vector_freqs[i] = float(np.clip(candidate_freq, min_freq, max_freq))
+
+                if self.enable_baseline_adaptation and self.baseline_adapt_alpha > 0.0:
+                    ini_voltage[i] = (
+                        (1.0 - self.baseline_adapt_alpha) * ini_voltage[i]
+                        + self.baseline_adapt_alpha * voltage_now
+                    )
+
                 # append results to list for plotting to graphs later
                 df_arr[i].append(self.df)
                 dV_arr[i].append(self.dV)
                 res_freq_arr[i].append(self.vector_freqs[i])
+                shift_mhz_arr[i].append((self.vector_freqs[i] - self.initial_vector_freqs[i]) * 1e3)
+                latest_dv[i] = self.dV
+                latest_df[i] = self.df
 
-            # if the lists get longer than 100 elements, start removing the last element before plotting - gives a
-            # scrolling graph effect for longer scans, prevents excessive "bunching up" of data on the graph.
-            if len(df_arr[0]) > 100:
-                for i in range(len(self.vector_freqs)):
+            # Trim each trace independently so single-resonance mode and inactive traces can remain empty safely.
+            for i in range(len(self.vector_freqs)):
+                while len(df_arr[i]) > self.max_history_points:
                     df_arr[i].pop(0)
+                while len(dV_arr[i]) > self.max_history_points:
                     dV_arr[i].pop(0)
+                while len(res_freq_arr[i]) > self.max_history_points:
                     res_freq_arr[i].pop(0)
+                while len(shift_mhz_arr[i]) > self.max_history_points:
+                    shift_mhz_arr[i].pop(0)
             # trying to iterate this while loop to fast while plotting causes the software to crash -
             # needs a workaround - using a 100 ms sleep to prevent this at the moment
-            time.sleep(0.1)
+            if not self._sleep_with_stop_flag(self, 0.03):
+                break
             now = time.monotonic()
-            if now - last_emit >= 0.1:
+            if now - last_emit >= self.emit_interval_s:
                 kwargs["progress_callback"].emit(
-                    [res_freq_arr, dV_arr]
+                    [
+                        shift_mhz_arr,
+                        dV_arr,
+                        {
+                            "dV": list(latest_dv),
+                            "df": list(latest_df),
+                            "deadband": list(latest_db),
+                            "active_indices": list(active_indices),
+                        },
+                    ]
                 )  # update the graphs
                 last_emit = now
         return
@@ -974,15 +1491,21 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
         :param arrs: Lists of the measured voltage and frequencies over time to plot to the debug graph widgets
         :return:
         """
-        self.vc1.setData(arrs[0][0], pen=get_plot_pen(0))
-        self.vc2.setData(arrs[0][1], pen=get_plot_pen(1))
-        self.vc3.setData(arrs[0][2], pen=get_plot_pen(2))
-        self.vc4.setData(arrs[0][3], pen=get_plot_pen(3))
+        active_indices = []
+        if isinstance(arrs, (list, tuple)) and len(arrs) >= 3 and isinstance(arrs[2], dict):
+            active_indices = arrs[2].get("active_indices", [])
 
-        self.fc1.setData(arrs[1][0], pen=get_plot_pen(0))
-        self.fc2.setData(arrs[1][1], pen=get_plot_pen(1))
-        self.fc3.setData(arrs[1][2], pen=get_plot_pen(2))
-        self.fc4.setData(arrs[1][3], pen=get_plot_pen(3))
+        freq_plots = [self.vc1, self.vc2, self.vc3, self.vc4]
+        volt_plots = [self.fc1, self.fc2, self.fc3, self.fc4]
+        for i in range(4):
+            if i in active_indices:
+                freq_plots[i].setData(arrs[0][i], pen=get_plot_pen(i))
+                volt_plots[i].setData(arrs[1][i], pen=get_plot_pen(i))
+            else:
+                freq_plots[i].setData([], pen=get_plot_pen(i))
+                volt_plots[i].setData([], pen=get_plot_pen(i))
+        if isinstance(arrs, (list, tuple)) and len(arrs) >= 3 and isinstance(arrs[2], dict):
+            self._update_live_diagnostics(arrs[2])
         return
 
     def closeEvent(self, event):
@@ -990,7 +1513,8 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
         :param event:
         :return:
         """
-        self.scanning = False  # stops the while loop in initialise_vector_feedback and finishes/kills the thread.
+        self.stop_tracking()  # stops the while loop in initialise_vector_feedback and finishes/kills the thread.
+        event.accept()
 
 
 class StageOptions(QtWidgets.QWidget):
