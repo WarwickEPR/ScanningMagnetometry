@@ -1040,6 +1040,12 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
         self.deadband_voltage = 0.0
         self.enable_baseline_adaptation = False
         self.baseline_adapt_alpha = 0.0
+        self.feedback_control_mode = "Proportional"
+        self.pid_kp = 1.0
+        self.pid_ki = 0.0
+        self.pid_kd = 0.0
+        self.pid_integral_limit = 5.0
+        self.feedback_demod_mode = "R"
         self._load_feedback_controls()
         self._update_live_diagnostics({})
         if hasattr(self, "vectorTrackedResonanceCombo"):
@@ -1248,6 +1254,18 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
             )
         if hasattr(self, "vectorBaselineAdaptAlphaSpinBox"):
             self.vectorBaselineAdaptAlphaSpinBox.setValue(float(self.baseline_adapt_alpha))
+        if hasattr(self, "vectorControlModeCombo"):
+            self.vectorControlModeCombo.setCurrentText(str(self.feedback_control_mode))
+        if hasattr(self, "vectorPidKpSpinBox"):
+            self.vectorPidKpSpinBox.setValue(float(self.pid_kp))
+        if hasattr(self, "vectorPidKiSpinBox"):
+            self.vectorPidKiSpinBox.setValue(float(self.pid_ki))
+        if hasattr(self, "vectorPidKdSpinBox"):
+            self.vectorPidKdSpinBox.setValue(float(self.pid_kd))
+        if hasattr(self, "vectorPidIntegralLimitSpinBox"):
+            self.vectorPidIntegralLimitSpinBox.setValue(float(self.pid_integral_limit))
+        if hasattr(self, "vectorDemodFeedbackModeCombo"):
+            self.vectorDemodFeedbackModeCombo.setCurrentText(str(self.feedback_demod_mode))
         self._on_tracking_mode_changed(0)
         self._refresh_feedback_settings_from_ui()
 
@@ -1278,9 +1296,46 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
                 self.vectorBaselineAdaptCheckBox.isChecked()
             )
         if hasattr(self, "vectorBaselineAdaptAlphaSpinBox"):
-            self.baseline_adapt_alpha = min(
-                0.2, max(0.0, float(self.vectorBaselineAdaptAlphaSpinBox.value()))
+            self.baseline_adapt_alpha = max(
+                0.0, float(self.vectorBaselineAdaptAlphaSpinBox.value())
             )
+        if hasattr(self, "vectorControlModeCombo"):
+            self.feedback_control_mode = str(self.vectorControlModeCombo.currentText())
+        if hasattr(self, "vectorPidKpSpinBox"):
+            self.pid_kp = max(0.0, float(self.vectorPidKpSpinBox.value()))
+        if hasattr(self, "vectorPidKiSpinBox"):
+            self.pid_ki = max(0.0, float(self.vectorPidKiSpinBox.value()))
+        if hasattr(self, "vectorPidKdSpinBox"):
+            self.pid_kd = max(0.0, float(self.vectorPidKdSpinBox.value()))
+        if hasattr(self, "vectorPidIntegralLimitSpinBox"):
+            self.pid_integral_limit = max(0.0, float(self.vectorPidIntegralLimitSpinBox.value()))
+        if hasattr(self, "vectorDemodFeedbackModeCombo"):
+            self.feedback_demod_mode = str(self.vectorDemodFeedbackModeCombo.currentText())
+
+    def _compute_pid_df(self, error_mhz, index, pid_integral, pid_prev_error, pid_prev_time):
+        now_t = time.monotonic()
+        prev_t = pid_prev_time[index]
+        dt = max(1e-3, now_t - prev_t) if prev_t is not None else 0.0
+
+        if dt > 0.0 and self.pid_ki > 0.0:
+            pid_integral[index] += error_mhz * dt
+            if self.pid_integral_limit > 0.0:
+                pid_integral[index] = float(
+                    np.clip(pid_integral[index], -self.pid_integral_limit, self.pid_integral_limit)
+                )
+
+        derivative = 0.0
+        if dt > 0.0 and pid_prev_error[index] is not None:
+            derivative = (error_mhz - pid_prev_error[index]) / dt
+
+        pid_prev_error[index] = error_mhz
+        pid_prev_time[index] = now_t
+
+        p_term = self.pid_kp * error_mhz
+        i_term = self.pid_ki * pid_integral[index]
+        d_term = self.pid_kd * derivative
+        output = p_term + i_term + d_term
+        return float(output), float(p_term), float(i_term), float(d_term)
 
     def _read_lia_voltage_average(self, lia_daq, lia_device, scale):
         self._refresh_feedback_settings_from_ui()
@@ -1288,7 +1343,13 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
         demod_path = f"/{lia_device}/demods/0/sample"
         for sample_index in range(max(1, int(self.feedback_voltage_avg_samples))):
             sample = lia_daq.getSample(demod_path)
-            samples.append(float(sample["x"][0]) * float(scale))
+            x_val = float(sample["x"][0])
+            y_val = float(sample["y"][0])
+            if self.feedback_demod_mode == "X":
+                signal_value = x_val
+            else:
+                signal_value = float(np.hypot(x_val, y_val))
+            samples.append(signal_value * float(scale))
             if sample_index < int(self.feedback_voltage_avg_samples) - 1:
                 if not self._sleep_with_stop_flag(
                     self, self.feedback_voltage_sample_spacing_s
@@ -1302,11 +1363,27 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
         dv_values = diag.get("dV", []) if isinstance(diag, dict) else []
         df_values = diag.get("df", []) if isinstance(diag, dict) else []
         db_flags = diag.get("deadband", []) if isinstance(diag, dict) else []
+        p_values = diag.get("p", []) if isinstance(diag, dict) else []
+        i_values = diag.get("i", []) if isinstance(diag, dict) else []
+        d_values = diag.get("d", []) if isinstance(diag, dict) else []
 
         dv_labels = getattr(self, "vectorDiagDvLabels", [])
         df_labels = getattr(self, "vectorDiagDfLabels", [])
         db_labels = getattr(self, "vectorDiagDbLabels", [])
-        for i in range(min(4, len(dv_labels), len(df_labels), len(db_labels))):
+        p_labels = getattr(self, "vectorDiagPLabels", [])
+        i_labels = getattr(self, "vectorDiagILabels", [])
+        d_labels = getattr(self, "vectorDiagDLabels", [])
+        for i in range(
+            min(
+                4,
+                len(dv_labels),
+                len(df_labels),
+                len(db_labels),
+                len(p_labels),
+                len(i_labels),
+                len(d_labels),
+            )
+        ):
             if i < len(dv_values) and dv_values[i] is not None:
                 dv_labels[i].setText(f"{float(dv_values[i]):+.4g}")
             else:
@@ -1321,6 +1398,21 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
                 db_labels[i].setText("ON" if bool(db_flags[i]) else "OFF")
             else:
                 db_labels[i].setText("-")
+
+            if i < len(p_values) and p_values[i] is not None:
+                p_labels[i].setText(f"{float(p_values[i]):+.4g}")
+            else:
+                p_labels[i].setText("-")
+
+            if i < len(i_values) and i_values[i] is not None:
+                i_labels[i].setText(f"{float(i_values[i]):+.4g}")
+            else:
+                i_labels[i].setText("-")
+
+            if i < len(d_values) and d_values[i] is not None:
+                d_labels[i].setText(f"{float(d_values[i]):+.4g}")
+            else:
+                d_labels[i].setText("-")
 
     def initialise_vector_feedback(self, *args, **kwargs):
         """Starts the vector feedback to keep adjusting the microwave frequencies for 4 ODMR peaks to allow for
@@ -1360,7 +1452,9 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
             )
 
         active_gradients = [float(self.vector_grads[i]) for i in active_indices]
-        if all(g >= 0 for g in active_gradients) or all(g <= 0 for g in active_gradients):
+        if len(active_gradients) > 1 and (
+            all(g >= 0 for g in active_gradients) or all(g <= 0 for g in active_gradients)
+        ):
             print(
                 "[VectorTest] Warning: all gradient signs are identical. "
                 "Check resonance slope sign for each tracked point."
@@ -1393,6 +1487,12 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
         latest_dv = [None, None, None, None]
         latest_df = [None, None, None, None]
         latest_db = [False for _ in range(len(self.vector_freqs))]
+        latest_p = [None, None, None, None]
+        latest_i = [None, None, None, None]
+        latest_d = [None, None, None, None]
+        pid_integral = [0.0, 0.0, 0.0, 0.0]
+        pid_prev_error = [None, None, None, None]
+        pid_prev_time = [None, None, None, None]
         last_emit = 0.0
         while self.scanning:
             self._refresh_feedback_settings_from_ui()
@@ -1405,6 +1505,12 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
                     latest_dv[i] = None
                     latest_df[i] = None
                     latest_db[i] = False
+                    latest_p[i] = None
+                    latest_i[i] = None
+                    latest_d[i] = None
+                    pid_prev_time[i] = None
+                    pid_prev_error[i] = None
+                    pid_integral[i] = 0.0
                     continue
                 if not self.scanning:
                     break
@@ -1423,12 +1529,28 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
                         f"Gradient for resonance {i + 1} is too close to zero ({gradient})."
                     )
 
+                error_mhz = (1.0 / gradient) * (-self.dV)
+
                 if abs(self.dV) < self.deadband_voltage:
                     raw_df = 0.0
+                    p_term = 0.0
+                    i_term = 0.0
+                    d_term = 0.0
                     latest_db[i] = True
+                    pid_prev_time[i] = None
+                    pid_prev_error[i] = 0.0
                 else:
-                    raw_df = (1.0 / gradient) * (-self.dV)  # freq. shift in MHz
+                    if self.feedback_control_mode == "PID":
+                        raw_df, p_term, i_term, d_term = self._compute_pid_df(
+                            error_mhz, i, pid_integral, pid_prev_error, pid_prev_time
+                        )
+                    else:
+                        raw_df = error_mhz  # freq. shift in MHz
+                        p_term = raw_df
+                        i_term = 0.0
+                        d_term = 0.0
                     latest_db[i] = False
+
                 self.df = float(
                     np.clip(raw_df, -self.max_df_step_mhz, self.max_df_step_mhz)
                 )
@@ -1452,6 +1574,9 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
                 shift_mhz_arr[i].append((self.vector_freqs[i] - self.initial_vector_freqs[i]) * 1e3)
                 latest_dv[i] = self.dV
                 latest_df[i] = self.df
+                latest_p[i] = p_term
+                latest_i[i] = i_term
+                latest_d[i] = d_term
 
             # Trim each trace independently so single-resonance mode and inactive traces can remain empty safely.
             for i in range(len(self.vector_freqs)):
@@ -1477,6 +1602,9 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
                             "dV": list(latest_dv),
                             "df": list(latest_df),
                             "deadband": list(latest_db),
+                            "p": list(latest_p),
+                            "i": list(latest_i),
+                            "d": list(latest_d),
                             "active_indices": list(active_indices),
                         },
                     ]

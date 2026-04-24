@@ -188,33 +188,33 @@ class VectorTestWindowUIBuilder:
 
         window.vectorAvgSamplesSpinBox = QtWidgets.QSpinBox()
         window.vectorAvgSamplesSpinBox.setObjectName("vectorAvgSamplesSpinBox")
-        window.vectorAvgSamplesSpinBox.setRange(1, 20)
+        window.vectorAvgSamplesSpinBox.setRange(1, 1000000)
 
         window.vectorSampleSpacingSpinBox = QtWidgets.QDoubleSpinBox()
         window.vectorSampleSpacingSpinBox.setObjectName("vectorSampleSpacingSpinBox")
         window.vectorSampleSpacingSpinBox.setDecimals(3)
-        window.vectorSampleSpacingSpinBox.setRange(0.0, 1.0)
+        window.vectorSampleSpacingSpinBox.setRange(0.0, 99999999.0)
         window.vectorSampleSpacingSpinBox.setSingleStep(0.005)
         window.vectorSampleSpacingSpinBox.setSuffix(" s")
 
         window.vectorMaxDfStepSpinBox = QtWidgets.QDoubleSpinBox()
         window.vectorMaxDfStepSpinBox.setObjectName("vectorMaxDfStepSpinBox")
         window.vectorMaxDfStepSpinBox.setDecimals(3)
-        window.vectorMaxDfStepSpinBox.setRange(0.001, 100.0)
+        window.vectorMaxDfStepSpinBox.setRange(0.001, 99999999.0)
         window.vectorMaxDfStepSpinBox.setSingleStep(0.05)
         window.vectorMaxDfStepSpinBox.setSuffix(" MHz")
 
         window.vectorMaxTrackingOffsetSpinBox = QtWidgets.QDoubleSpinBox()
         window.vectorMaxTrackingOffsetSpinBox.setObjectName("vectorMaxTrackingOffsetSpinBox")
         window.vectorMaxTrackingOffsetSpinBox.setDecimals(2)
-        window.vectorMaxTrackingOffsetSpinBox.setRange(0.1, 500.0)
+        window.vectorMaxTrackingOffsetSpinBox.setRange(0.1, 99999999.0)
         window.vectorMaxTrackingOffsetSpinBox.setSingleStep(1.0)
         window.vectorMaxTrackingOffsetSpinBox.setSuffix(" MHz")
 
         window.vectorEmitIntervalSpinBox = QtWidgets.QDoubleSpinBox()
         window.vectorEmitIntervalSpinBox.setObjectName("vectorEmitIntervalSpinBox")
         window.vectorEmitIntervalSpinBox.setDecimals(3)
-        window.vectorEmitIntervalSpinBox.setRange(0.01, 2.0)
+        window.vectorEmitIntervalSpinBox.setRange(0.01, 99999999.0)
         window.vectorEmitIntervalSpinBox.setSingleStep(0.01)
         window.vectorEmitIntervalSpinBox.setSuffix(" s")
 
@@ -227,7 +227,7 @@ class VectorTestWindowUIBuilder:
         window.vectorDeadbandSpinBox = QtWidgets.QDoubleSpinBox()
         window.vectorDeadbandSpinBox.setObjectName("vectorDeadbandSpinBox")
         window.vectorDeadbandSpinBox.setDecimals(6)
-        window.vectorDeadbandSpinBox.setRange(0.0, 1000.0)
+        window.vectorDeadbandSpinBox.setRange(0.0, 99999999.0)
         window.vectorDeadbandSpinBox.setSingleStep(0.001)
 
         window.vectorBaselineAdaptCheckBox = QtWidgets.QCheckBox("Enable baseline adaptation")
@@ -237,8 +237,41 @@ class VectorTestWindowUIBuilder:
         window.vectorBaselineAdaptAlphaSpinBox = QtWidgets.QDoubleSpinBox()
         window.vectorBaselineAdaptAlphaSpinBox.setObjectName("vectorBaselineAdaptAlphaSpinBox")
         window.vectorBaselineAdaptAlphaSpinBox.setDecimals(4)
-        window.vectorBaselineAdaptAlphaSpinBox.setRange(0.0, 0.2)
+        window.vectorBaselineAdaptAlphaSpinBox.setRange(0.0, 99999999.0)
         window.vectorBaselineAdaptAlphaSpinBox.setSingleStep(0.001)
+
+        window.vectorControlModeCombo = QtWidgets.QComboBox()
+        window.vectorControlModeCombo.setObjectName("vectorControlModeCombo")
+        window.vectorControlModeCombo.addItems(["Proportional", "PID"])
+
+        window.vectorPidKpSpinBox = QtWidgets.QDoubleSpinBox()
+        window.vectorPidKpSpinBox.setObjectName("vectorPidKpSpinBox")
+        window.vectorPidKpSpinBox.setDecimals(4)
+        window.vectorPidKpSpinBox.setRange(0.0, 99999999.0)
+        window.vectorPidKpSpinBox.setSingleStep(0.05)
+
+        window.vectorPidKiSpinBox = QtWidgets.QDoubleSpinBox()
+        window.vectorPidKiSpinBox.setObjectName("vectorPidKiSpinBox")
+        window.vectorPidKiSpinBox.setDecimals(4)
+        window.vectorPidKiSpinBox.setRange(0.0, 99999999.0)
+        window.vectorPidKiSpinBox.setSingleStep(0.01)
+
+        window.vectorPidKdSpinBox = QtWidgets.QDoubleSpinBox()
+        window.vectorPidKdSpinBox.setObjectName("vectorPidKdSpinBox")
+        window.vectorPidKdSpinBox.setDecimals(4)
+        window.vectorPidKdSpinBox.setRange(0.0, 99999999.0)
+        window.vectorPidKdSpinBox.setSingleStep(0.01)
+
+        window.vectorPidIntegralLimitSpinBox = QtWidgets.QDoubleSpinBox()
+        window.vectorPidIntegralLimitSpinBox.setObjectName("vectorPidIntegralLimitSpinBox")
+        window.vectorPidIntegralLimitSpinBox.setDecimals(3)
+        window.vectorPidIntegralLimitSpinBox.setRange(0.0, 99999999.0)
+        window.vectorPidIntegralLimitSpinBox.setSingleStep(0.1)
+        window.vectorPidIntegralLimitSpinBox.setSuffix(" MHz*s")
+
+        window.vectorDemodFeedbackModeCombo = QtWidgets.QComboBox()
+        window.vectorDemodFeedbackModeCombo.setObjectName("vectorDemodFeedbackModeCombo")
+        window.vectorDemodFeedbackModeCombo.addItems(["R", "X"])
 
         controls_layout.addWidget(controls_title, 0, 0, 1, 4)
         controls_layout.addWidget(QtWidgets.QLabel("Tracking mode"), 1, 0)
@@ -263,6 +296,18 @@ class VectorTestWindowUIBuilder:
         controls_layout.addWidget(window.vectorBaselineAdaptCheckBox, 6, 2)
         controls_layout.addWidget(QtWidgets.QLabel("Baseline adapt alpha"), 7, 0)
         controls_layout.addWidget(window.vectorBaselineAdaptAlphaSpinBox, 7, 1)
+        controls_layout.addWidget(QtWidgets.QLabel("Control mode"), 8, 0)
+        controls_layout.addWidget(window.vectorControlModeCombo, 8, 1)
+        controls_layout.addWidget(QtWidgets.QLabel("PID Kp"), 8, 2)
+        controls_layout.addWidget(window.vectorPidKpSpinBox, 8, 3)
+        controls_layout.addWidget(QtWidgets.QLabel("PID Ki"), 9, 0)
+        controls_layout.addWidget(window.vectorPidKiSpinBox, 9, 1)
+        controls_layout.addWidget(QtWidgets.QLabel("PID Kd"), 9, 2)
+        controls_layout.addWidget(window.vectorPidKdSpinBox, 9, 3)
+        controls_layout.addWidget(QtWidgets.QLabel("PID integral limit"), 10, 0)
+        controls_layout.addWidget(window.vectorPidIntegralLimitSpinBox, 10, 1)
+        controls_layout.addWidget(QtWidgets.QLabel("Demod feedback"), 10, 2)
+        controls_layout.addWidget(window.vectorDemodFeedbackModeCombo, 10, 3)
 
         diagnostics_card = QtWidgets.QFrame()
         diagnostics_card.setObjectName("vectorDiagnosticsCard")
@@ -273,15 +318,21 @@ class VectorTestWindowUIBuilder:
 
         diagnostics_title = QtWidgets.QLabel("Live Diagnostics")
         diagnostics_title.setObjectName("vectorDiagnosticsTitle")
-        diagnostics_layout.addWidget(diagnostics_title, 0, 0, 1, 4)
+        diagnostics_layout.addWidget(diagnostics_title, 0, 0, 1, 7)
         diagnostics_layout.addWidget(QtWidgets.QLabel("Resonance"), 1, 0)
         diagnostics_layout.addWidget(QtWidgets.QLabel("dV"), 1, 1)
         diagnostics_layout.addWidget(QtWidgets.QLabel("df (MHz)"), 1, 2)
         diagnostics_layout.addWidget(QtWidgets.QLabel("Deadband"), 1, 3)
+        diagnostics_layout.addWidget(QtWidgets.QLabel("P"), 1, 4)
+        diagnostics_layout.addWidget(QtWidgets.QLabel("I"), 1, 5)
+        diagnostics_layout.addWidget(QtWidgets.QLabel("D"), 1, 6)
 
         window.vectorDiagDvLabels = []
         window.vectorDiagDfLabels = []
         window.vectorDiagDbLabels = []
+        window.vectorDiagPLabels = []
+        window.vectorDiagILabels = []
+        window.vectorDiagDLabels = []
         for row in range(4):
             diagnostics_layout.addWidget(QtWidgets.QLabel(f"R{row + 1}"), row + 2, 0)
 
@@ -297,9 +348,24 @@ class VectorTestWindowUIBuilder:
             db_label.setObjectName(f"vectorDiagDb{row + 1}")
             diagnostics_layout.addWidget(db_label, row + 2, 3)
 
+            p_label = QtWidgets.QLabel("-")
+            p_label.setObjectName(f"vectorDiagP{row + 1}")
+            diagnostics_layout.addWidget(p_label, row + 2, 4)
+
+            i_label = QtWidgets.QLabel("-")
+            i_label.setObjectName(f"vectorDiagI{row + 1}")
+            diagnostics_layout.addWidget(i_label, row + 2, 5)
+
+            d_label = QtWidgets.QLabel("-")
+            d_label.setObjectName(f"vectorDiagD{row + 1}")
+            diagnostics_layout.addWidget(d_label, row + 2, 6)
+
             window.vectorDiagDvLabels.append(dv_label)
             window.vectorDiagDfLabels.append(df_label)
             window.vectorDiagDbLabels.append(db_label)
+            window.vectorDiagPLabels.append(p_label)
+            window.vectorDiagILabels.append(i_label)
+            window.vectorDiagDLabels.append(d_label)
 
         top_card = QtWidgets.QFrame()
         top_card.setObjectName("vectorTopCard")
