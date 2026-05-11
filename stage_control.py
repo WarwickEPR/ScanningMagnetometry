@@ -66,7 +66,12 @@ class StageControl:
         :return:
         """
         try:
-            self.ser = serial.Serial(port=com_port, baudrate=baud_rate)
+            self.ser = serial.Serial(
+                port=com_port,
+                baudrate=baud_rate,
+                timeout=0.5,
+                write_timeout=0.5,
+            )
             self.stage_connected = True
             return True
         except Exception as error:

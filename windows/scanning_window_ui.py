@@ -45,8 +45,12 @@ class ScanningWindowUIBuilder:
         window.exportDataButton = QtWidgets.QPushButton("Export Data")
         window.exportDataButton.setObjectName("exportDataButton")
 
+        window.stopScanButton = QtWidgets.QPushButton("Stop Scan")
+        window.stopScanButton.setObjectName("stopScanButton")
+
         layout.addLayout(title_col)
         layout.addStretch(1)
+        layout.addWidget(window.stopScanButton)
         layout.addWidget(window.exportDataButton)
         return bar
 

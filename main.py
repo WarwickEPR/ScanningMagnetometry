@@ -99,6 +99,11 @@ class MainUI(QtWidgets.QMainWindow):
         self._set_connection_indicator("stage", "disconnected")
         self._set_connection_indicator("rf", "disconnected")
         self._set_connection_indicator("lia", "disconnected")
+        self._last_health_status = {
+            "stage": bool(getattr(self.stageController, "stage_connected", False)),
+            "rf": bool(getattr(self.rfController, "rf_connected", False)),
+            "lia": bool(getattr(self.LIAController, "LIA_connected", False)),
+        }
 
         # try loading default default_config.yml to set default values if it exists in directory
         try:
@@ -206,6 +211,10 @@ class MainUI(QtWidgets.QMainWindow):
         # can supress this printout to console to tell user how many threads are available - only really useful for
         # developers
         # print('max %d threads' % self.threadpool.maxThreadCount())
+        self._health_check_timer = QtCore.QTimer(self)
+        self._health_check_timer.setInterval(10000)
+        self._health_check_timer.timeout.connect(self._run_idle_health_check)
+        self._health_check_timer.start()
         return
     
     def auto_discover_devices(self):
@@ -301,6 +310,99 @@ class MainUI(QtWidgets.QMainWindow):
         style.polish(label)
         dot.update()
         label.update()
+
+    def _is_system_idle_for_health_check(self):
+        if bool(getattr(self.rfController, "sweeping", False)):
+            return False
+
+        if self.scan_window is not None and bool(getattr(self.scan_window, "scanning", False)):
+            return False
+
+        if self.fft_graph_window is not None and bool(
+            getattr(self.fft_graph_window, "worker_running", False)
+        ):
+            return False
+
+        if self.odmr_graph_window is not None and bool(
+            getattr(self.odmr_graph_window, "worker_running", False)
+        ):
+            return False
+
+        if self.lia_live_trace_window is not None and bool(
+            getattr(self.lia_live_trace_window, "running", False)
+        ):
+            return False
+
+        if self.vector_test_window is not None and (
+            bool(getattr(self.vector_test_window, "worker_running", False))
+            or bool(getattr(self.vector_test_window, "scanning", False))
+        ):
+            return False
+
+        return True
+
+    def _check_stage_health(self):
+        ser = getattr(self.stageController, "ser", None)
+        if ser is None or not bool(getattr(ser, "is_open", False)):
+            return False
+        try:
+            ser.reset_input_buffer()
+            ser.write(b"M114\r\n")
+            response = ser.readline()
+            return bool(response)
+        except Exception:
+            return False
+
+    def _check_rf_health(self):
+        inst = getattr(self.rfController, "inst", None)
+        if inst is None:
+            return False
+        try:
+            inst.query("FREQ?")
+            return True
+        except Exception:
+            return False
+
+    def _check_lia_health(self):
+        daq = getattr(self.LIAController, "daq", None)
+        device = getattr(self.LIAController, "device", None)
+        if daq is None or device is None:
+            return False
+        try:
+            daq.getInt(f"/{device}/clockbase")
+            return True
+        except Exception:
+            return False
+
+    def _run_idle_health_check(self):
+        if not self._is_system_idle_for_health_check():
+            return
+
+        current_status = {
+            "stage": self._check_stage_health(),
+            "rf": self._check_rf_health(),
+            "lia": self._check_lia_health(),
+        }
+
+        # Keep controller flags aligned with current link state.
+        self.stageController.stage_connected = bool(current_status["stage"])
+        self.rfController.rf_connected = bool(current_status["rf"])
+        self.LIAController.LIA_connected = bool(current_status["lia"])
+
+        for prefix in ["stage", "rf", "lia"]:
+            was_connected = bool(self._last_health_status.get(prefix, False))
+            is_connected = bool(current_status[prefix])
+            if was_connected == is_connected:
+                continue
+
+            if is_connected:
+                self._set_connection_indicator(prefix, "connected")
+            else:
+                self._set_connection_indicator(
+                    prefix, "disconnected", "Disconnected (health check failed)"
+                )
+
+            self._last_health_status[prefix] = is_connected
 
     def _set_lia_input_mode(self, use_dropdown_values):
         use_dropdown = bool(use_dropdown_values)
@@ -609,6 +711,9 @@ class MainUI(QtWidgets.QMainWindow):
         if confirm != QtWidgets.QMessageBox.StandardButton.Yes:
             event.ignore()
             return
+
+        if hasattr(self, "_health_check_timer"):
+            self._health_check_timer.stop()
 
         for widget in QtWidgets.QApplication.topLevelWidgets():
             if widget is not self:

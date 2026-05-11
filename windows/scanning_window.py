@@ -88,6 +88,7 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         self.fc4 = self.graphWidget_2.plot()
 
         self.exportDataButton.clicked.connect(self.export_data)
+        self.stopScanButton.clicked.connect(self.stop_scan)
         self.test_data = np.random.random([4, 10, 10])
 
         if (
@@ -503,6 +504,9 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
 
             df_image.save(folderpath + date_time + "IMAGES/" + "_IMAGE_freq_" + str(i) + ".PNG")
             voltage_image.save(folderpath + date_time + "IMAGES/" + "_IMAGE_voltage_" + str(i) + ".PNG")
+
+    def stop_scan(self):
+        self.scanning = False
 
     def closeEvent(self, event):
         self.scanning = False

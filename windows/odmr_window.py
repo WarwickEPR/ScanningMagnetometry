@@ -358,6 +358,11 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         self.worker_running = False
         self._selection_mode_active = False
         self.autoFitButton.setText("Select Linear Region")
+        try:
+            self.main_window.rfController.sweeping = False
+        except Exception:
+            pass
+        self.main_window.takeODMRButton.setEnabled(True)
 
     def updateViews(self):
         self.p2.setGeometry(self.p1.vb.sceneBoundingRect())
