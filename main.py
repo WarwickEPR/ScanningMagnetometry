@@ -158,6 +158,7 @@ class MainUI(QtWidgets.QMainWindow):
 
         self.takeFFTButton.clicked.connect(self.open_fft_graph)
         self.openLIALiveTraceButton.clicked.connect(self.open_lia_live_trace)
+        self.resetAllButton.clicked.connect(self.reset_all)
 
         #  RF ui controls
         self.takeODMRButton.clicked.connect(self.open_odmr_graph)
@@ -399,6 +400,51 @@ class MainUI(QtWidgets.QMainWindow):
             device_ip = self.LIAIPBox.text().strip()
             source = "manual"
         return device_id, device_ip, source
+
+    def reset_all(self):
+        """Stop all running operations and reconnect all three instruments."""
+        # --- stop LIA live trace ---
+        self.stop_lia_live_trace()
+
+        # --- stop and close scan window ---
+        if self.scan_window is not None:
+            try:
+                self.scan_window.scanning = False
+                self.scan_window.close()
+            except Exception:
+                pass
+            self.scan_window = None
+
+        # --- stop and close ODMR window ---
+        if self.odmr_graph_window is not None:
+            try:
+                self.odmr_graph_window.worker_running = False
+                self.odmr_graph_window.close()
+            except Exception:
+                pass
+            self.odmr_graph_window = None
+
+        # --- stop and close FFT window ---
+        if self.fft_graph_window is not None:
+            try:
+                if getattr(self.fft_graph_window, "worker_running", False):
+                    self.fft_graph_window.stop_fft()
+                self.fft_graph_window.close()
+            except Exception:
+                pass
+            self.fft_graph_window = None
+
+        # --- stop vector test tracking if open ---
+        if self.vector_test_window is not None:
+            try:
+                self.vector_test_window.stop_tracking()
+            except Exception:
+                pass
+
+        # --- reconnect all instruments ---
+        self.connect_stage()
+        self.connect_rf()
+        self.connect_lia()
 
     def connect_stage(self):
         port = self.comPortBox.currentText().strip()

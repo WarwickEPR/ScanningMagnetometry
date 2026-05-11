@@ -127,7 +127,7 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
             return
         self._selection_mode_active = True
         self._selected_indices = []
-        self.autoFitButton.setText("Select Point 1/2")
+        self.autoFitButton.setText("Click first point...")
 
     def _hide_legacy_auto_fit_controls(self):
         legacy_widgets = [
@@ -172,19 +172,101 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
 
         view_pos = self.p1.vb.mapSceneToView(event.scenePos())
         clicked_x = float(view_pos.x())
-        nearest_idx = int(np.argmin(np.abs(self.x - clicked_x)))
-        self._selected_indices.append(nearest_idx)
+        clicked_idx = int(np.argmin(np.abs(self.x - clicked_x)))
+        self._selected_indices.append(clicked_idx)
 
         if len(self._selected_indices) == 1:
-            self.autoFitButton.setText("Select Point 2/2")
+            self.autoFitButton.setText("Click second point...")
             return
 
-        idx_start, idx_end = sorted(self._selected_indices[:2])
-        self._selected_indices = []
-        self._selection_mode_active = False
-        self.autoFitButton.setText("Select Linear Region")
+        idx_start = min(self._selected_indices[0], self._selected_indices[1])
+        idx_end = max(self._selected_indices[0], self._selected_indices[1])
 
+        self._selection_mode_active = False
+        self._selected_indices = []
+        self.autoFitButton.setText("Select Linear Region")
         self._fit_manual_region(idx_start, idx_end)
+
+    def _fit_from_center_click(self, center_idx):
+        """Fit using nearest local max/min tips around the clicked center."""
+        if self.x is None or self.y is None:
+            return
+        n = len(self.y)
+        if n < 4:
+            return
+
+        y = np.asarray(self.y, dtype=float)
+
+        # Light smoothing avoids noise-induced pseudo-extrema.
+        kernel_size = max(3, n // 25)
+        if kernel_size % 2 == 0:
+            kernel_size += 1
+        kernel = np.ones(kernel_size, dtype=float) / float(kernel_size)
+        y_smooth = np.convolve(y, kernel, mode="same")
+
+        candidate_max = np.where(
+            (y_smooth[1:-1] > y_smooth[:-2]) & (y_smooth[1:-1] >= y_smooth[2:])
+        )[0] + 1
+        candidate_min = np.where(
+            (y_smooth[1:-1] < y_smooth[:-2]) & (y_smooth[1:-1] <= y_smooth[2:])
+        )[0] + 1
+
+        max_left = candidate_max[candidate_max < center_idx]
+        max_right = candidate_max[candidate_max > center_idx]
+        min_left = candidate_min[candidate_min < center_idx]
+        min_right = candidate_min[candidate_min > center_idx]
+
+        left_max_idx = int(max_left[-1]) if len(max_left) > 0 else None
+        right_max_idx = int(max_right[0]) if len(max_right) > 0 else None
+        left_min_idx = int(min_left[-1]) if len(min_left) > 0 else None
+        right_min_idx = int(min_right[0]) if len(min_right) > 0 else None
+
+        # Pick extrema on opposite sides of the clicked slope center according to slope direction.
+        # Descending slope: max (left) -> min (right)
+        # Ascending slope: min (left) -> max (right)
+        local_slope = float(np.gradient(y_smooth)[center_idx])
+        if local_slope <= 0:
+            idx_start, idx_end = left_max_idx, right_min_idx
+        else:
+            idx_start, idx_end = left_min_idx, right_max_idx
+
+        if idx_start is not None and idx_end is not None and idx_end - idx_start >= 2:
+            self._fit_manual_region(idx_start, idx_end)
+            return
+
+        # Secondary fallback: nearest min/max pair if side-constrained extrema are unavailable.
+        max_idx = (
+            int(candidate_max[np.argmin(np.abs(candidate_max - center_idx))])
+            if len(candidate_max) > 0
+            else None
+        )
+        min_idx = (
+            int(candidate_min[np.argmin(np.abs(candidate_min - center_idx))])
+            if len(candidate_min) > 0
+            else None
+        )
+        if max_idx is not None and min_idx is not None and max_idx != min_idx:
+            idx_start = min(max_idx, min_idx)
+            idx_end = max(max_idx, min_idx)
+            if idx_end - idx_start >= 2:
+                self._fit_manual_region(idx_start, idx_end)
+                return
+
+        # Fallback: use derivative sign-change bounds around click if tips are ambiguous.
+        dy = np.gradient(y_smooth)
+        left_idx = 0
+        for i in range(center_idx - 1, 0, -1):
+            if dy[i - 1] * dy[i] <= 0:
+                left_idx = i
+                break
+
+        right_idx = n - 1
+        for i in range(center_idx + 1, n - 1):
+            if dy[i] * dy[i + 1] <= 0:
+                right_idx = i
+                break
+
+        self._fit_manual_region(left_idx, right_idx)
 
     def _fit_manual_region(self, idx_start, idx_end):
         if self.x is None or self.y is None:
@@ -222,10 +304,50 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         checkbox.setChecked(True)
         self.linearRegionTable.setCellWidget(row_idx, 2, checkbox)
 
+        delete_button = QtWidgets.QPushButton("X")
+        delete_button.setToolTip("Delete this fit")
+        delete_button.setMaximumWidth(26)
+        delete_button.clicked.connect(self._on_delete_linear_region_clicked)
+        self.linearRegionTable.setCellWidget(row_idx, 3, delete_button)
+
         if self.linear_region_list is None:
             self.linear_region_list = []
         line_plot = self.graphWidget.plot(x_linear, predicted, pen=self._linear_region_default_pen)
         self.linear_region_list.append(line_plot)
+
+    def _on_delete_linear_region_clicked(self):
+        sender = self.sender()
+        if sender is None:
+            return
+
+        row_to_remove = None
+        for row in range(self.linearRegionTable.rowCount()):
+            if self.linearRegionTable.cellWidget(row, 3) is sender:
+                row_to_remove = row
+                break
+
+        if row_to_remove is None:
+            return
+
+        self._remove_linear_region_row(row_to_remove)
+
+    def _remove_linear_region_row(self, row):
+        if self.linear_region_list is not None and 0 <= row < len(self.linear_region_list):
+            line_plot = self.linear_region_list.pop(row)
+            try:
+                self.graphWidget.removeItem(line_plot)
+            except Exception:
+                try:
+                    line_plot.clear()
+                except Exception:
+                    pass
+
+        if self._hovered_linear_row == row:
+            self._hovered_linear_row = None
+        elif self._hovered_linear_row is not None and self._hovered_linear_row > row:
+            self._hovered_linear_row -= 1
+
+        self.linearRegionTable.removeRow(row)
 
     def closeEvent(self, event):
         self.main_window.rfController.sweeping = False

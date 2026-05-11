@@ -115,6 +115,10 @@ class MainWindowUIBuilder:
         status_chip.setObjectName("statusChip")
         layout.addWidget(status_chip)
 
+        status_bar = QtWidgets.QStatusBar()
+        status_bar.setObjectName("statusBar")
+        window.setStatusBar(status_bar)
+
         return card
 
     def _build_quick_actions(self, window):
@@ -136,6 +140,8 @@ class MainWindowUIBuilder:
         window.openLIALiveTraceButton.setObjectName("openLIALiveTraceButton")
         window.vectorTestButton = QtWidgets.QPushButton("Vector Test")
         window.vectorTestButton.setObjectName("vectorTestButton")
+        window.resetAllButton = QtWidgets.QPushButton("Reset All")
+        window.resetAllButton.setObjectName("resetAllButton")
 
         layout.addWidget(window.startScanButton)
         layout.addWidget(window.takeODMRButton)
@@ -143,6 +149,7 @@ class MainWindowUIBuilder:
         layout.addWidget(window.autoDiscoverDevicesButton)
         layout.addWidget(window.openLIALiveTraceButton)
         layout.addStretch(1)
+        layout.addWidget(window.resetAllButton)
         layout.addWidget(window.vectorTestButton)
 
         return card

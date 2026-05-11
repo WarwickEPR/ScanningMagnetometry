@@ -85,10 +85,10 @@ class ODMRWindowUIBuilder:
         region_group = QtWidgets.QGroupBox("Linear Regions")
         region_layout = QtWidgets.QVBoxLayout(region_group)
 
-        window.linearRegionTable = QtWidgets.QTableWidget(0, 3)
+        window.linearRegionTable = QtWidgets.QTableWidget(0, 4)
         window.linearRegionTable.setObjectName("linearRegionTable")
         window.linearRegionTable.setHorizontalHeaderLabels(
-            ["Center Freq (GHz)", "Gradient", "Use"]
+            ["Center Freq (GHz)", "Gradient", "Use", ""]
         )
         window.linearRegionTable.horizontalHeader().setStretchLastSection(False)
         window.linearRegionTable.horizontalHeader().setSectionResizeMode(
@@ -99,6 +99,9 @@ class ODMRWindowUIBuilder:
         )
         window.linearRegionTable.horizontalHeader().setSectionResizeMode(
             2, QtWidgets.QHeaderView.ResizeMode.ResizeToContents
+        )
+        window.linearRegionTable.horizontalHeader().setSectionResizeMode(
+            3, QtWidgets.QHeaderView.ResizeMode.ResizeToContents
         )
         window.linearRegionTable.verticalHeader().setVisible(False)
         window.linearRegionTable.setAlternatingRowColors(True)
