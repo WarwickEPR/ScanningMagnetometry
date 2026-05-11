@@ -75,6 +75,8 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
             self.main_window.feedbackToggle.setChecked(True)
             self.feedback = self.main_window.feedbackToggle.isChecked()
 
+        self._apply_mode_visibility()
+
         self.vc1 = self.graphWidget.plot()
         self.vc2 = self.graphWidget.plot()
         self.vc3 = self.graphWidget.plot()
@@ -142,6 +144,71 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
             self.main_window.xStartSpinBox.value(), self.main_window.yStartSpinBox.value()
         )
         time.sleep(5)
+
+    def _apply_mode_visibility(self):
+        use_tracking = bool(self.feedback or self.vector)
+        use_vector_maps = bool(self.vector)
+
+        tab_widget = getattr(self, "scanTabWidget", None)
+        map_tab = getattr(self, "scanMapTab", None)
+        tracking_tab = getattr(self, "scanTrackingTab", None)
+        if tab_widget is not None and map_tab is not None and tracking_tab is not None:
+            tracking_index = tab_widget.indexOf(tracking_tab)
+            map_index = tab_widget.indexOf(map_tab)
+            if tracking_index != -1:
+                if hasattr(tab_widget, "setTabVisible"):
+                    tab_widget.setTabVisible(tracking_index, use_tracking)
+                tab_widget.setTabEnabled(tracking_index, use_tracking)
+            if map_index != -1:
+                tab_widget.setCurrentIndex(map_index)
+
+        for widget_name in [
+            "vectorMapCardBx",
+            "vectorMapCardBy",
+            "vectorMapCardBz",
+            "imageWidget_2",
+            "imageWidget_3",
+            "imageWidget_4",
+        ]:
+            widget = getattr(self, widget_name, None)
+            if widget is not None:
+                widget.setVisible(use_vector_maps)
+
+        # Reflow map layout so primary map expands to fill the tab when vector maps are hidden.
+        map_layout = getattr(self, "mapPanelLayout", None)
+        primary_card = getattr(self, "primaryMapCard", None)
+        vector_bx = getattr(self, "vectorMapCardBx", None)
+        vector_by = getattr(self, "vectorMapCardBy", None)
+        vector_bz = getattr(self, "vectorMapCardBz", None)
+        if map_layout is not None and primary_card is not None:
+            if use_vector_maps:
+                map_layout.addWidget(primary_card, 0, 0, 2, 2)
+                if vector_bx is not None:
+                    map_layout.addWidget(vector_bx, 0, 2, 1, 1)
+                if vector_by is not None:
+                    map_layout.addWidget(vector_by, 1, 2, 1, 1)
+                if vector_bz is not None:
+                    map_layout.addWidget(vector_bz, 0, 3, 2, 1)
+                map_layout.setColumnStretch(0, 3)
+                map_layout.setColumnStretch(1, 3)
+                map_layout.setColumnStretch(2, 2)
+                map_layout.setColumnStretch(3, 2)
+            else:
+                map_layout.addWidget(primary_card, 0, 0, 2, 4)
+                map_layout.setColumnStretch(0, 1)
+                map_layout.setColumnStretch(1, 0)
+                map_layout.setColumnStretch(2, 0)
+                map_layout.setColumnStretch(3, 0)
+
+        for widget_name in [
+            "frequencyTrackingCard",
+            "voltageTrackingCard",
+            "graphWidget",
+            "graphWidget_2",
+        ]:
+            widget = getattr(self, widget_name, None)
+            if widget is not None:
+                widget.setVisible(use_tracking)
 
     def start_scan(self):
         self.scanning = True

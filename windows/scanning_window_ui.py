@@ -16,14 +16,14 @@ class ScanningWindowUIBuilder:
 
         root.addWidget(self._build_top_bar(window))
 
-        body = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
-        body.setChildrenCollapsible(False)
-        root.addWidget(body, 1)
+        window.scanTabWidget = QtWidgets.QTabWidget()
+        window.scanTabWidget.setObjectName("scanTabWidget")
+        root.addWidget(window.scanTabWidget, 1)
 
-        body.addWidget(self._build_map_panel(window))
-        body.addWidget(self._build_trace_panel(window))
-        body.setStretchFactor(0, 5)
-        body.setStretchFactor(1, 3)
+        window.scanMapTab = self._build_map_panel(window)
+        window.scanTrackingTab = self._build_trace_panel(window)
+        window.scanTabWidget.addTab(window.scanMapTab, "Maps")
+        window.scanTabWidget.addTab(window.scanTrackingTab, "Tracking")
 
         self._apply_styles(window)
 
@@ -54,26 +54,31 @@ class ScanningWindowUIBuilder:
         panel = QtWidgets.QFrame()
         panel.setObjectName("mapPanel")
         layout = QtWidgets.QGridLayout(panel)
+        window.mapPanelLayout = layout
         layout.setContentsMargins(10, 10, 10, 10)
         layout.setHorizontalSpacing(8)
         layout.setVerticalSpacing(8)
 
         main_card = self._image_card("Primary Map")
+        window.primaryMapCard = main_card
         window.imageWidget = pg.ImageView()
         window.imageWidget.setObjectName("imageWidget")
         self._attach_image_widget(main_card, window.imageWidget)
 
         card2 = self._image_card("Vector Bx")
+        window.vectorMapCardBx = card2
         window.imageWidget_2 = pg.ImageView()
         window.imageWidget_2.setObjectName("imageWidget_2")
         self._attach_image_widget(card2, window.imageWidget_2)
 
         card3 = self._image_card("Vector By")
+        window.vectorMapCardBy = card3
         window.imageWidget_3 = pg.ImageView()
         window.imageWidget_3.setObjectName("imageWidget_3")
         self._attach_image_widget(card3, window.imageWidget_3)
 
         card4 = self._image_card("Vector Bz")
+        window.vectorMapCardBz = card4
         window.imageWidget_4 = pg.ImageView()
         window.imageWidget_4.setObjectName("imageWidget_4")
         self._attach_image_widget(card4, window.imageWidget_4)
@@ -97,12 +102,14 @@ class ScanningWindowUIBuilder:
         layout.setSpacing(8)
 
         trace_card_1 = QtWidgets.QGroupBox("Frequency Tracking")
+        window.frequencyTrackingCard = trace_card_1
         trace_layout_1 = QtWidgets.QVBoxLayout(trace_card_1)
         window.graphWidget = pg.PlotWidget()
         window.graphWidget.setObjectName("graphWidget")
         trace_layout_1.addWidget(window.graphWidget)
 
         trace_card_2 = QtWidgets.QGroupBox("Voltage Tracking")
+        window.voltageTrackingCard = trace_card_2
         trace_layout_2 = QtWidgets.QVBoxLayout(trace_card_2)
         window.graphWidget_2 = pg.PlotWidget()
         window.graphWidget_2.setObjectName("graphWidget_2")

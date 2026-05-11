@@ -70,7 +70,6 @@ def build_image_colormap():
 
 def style_image_view(image_view):
     """Style an ImageView to match the light card layout."""
-    image_view.setBackground(PLOT_BACKGROUND)
     image_view.view.setBackgroundColor(PLOT_BACKGROUND)
     image_view.view.setBorder(pg.mkPen(PLOT_BORDER, width=1))
     image_view.setColorMap(build_image_colormap())
