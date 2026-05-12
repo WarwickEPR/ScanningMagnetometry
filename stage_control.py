@@ -8,6 +8,7 @@ Uses G-code commands to control movement.
 from PyQt6 import QtWidgets
 import serial
 import re
+import time
 
 
 class StageControl:
@@ -40,6 +41,65 @@ class StageControl:
             self.ser.write(f'{command}\r\n'.encode())
         except:
             self.show_error_message("ERROR: Could not execute stage command")
+
+    @staticmethod
+    def _parse_position_from_response(decoded_response):
+        x_match = re.search(r"X:([-+]?\d*\.?\d+)", decoded_response)
+        y_match = re.search(r"Y:([-+]?\d*\.?\d+)", decoded_response)
+        z_match = re.search(r"Z:([-+]?\d*\.?\d+)", decoded_response)
+        if x_match and y_match and z_match:
+            return float(x_match.group(1)), float(y_match.group(1)), float(z_match.group(1))
+
+        # Fallback for non-standard tokenized formats.
+        tokens = decoded_response.split()
+        if len(tokens) >= 3:
+            try:
+                return float(tokens[0]), float(tokens[1]), float(tokens[2])
+            except Exception:
+                pass
+        return None
+
+    def get_stage_position_tuple(self):
+        response = self.read_gcode('M114')
+        if not response:
+            return None
+        decoded = response.decode("utf-8", errors="ignore").strip()
+        return self._parse_position_from_response(decoded)
+
+    def move_stage_pos_wait(
+        self,
+        x,
+        y,
+        tolerance_mm=0.02,
+        speed_mm_s=5.0,
+        timeout_s=None,
+        poll_s=0.05,
+    ):
+        """Move stage in XY and wait until position reaches target within tolerance.
+
+        If no explicit timeout is provided, compute a dynamic timeout from travel distance
+        and a conservative default speed.
+        """
+        start_pos = self.get_stage_position_tuple()
+        self.set_stage_pos(x, y)
+
+        if timeout_s is None:
+            if start_pos is not None:
+                distance_mm = ((float(x) - start_pos[0]) ** 2 + (float(y) - start_pos[1]) ** 2) ** 0.5
+                timeout_s = max(0.5, (distance_mm / max(1e-6, float(speed_mm_s))) + 1.0)
+            else:
+                timeout_s = 5.0
+
+        end_t = time.monotonic() + max(0.1, float(timeout_s))
+        while time.monotonic() < end_t:
+            pos = self.get_stage_position_tuple()
+            if pos is not None:
+                dx = abs(pos[0] - float(x))
+                dy = abs(pos[1] - float(y))
+                if dx <= float(tolerance_mm) and dy <= float(tolerance_mm):
+                    return True
+            time.sleep(max(0.01, float(poll_s)))
+        return False
 
     def read_gcode(self, command):
         """Send a g-code command to the stage and read the response.
@@ -120,26 +180,11 @@ class StageControl:
         :return:
         """
         try:
-            response = self.read_gcode('M114')
-            if not response:
+            pos = self.get_stage_position_tuple()
+            if pos is None:
                 raise RuntimeError("No response from stage for position query (M114).")
 
-            decoded = response.decode("utf-8", errors="ignore").strip()
-            # Robust parse for typical M114 format: "X:.. Y:.. Z:.."
-            x_match = re.search(r"X:([-+]?\d*\.?\d+)", decoded)
-            y_match = re.search(r"Y:([-+]?\d*\.?\d+)", decoded)
-            z_match = re.search(r"Z:([-+]?\d*\.?\d+)", decoded)
-
-            if x_match and y_match and z_match:
-                xPos = x_match.group(1)
-                yPos = y_match.group(1)
-                zPos = z_match.group(1)
-            else:
-                # Fallback to token parsing for non-standard firmware responses.
-                tokens = decoded.split()
-                if len(tokens) < 3:
-                    raise RuntimeError(f"Unexpected stage response: '{decoded}'")
-                xPos, yPos, zPos = tokens[0], tokens[1], tokens[2]
+            xPos, yPos, zPos = pos
 
             self.window.currentXLabel.setText(str(xPos))
             self.window.currentYLabel.setText(str(yPos))

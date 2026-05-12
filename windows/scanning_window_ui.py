@@ -57,44 +57,57 @@ class ScanningWindowUIBuilder:
     def _build_map_panel(self, window):
         panel = QtWidgets.QFrame()
         panel.setObjectName("mapPanel")
-        layout = QtWidgets.QGridLayout(panel)
-        window.mapPanelLayout = layout
+        layout = QtWidgets.QVBoxLayout(panel)
         layout.setContentsMargins(10, 10, 10, 10)
-        layout.setHorizontalSpacing(8)
-        layout.setVerticalSpacing(8)
+        layout.setSpacing(8)
+
+        window.mapSubTabWidget = QtWidgets.QTabWidget()
+        window.mapSubTabWidget.setObjectName("mapSubTabWidget")
+        layout.addWidget(window.mapSubTabWidget, 1)
 
         main_card = self._image_card("Primary Map")
         window.primaryMapCard = main_card
         window.imageWidget = pg.ImageView()
         window.imageWidget.setObjectName("imageWidget")
         self._attach_image_widget(main_card, window.imageWidget)
+        window.primaryMapTab = QtWidgets.QWidget()
+        primary_tab_layout = QtWidgets.QVBoxLayout(window.primaryMapTab)
+        primary_tab_layout.setContentsMargins(0, 0, 0, 0)
+        primary_tab_layout.addWidget(main_card)
+        window.mapSubTabWidget.addTab(window.primaryMapTab, "Primary")
 
         card2 = self._image_card("Vector Bx")
         window.vectorMapCardBx = card2
         window.imageWidget_2 = pg.ImageView()
         window.imageWidget_2.setObjectName("imageWidget_2")
         self._attach_image_widget(card2, window.imageWidget_2)
+        window.vectorMapTabBx = QtWidgets.QWidget()
+        bx_tab_layout = QtWidgets.QVBoxLayout(window.vectorMapTabBx)
+        bx_tab_layout.setContentsMargins(0, 0, 0, 0)
+        bx_tab_layout.addWidget(card2)
+        window.mapSubTabWidget.addTab(window.vectorMapTabBx, "Bx")
 
         card3 = self._image_card("Vector By")
         window.vectorMapCardBy = card3
         window.imageWidget_3 = pg.ImageView()
         window.imageWidget_3.setObjectName("imageWidget_3")
         self._attach_image_widget(card3, window.imageWidget_3)
+        window.vectorMapTabBy = QtWidgets.QWidget()
+        by_tab_layout = QtWidgets.QVBoxLayout(window.vectorMapTabBy)
+        by_tab_layout.setContentsMargins(0, 0, 0, 0)
+        by_tab_layout.addWidget(card3)
+        window.mapSubTabWidget.addTab(window.vectorMapTabBy, "By")
 
         card4 = self._image_card("Vector Bz")
         window.vectorMapCardBz = card4
         window.imageWidget_4 = pg.ImageView()
         window.imageWidget_4.setObjectName("imageWidget_4")
         self._attach_image_widget(card4, window.imageWidget_4)
-
-        layout.addWidget(main_card, 0, 0, 2, 2)
-        layout.addWidget(card2, 0, 2, 1, 1)
-        layout.addWidget(card3, 1, 2, 1, 1)
-        layout.addWidget(card4, 0, 3, 2, 1)
-        layout.setColumnStretch(0, 3)
-        layout.setColumnStretch(1, 3)
-        layout.setColumnStretch(2, 2)
-        layout.setColumnStretch(3, 2)
+        window.vectorMapTabBz = QtWidgets.QWidget()
+        bz_tab_layout = QtWidgets.QVBoxLayout(window.vectorMapTabBz)
+        bz_tab_layout.setContentsMargins(0, 0, 0, 0)
+        bz_tab_layout.addWidget(card4)
+        window.mapSubTabWidget.addTab(window.vectorMapTabBz, "Bz")
 
         return panel
 

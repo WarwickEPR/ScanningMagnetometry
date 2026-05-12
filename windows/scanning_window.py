@@ -201,7 +201,10 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         self.StageControl.set_stage_pos(
             self.main_window.xStartSpinBox.value(), self.main_window.yStartSpinBox.value()
         )
-        time.sleep(5)
+        self.StageControl.move_stage_pos_wait(
+            self.main_window.xStartSpinBox.value(),
+            self.main_window.yStartSpinBox.value(),
+        )
 
     def _apply_mode_visibility(self):
         use_tracking = bool(self.feedback or self.vector)
@@ -220,43 +223,36 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
             if map_index != -1:
                 tab_widget.setCurrentIndex(map_index)
 
-        for widget_name in [
-            "vectorMapCardBx",
-            "vectorMapCardBy",
-            "vectorMapCardBz",
-            "imageWidget_2",
-            "imageWidget_3",
-            "imageWidget_4",
-        ]:
-            widget = getattr(self, widget_name, None)
-            if widget is not None:
-                widget.setVisible(use_vector_maps)
+        map_sub_tabs = getattr(self, "mapSubTabWidget", None)
+        primary_tab = getattr(self, "primaryMapTab", None)
+        bx_tab = getattr(self, "vectorMapTabBx", None)
+        by_tab = getattr(self, "vectorMapTabBy", None)
+        bz_tab = getattr(self, "vectorMapTabBz", None)
+        if map_sub_tabs is not None:
+            tab_targets = [
+                (primary_tab, not use_vector_maps),
+                (bx_tab, use_vector_maps),
+                (by_tab, use_vector_maps),
+                (bz_tab, use_vector_maps),
+            ]
+            for tab_widget_ref, should_show in tab_targets:
+                if tab_widget_ref is None:
+                    continue
+                tab_index = map_sub_tabs.indexOf(tab_widget_ref)
+                if tab_index == -1:
+                    continue
+                if hasattr(map_sub_tabs, "setTabVisible"):
+                    map_sub_tabs.setTabVisible(tab_index, bool(should_show))
+                map_sub_tabs.setTabEnabled(tab_index, bool(should_show))
 
-        # Reflow map layout so primary map expands to fill the tab when vector maps are hidden.
-        map_layout = getattr(self, "mapPanelLayout", None)
-        primary_card = getattr(self, "primaryMapCard", None)
-        vector_bx = getattr(self, "vectorMapCardBx", None)
-        vector_by = getattr(self, "vectorMapCardBy", None)
-        vector_bz = getattr(self, "vectorMapCardBz", None)
-        if map_layout is not None and primary_card is not None:
-            if use_vector_maps:
-                map_layout.addWidget(primary_card, 0, 0, 2, 2)
-                if vector_bx is not None:
-                    map_layout.addWidget(vector_bx, 0, 2, 1, 1)
-                if vector_by is not None:
-                    map_layout.addWidget(vector_by, 1, 2, 1, 1)
-                if vector_bz is not None:
-                    map_layout.addWidget(vector_bz, 0, 3, 2, 1)
-                map_layout.setColumnStretch(0, 3)
-                map_layout.setColumnStretch(1, 3)
-                map_layout.setColumnStretch(2, 2)
-                map_layout.setColumnStretch(3, 2)
-            else:
-                map_layout.addWidget(primary_card, 0, 0, 2, 4)
-                map_layout.setColumnStretch(0, 1)
-                map_layout.setColumnStretch(1, 0)
-                map_layout.setColumnStretch(2, 0)
-                map_layout.setColumnStretch(3, 0)
+            if use_vector_maps and bx_tab is not None:
+                bx_index = map_sub_tabs.indexOf(bx_tab)
+                if bx_index != -1:
+                    map_sub_tabs.setCurrentIndex(bx_index)
+            elif (not use_vector_maps) and primary_tab is not None:
+                primary_index = map_sub_tabs.indexOf(primary_tab)
+                if primary_index != -1:
+                    map_sub_tabs.setCurrentIndex(primary_index)
 
         for widget_name in [
             "frequencyTrackingCard",
@@ -687,8 +683,7 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         totalSize = len(x_positions) * len(y_positions)
         for _idx, y_position in enumerate(y_positions, 2):
             i = len(x_positions) - 1
-            self.StageControl.set_stage_pos(x_positions[0], y_position)
-            time.sleep(10)
+            self.StageControl.move_stage_pos_wait(x_positions[0], y_position)
             for x_position in x_positions:
                 timeStart = time.time()
                 ts = time.time()
@@ -770,8 +765,7 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                 if self.scanning is False:
                     return
             j += 1
-            self.StageControl.set_stage_pos(x_positions[0], y_position)
-            time.sleep(6)
+            self.StageControl.move_stage_pos_wait(x_positions[0], y_position)
         time.sleep(1)
         self.scanning = False
 
