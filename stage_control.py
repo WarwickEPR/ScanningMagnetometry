@@ -7,6 +7,7 @@ Uses G-code commands to control movement.
 
 from PyQt6 import QtWidgets
 import serial
+import re
 
 
 class StageControl:
@@ -48,15 +49,16 @@ class StageControl:
         :param command: The G-code to send (e.g. M114 for position query)
         :return: The response from the stage
         """
+        response = b""
         try:
             self.ser.write(f'{command}\r\n'.encode())
-            self.response = self.ser.readline()
+            response = self.ser.readline()
             self.ser.readline()  # clears next line
 
         except Exception as error:
             error_dialog = QtWidgets.QErrorMessage(self.window)
             error_dialog.showMessage(str(error))
-        return self.response
+        return response
 
     def connect_stage(self, com_port, baud_rate=115200):
         """Connect to the stage via serial port.
@@ -119,12 +121,29 @@ class StageControl:
         """
         try:
             response = self.read_gcode('M114')
-            response = response.decode("utf-8").split()  # response[0] = xPos, [1] = yPos, [2] = zPos
-            xPos, yPos, zPos = response[0], response[1], response[2]
-            print(xPos)
-            self.window.currentXLabel.setText(xPos)
-            self.window.currentYLabel.setText(yPos)
-            self.window.currentHeightLabel.setText(zPos)
+            if not response:
+                raise RuntimeError("No response from stage for position query (M114).")
+
+            decoded = response.decode("utf-8", errors="ignore").strip()
+            # Robust parse for typical M114 format: "X:.. Y:.. Z:.."
+            x_match = re.search(r"X:([-+]?\d*\.?\d+)", decoded)
+            y_match = re.search(r"Y:([-+]?\d*\.?\d+)", decoded)
+            z_match = re.search(r"Z:([-+]?\d*\.?\d+)", decoded)
+
+            if x_match and y_match and z_match:
+                xPos = x_match.group(1)
+                yPos = y_match.group(1)
+                zPos = z_match.group(1)
+            else:
+                # Fallback to token parsing for non-standard firmware responses.
+                tokens = decoded.split()
+                if len(tokens) < 3:
+                    raise RuntimeError(f"Unexpected stage response: '{decoded}'")
+                xPos, yPos, zPos = tokens[0], tokens[1], tokens[2]
+
+            self.window.currentXLabel.setText(str(xPos))
+            self.window.currentYLabel.setText(str(yPos))
+            self.window.currentHeightLabel.setText(str(zPos))
         except Exception as error:
             error_dialog = QtWidgets.QErrorMessage(self.window)
             error_dialog.showMessage(str(error))

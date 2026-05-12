@@ -369,7 +369,7 @@ class MainWindowUIBuilder:
 
         runtime_grid.addWidget(QtWidgets.QLabel("Scaling"), 0, 0)
         runtime_grid.addWidget(window.scalingFactorSpinBox, 0, 1)
-        runtime_grid.addWidget(QtWidgets.QLabel("Time Constant (us)"), 1, 0)
+        runtime_grid.addWidget(QtWidgets.QLabel("3 dB Bandwidth (Hz)"), 1, 0)
         runtime_grid.addWidget(window.timeConstantSpinBox, 1, 1)
         runtime_grid.addWidget(QtWidgets.QLabel("Input Range"), 2, 0)
         runtime_grid.addWidget(window.rangeSelect, 2, 1)
@@ -499,6 +499,10 @@ class MainWindowUIBuilder:
 
         window.feedbackToggle = QtWidgets.QCheckBox("Enable Feedback")
         window.feedbackToggle.setObjectName("feedbackToggle")
+        window.feedbackRowSelect = QtWidgets.QComboBox()
+        window.feedbackRowSelect.setObjectName("feedbackRowSelect")
+        window.feedbackRowSelect.addItems(["Row 1", "Row 2", "Row 3", "Row 4"])
+        window.feedbackRowSelect.setEnabled(False)
         window.scanAveragingToggle = QtWidgets.QCheckBox("Enable Scan Averaging")
         window.scanAveragingToggle.setObjectName("scanAveragingToggle")
         window.scalarRadio = QtWidgets.QRadioButton("Scalar")
@@ -511,6 +515,12 @@ class MainWindowUIBuilder:
         mode_layout.addWidget(window.scalarRadio)
         mode_layout.addWidget(window.vectorRadio)
         mode_layout.addStretch(1)
+
+        feedback_select_layout = QtWidgets.QHBoxLayout()
+        feedback_select_layout.addWidget(window.feedbackToggle)
+        feedback_select_layout.addWidget(QtWidgets.QLabel("Entry"))
+        feedback_select_layout.addWidget(window.feedbackRowSelect)
+        feedback_select_layout.addStretch(1)
 
         sweep_grid.addWidget(QtWidgets.QLabel("Start Freq (GHz)"), 0, 0)
         sweep_grid.addWidget(window.startFreqBox, 0, 1)
@@ -525,7 +535,7 @@ class MainWindowUIBuilder:
         sweep_grid.addWidget(QtWidgets.QLabel("Definition"), 2, 2)
         sweep_grid.addWidget(window.sweepDefBox, 2, 3)
         sweep_grid.addWidget(window.odmrSweepContinous, 3, 0, 1, 2)
-        sweep_grid.addWidget(window.feedbackToggle, 3, 2, 1, 2)
+        sweep_grid.addLayout(feedback_select_layout, 3, 2, 1, 2)
         sweep_grid.addWidget(window.scanAveragingToggle, 4, 0, 1, 2)
         sweep_grid.addLayout(mode_layout, 4, 2, 1, 2)
 
@@ -553,9 +563,100 @@ class MainWindowUIBuilder:
 
         feedback_layout.addWidget(window.scanODMRPropertiesTable)
 
+        scan_feedback_group = QtWidgets.QGroupBox("Scan Feedback Controls")
+        scan_feedback_grid = QtWidgets.QGridLayout(scan_feedback_group)
+
+        window.scanFbControlModeCombo = QtWidgets.QComboBox()
+        window.scanFbControlModeCombo.setObjectName("scanFbControlModeCombo")
+        window.scanFbControlModeCombo.addItems(["Proportional", "PID"])
+
+        window.scanFbAvgSamplesSpinBox = QtWidgets.QSpinBox()
+        window.scanFbAvgSamplesSpinBox.setObjectName("scanFbAvgSamplesSpinBox")
+        window.scanFbAvgSamplesSpinBox.setRange(1, 10000)
+
+        window.scanFbSampleSpacingSpinBox = self._make_spinbox(decimals=4, minimum=0.0, maximum=10.0)
+        window.scanFbSampleSpacingSpinBox.setObjectName("scanFbSampleSpacingSpinBox")
+
+        window.scanFbSetpointDurationSpinBox = self._make_spinbox(decimals=2, minimum=0.1, maximum=60.0)
+        window.scanFbSetpointDurationSpinBox.setObjectName("scanFbSetpointDurationSpinBox")
+
+        window.scanFbMaxDfStepSpinBox = self._make_spinbox(decimals=4, minimum=0.000001, maximum=1e6)
+        window.scanFbMaxDfStepSpinBox.setObjectName("scanFbMaxDfStepSpinBox")
+
+        window.scanFbMaxTrackingOffsetSpinBox = self._make_spinbox(decimals=4, minimum=0.000001, maximum=1e6)
+        window.scanFbMaxTrackingOffsetSpinBox.setObjectName("scanFbMaxTrackingOffsetSpinBox")
+
+        window.scanFbEmitIntervalSpinBox = self._make_spinbox(decimals=3, minimum=0.01, maximum=10.0)
+        window.scanFbEmitIntervalSpinBox.setObjectName("scanFbEmitIntervalSpinBox")
+
+        window.scanFbDeadbandSpinBox = self._make_spinbox(decimals=6, minimum=0.0, maximum=1e6)
+        window.scanFbDeadbandSpinBox.setObjectName("scanFbDeadbandSpinBox")
+
+        window.scanFbPidKpSpinBox = self._make_spinbox(decimals=6, minimum=0.0, maximum=1e6)
+        window.scanFbPidKpSpinBox.setObjectName("scanFbPidKpSpinBox")
+        window.scanFbPidKiSpinBox = self._make_spinbox(decimals=6, minimum=0.0, maximum=1e6)
+        window.scanFbPidKiSpinBox.setObjectName("scanFbPidKiSpinBox")
+        window.scanFbPidKdSpinBox = self._make_spinbox(decimals=6, minimum=0.0, maximum=1e6)
+        window.scanFbPidKdSpinBox.setObjectName("scanFbPidKdSpinBox")
+        window.scanFbPidIntegralLimitSpinBox = self._make_spinbox(decimals=6, minimum=0.0, maximum=1e6)
+        window.scanFbPidIntegralLimitSpinBox.setObjectName("scanFbPidIntegralLimitSpinBox")
+
+        window.scanFbUseScaledCheckBox = QtWidgets.QCheckBox("Use LIA Scaling")
+        window.scanFbUseScaledCheckBox.setObjectName("scanFbUseScaledCheckBox")
+        window.scanFbBaselineAdaptCheckBox = QtWidgets.QCheckBox("Baseline Adapt")
+        window.scanFbBaselineAdaptCheckBox.setObjectName("scanFbBaselineAdaptCheckBox")
+        window.scanFbBaselineAlphaSpinBox = self._make_spinbox(decimals=4, minimum=0.0, maximum=1.0)
+        window.scanFbBaselineAlphaSpinBox.setObjectName("scanFbBaselineAlphaSpinBox")
+
+        window.scanFbScalarDemodModeCombo = QtWidgets.QComboBox()
+        window.scanFbScalarDemodModeCombo.setObjectName("scanFbScalarDemodModeCombo")
+        window.scanFbScalarDemodModeCombo.addItems(["X", "R"])
+        window.scanFbVectorDemodModeCombo = QtWidgets.QComboBox()
+        window.scanFbVectorDemodModeCombo.setObjectName("scanFbVectorDemodModeCombo")
+        window.scanFbVectorDemodModeCombo.addItems(["X", "R"])
+
+        scan_feedback_grid.addWidget(QtWidgets.QLabel("Mode"), 0, 0)
+        scan_feedback_grid.addWidget(window.scanFbControlModeCombo, 0, 1)
+        scan_feedback_grid.addWidget(QtWidgets.QLabel("Avg Samples"), 0, 2)
+        scan_feedback_grid.addWidget(window.scanFbAvgSamplesSpinBox, 0, 3)
+        scan_feedback_grid.addWidget(QtWidgets.QLabel("Sample Spacing (s)"), 0, 4)
+        scan_feedback_grid.addWidget(window.scanFbSampleSpacingSpinBox, 0, 5)
+
+        scan_feedback_grid.addWidget(QtWidgets.QLabel("Setpoint Duration (s)"), 1, 0)
+        scan_feedback_grid.addWidget(window.scanFbSetpointDurationSpinBox, 1, 1)
+        scan_feedback_grid.addWidget(QtWidgets.QLabel("Max df Step (MHz)"), 1, 2)
+        scan_feedback_grid.addWidget(window.scanFbMaxDfStepSpinBox, 1, 3)
+        scan_feedback_grid.addWidget(QtWidgets.QLabel("Max Offset (MHz)"), 1, 4)
+        scan_feedback_grid.addWidget(window.scanFbMaxTrackingOffsetSpinBox, 1, 5)
+
+        scan_feedback_grid.addWidget(QtWidgets.QLabel("Emit Interval (s)"), 2, 0)
+        scan_feedback_grid.addWidget(window.scanFbEmitIntervalSpinBox, 2, 1)
+        scan_feedback_grid.addWidget(QtWidgets.QLabel("Deadband (V)"), 2, 2)
+        scan_feedback_grid.addWidget(window.scanFbDeadbandSpinBox, 2, 3)
+        scan_feedback_grid.addWidget(window.scanFbUseScaledCheckBox, 2, 4)
+        scan_feedback_grid.addWidget(window.scanFbBaselineAdaptCheckBox, 2, 5)
+
+        scan_feedback_grid.addWidget(QtWidgets.QLabel("PID Kp"), 3, 0)
+        scan_feedback_grid.addWidget(window.scanFbPidKpSpinBox, 3, 1)
+        scan_feedback_grid.addWidget(QtWidgets.QLabel("PID Ki"), 3, 2)
+        scan_feedback_grid.addWidget(window.scanFbPidKiSpinBox, 3, 3)
+        scan_feedback_grid.addWidget(QtWidgets.QLabel("PID Kd"), 3, 4)
+        scan_feedback_grid.addWidget(window.scanFbPidKdSpinBox, 3, 5)
+
+        scan_feedback_grid.addWidget(QtWidgets.QLabel("Integral Limit"), 4, 0)
+        scan_feedback_grid.addWidget(window.scanFbPidIntegralLimitSpinBox, 4, 1)
+        scan_feedback_grid.addWidget(QtWidgets.QLabel("Baseline Alpha"), 4, 2)
+        scan_feedback_grid.addWidget(window.scanFbBaselineAlphaSpinBox, 4, 3)
+        scan_feedback_grid.addWidget(QtWidgets.QLabel("Scalar Demod"), 4, 4)
+        scan_feedback_grid.addWidget(window.scanFbScalarDemodModeCombo, 4, 5)
+
+        scan_feedback_grid.addWidget(QtWidgets.QLabel("Vector Demod"), 5, 0)
+        scan_feedback_grid.addWidget(window.scanFbVectorDemodModeCombo, 5, 1)
+
         layout.addWidget(area_group)
         layout.addWidget(sweep_group)
         layout.addWidget(feedback_group, 1)
+        layout.addWidget(scan_feedback_group)
 
         return tab
 

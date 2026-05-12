@@ -108,7 +108,7 @@ class LIAControl(ThreadedComponent):
                 filter_order = int(self.window.harmonicOrderSelect.currentIndex()) + 1
             filter_order = max(1, filter_order)
 
-            time_constant = float(self.window.timeConstantSpinBox.value()) / 1e6
+            time_constant = float(self.window.get_lia_time_constant_seconds())
             imp_fifty = int(self.window.fiftyOhmCheck.isChecked())
             ac_coupled = int(self.window.acCoupleCheck.isChecked())
             scaling = float(self.window.scalingFactorSpinBox.value())
@@ -170,7 +170,7 @@ class LIAControl(ThreadedComponent):
             self.daq.setInt('/%s/demods/0/order' % self.device, 
                                     (int(self.window.harmonicOrderSelect.currentIndex()) + 1))
             self.daq.setDouble('/%s/demods/0/timeconstant' % self.device, 
-                                        (float(self.window.timeConstantSpinBox.value())) / 1e6)
+                                        float(self.window.get_lia_time_constant_seconds()))
         else:
             self.daq_module.set("grid/mode", 2)
             self.daq_module.set("type", 0)
@@ -200,7 +200,7 @@ class LIAControl(ThreadedComponent):
         in_channel = 0
         demod_index = 1
         filter_order = int(self.window.harmonicOrderSelect.currentText())
-        time_constant = (float(self.window.timeConstantSpinBox.value())) / 1e6
+        time_constant = float(self.window.get_lia_time_constant_seconds())
 
         # Configure signal inputs
         exp_setting = [

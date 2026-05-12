@@ -26,6 +26,9 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         self.feedback_started = False
         self.res_grad = None
         self.res_freq = None
+        self.scalar_ini_freq = None
+        self.latest_feedback_voltage = None
+        self.latest_feedback_shift_mhz = None
         self.dV = None
         self.df = None
         configure_pyqtgraph_defaults()
@@ -67,9 +70,32 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         self.yStep = self.main_window.yStepSpinBox.value()
         self.vector = self.main_window.vectorRadio.isChecked()
         self.feedback = self.main_window.feedbackToggle.isChecked()
+        self.feedback_row_index = int(
+            getattr(self.main_window.feedbackRowSelect, "currentIndex", lambda: 0)()
+        )
         self.scan_averaging = self.main_window.scanAveragingToggle.isChecked()
         self.avg_time = self.main_window.scanAveragingTimeSpinBox.value()
         self.scanning = False
+        self.feedback_voltage_avg_samples = 3
+        self.feedback_voltage_sample_spacing_s = 0.01
+        self.max_df_step_mhz = 0.4
+        self.max_tracking_offset_mhz = 25.0
+        self.min_gradient_abs = 1e-6
+        self.max_history_points = 100
+        self.emit_interval_s = 0.1
+        self.use_scaled_feedback_voltage = False
+        self.deadband_voltage = 0.0
+        self.enable_baseline_adaptation = False
+        self.baseline_adapt_alpha = 0.0
+        self.feedback_control_mode = "Proportional"
+        self.pid_kp = 1.0
+        self.pid_ki = 0.0
+        self.pid_kd = 0.0
+        self.pid_integral_limit = 5.0
+        self.scalar_feedback_demod_mode = "X"
+        self.vector_feedback_demod_mode = "R"
+        self.setpoint_duration_s = 2.0
+        self._refresh_feedback_settings_from_ui()
 
         if self.vector:
             self.main_window.feedbackToggle.setChecked(True)
@@ -97,14 +123,37 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
             and self.main_window.LIAController.LIA_connected
         ):
             if self.feedback or self.vector:
-                if (self.main_window.scanODMRPropertiesTable.item(0, 0) is None) or (
-                    self.main_window.scanODMRPropertiesTable.item(0, 1) is None
-                ):
-                    error_dialog = QtWidgets.QErrorMessage(self.main_window)
-                    error_dialog.showMessage(
-                        "Error: If using feedback or vector, first row of freq. table can not be empty"
-                    )
-                    return
+                if self.vector:
+                    for row in range(4):
+                        freq_item = self.main_window.scanODMRPropertiesTable.item(row, 0)
+                        grad_item = self.main_window.scanODMRPropertiesTable.item(row, 1)
+                        if freq_item is None or grad_item is None:
+                            error_dialog = QtWidgets.QErrorMessage(self.main_window)
+                            error_dialog.showMessage(
+                                "Error: Vector mode requires all 4 feedback rows to be populated."
+                            )
+                            return
+                        try:
+                            float(freq_item.text())
+                            float(grad_item.text())
+                        except Exception:
+                            error_dialog = QtWidgets.QErrorMessage(self.main_window)
+                            error_dialog.showMessage(
+                                "Error: Vector mode feedback table contains invalid values."
+                            )
+                            return
+                else:
+                    target_row = self.feedback_row_index
+                    if (
+                        self.main_window.scanODMRPropertiesTable.item(target_row, 0) is None
+                    ) or (
+                        self.main_window.scanODMRPropertiesTable.item(target_row, 1) is None
+                    ):
+                        error_dialog = QtWidgets.QErrorMessage(self.main_window)
+                        error_dialog.showMessage(
+                            "Error: Selected feedback table entry is empty."
+                        )
+                        return
                 self.thread_function(
                     self.setup_scan,
                     err_fn=self.main_window.show_error_message,
@@ -138,8 +187,16 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                     except Exception:
                         pass
             else:
-                self.res_freq = float(self.main_window.scanODMRPropertiesTable.item(0, 0).text())
-                self.res_grad = float(self.main_window.scanODMRPropertiesTable.item(0, 1).text())
+                self.res_freq = float(
+                    self.main_window.scanODMRPropertiesTable.item(
+                        self.feedback_row_index, 0
+                    ).text()
+                )
+                self.res_grad = float(
+                    self.main_window.scanODMRPropertiesTable.item(
+                        self.feedback_row_index, 1
+                    ).text()
+                )
 
         self.StageControl.set_stage_pos(
             self.main_window.xStartSpinBox.value(), self.main_window.yStartSpinBox.value()
@@ -252,86 +309,355 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
             time.sleep(poll)
         return True
 
-    def initialise_feedback(self, *args, **kwargs):
-        self.main_window.rfController.inst.write("FREQ " + str(round(float(self.res_freq) * 1e9, 12)))
-        time.sleep(1)
-        sample = self.main_window.LIAController.daq.getSample(
-            "/%s/demods/0/sample" % self.main_window.LIAController.device
-        )
-        ini_voltage = sample["x"][0]
-        self.feedback_started = True
-        df_arr = []
-        dV_arr = []
-        res_freq_arr = []
-        last_emit = 0.0
-        while self.scanning:
-            res_freq_arr.append(self.res_freq)
-            sample = self.main_window.LIAController.daq.getSample(
-                "/%s/demods/0/sample" % self.main_window.LIAController.device
+    def _refresh_feedback_settings_from_ui(self):
+        if hasattr(self.main_window, "scanFbAvgSamplesSpinBox"):
+            self.feedback_voltage_avg_samples = max(
+                1, int(self.main_window.scanFbAvgSamplesSpinBox.value())
             )
-            voltage_now = sample["x"][0]
+        if hasattr(self.main_window, "scanFbSampleSpacingSpinBox"):
+            self.feedback_voltage_sample_spacing_s = max(
+                0.0, float(self.main_window.scanFbSampleSpacingSpinBox.value())
+            )
+        if hasattr(self.main_window, "scanFbSetpointDurationSpinBox"):
+            self.setpoint_duration_s = max(
+                0.1, float(self.main_window.scanFbSetpointDurationSpinBox.value())
+            )
+        if hasattr(self.main_window, "scanFbMaxDfStepSpinBox"):
+            self.max_df_step_mhz = max(
+                1e-6, float(self.main_window.scanFbMaxDfStepSpinBox.value())
+            )
+        if hasattr(self.main_window, "scanFbMaxTrackingOffsetSpinBox"):
+            self.max_tracking_offset_mhz = max(
+                1e-6, float(self.main_window.scanFbMaxTrackingOffsetSpinBox.value())
+            )
+        if hasattr(self.main_window, "scanFbEmitIntervalSpinBox"):
+            self.emit_interval_s = max(
+                0.01, float(self.main_window.scanFbEmitIntervalSpinBox.value())
+            )
+        if hasattr(self.main_window, "scanFbDeadbandSpinBox"):
+            self.deadband_voltage = max(
+                0.0, float(self.main_window.scanFbDeadbandSpinBox.value())
+            )
+        if hasattr(self.main_window, "scanFbControlModeCombo"):
+            self.feedback_control_mode = str(
+                self.main_window.scanFbControlModeCombo.currentText()
+            )
+        if hasattr(self.main_window, "scanFbPidKpSpinBox"):
+            self.pid_kp = max(0.0, float(self.main_window.scanFbPidKpSpinBox.value()))
+        if hasattr(self.main_window, "scanFbPidKiSpinBox"):
+            self.pid_ki = max(0.0, float(self.main_window.scanFbPidKiSpinBox.value()))
+        if hasattr(self.main_window, "scanFbPidKdSpinBox"):
+            self.pid_kd = max(0.0, float(self.main_window.scanFbPidKdSpinBox.value()))
+        if hasattr(self.main_window, "scanFbPidIntegralLimitSpinBox"):
+            self.pid_integral_limit = max(
+                0.0, float(self.main_window.scanFbPidIntegralLimitSpinBox.value())
+            )
+        if hasattr(self.main_window, "scanFbUseScaledCheckBox"):
+            self.use_scaled_feedback_voltage = bool(
+                self.main_window.scanFbUseScaledCheckBox.isChecked()
+            )
+        if hasattr(self.main_window, "scanFbBaselineAdaptCheckBox"):
+            self.enable_baseline_adaptation = bool(
+                self.main_window.scanFbBaselineAdaptCheckBox.isChecked()
+            )
+        if hasattr(self.main_window, "scanFbBaselineAlphaSpinBox"):
+            self.baseline_adapt_alpha = max(
+                0.0, float(self.main_window.scanFbBaselineAlphaSpinBox.value())
+            )
+        if hasattr(self.main_window, "scanFbScalarDemodModeCombo"):
+            self.scalar_feedback_demod_mode = str(
+                self.main_window.scanFbScalarDemodModeCombo.currentText()
+            )
+        if hasattr(self.main_window, "scanFbVectorDemodModeCombo"):
+            self.vector_feedback_demod_mode = str(
+                self.main_window.scanFbVectorDemodModeCombo.currentText()
+            )
+
+    @staticmethod
+    def _sleep_with_stop_flag(instance, duration_s, chunk_s=0.01):
+        end_t = time.monotonic() + max(0.0, float(duration_s))
+        while time.monotonic() < end_t:
+            if not instance.scanning:
+                return False
+            time.sleep(min(chunk_s, end_t - time.monotonic()))
+        return True
+
+    @staticmethod
+    def _set_rf_frequency_ghz(rf_inst, frequency_ghz):
+        rf_inst.write("FREQ " + str(round(float(frequency_ghz) * 1e9, 12)))
+
+    def _compute_pid_df(self, error_mhz, index, pid_integral, pid_prev_error, pid_prev_time):
+        now_t = time.monotonic()
+        prev_t = pid_prev_time[index]
+        dt = max(1e-3, now_t - prev_t) if prev_t is not None else 0.0
+
+        if dt > 0.0 and self.pid_ki > 0.0:
+            pid_integral[index] += error_mhz * dt
+            if self.pid_integral_limit > 0.0:
+                pid_integral[index] = float(
+                    np.clip(pid_integral[index], -self.pid_integral_limit, self.pid_integral_limit)
+                )
+
+        derivative = 0.0
+        if dt > 0.0 and pid_prev_error[index] is not None:
+            derivative = (error_mhz - pid_prev_error[index]) / dt
+
+        pid_prev_error[index] = error_mhz
+        pid_prev_time[index] = now_t
+
+        p_term = self.pid_kp * error_mhz
+        i_term = self.pid_ki * pid_integral[index]
+        d_term = self.pid_kd * derivative
+        output = p_term + i_term + d_term
+        return float(output), float(p_term), float(i_term), float(d_term)
+
+    def _read_lia_voltage_average(self, lia_daq, lia_device, scale, demod_mode):
+        samples = []
+        demod_path = f"/{lia_device}/demods/0/sample"
+        for sample_index in range(max(1, int(self.feedback_voltage_avg_samples))):
+            sample = lia_daq.getSample(demod_path)
+            x_val = float(sample["x"][0])
+            y_val = float(sample["y"][0])
+            if demod_mode == "X":
+                signal_value = x_val
+            else:
+                signal_value = float(np.hypot(x_val, y_val))
+            samples.append(signal_value * float(scale))
+            if sample_index < int(self.feedback_voltage_avg_samples) - 1:
+                if not self._sleep_with_stop_flag(self, self.feedback_voltage_sample_spacing_s):
+                    break
+        if not samples:
+            raise RuntimeError("Failed to read LIA sample for feedback.")
+        return float(np.mean(samples))
+
+    def initialise_feedback(self, *args, **kwargs):
+        self._refresh_feedback_settings_from_ui()
+        rf_inst = getattr(self.main_window.rfController, "inst", None)
+        lia_daq = getattr(self.main_window.LIAController, "daq", None)
+        lia_device = getattr(self.main_window.LIAController, "device", None)
+        if rf_inst is None:
+            raise RuntimeError("RF source is not connected. Connect RF before starting feedback scan.")
+        if lia_daq is None or lia_device is None:
+            raise RuntimeError("LIA is not connected. Connect LIA before starting feedback scan.")
+
+        runtime_scale = float(
+            getattr(self.main_window.LIAController, "scaling_Factor", None)
+            or self.main_window.scalingFactorSpinBox.value()
+            or 1.0
+        )
+        scale = runtime_scale if self.use_scaled_feedback_voltage else 1.0
+        settle_time_s = max(
+            0.03,
+            min(
+                0.3,
+                3.0 * float(self.main_window.get_lia_time_constant_seconds()),
+            ),
+        )
+
+        if abs(float(self.res_grad)) < self.min_gradient_abs:
+            raise ValueError(f"Selected gradient is too close to zero ({self.res_grad}).")
+
+        self.scalar_ini_freq = float(self.res_freq)
+        self._set_rf_frequency_ghz(rf_inst, self.res_freq)
+        if not self._sleep_with_stop_flag(self, settle_time_s):
+            return
+
+        demod_path = f"/{lia_device}/demods/0/sample"
+        setpoint_samples = []
+        setpoint_end = time.monotonic() + self.setpoint_duration_s
+        while time.monotonic() < setpoint_end:
+            if not self.scanning:
+                return
+            sample = lia_daq.getSample(demod_path)
+            setpoint_samples.append(float(sample["x"][0]) * float(scale))
+            time.sleep(0.01)
+        if not setpoint_samples:
+            raise RuntimeError("Failed to acquire scalar feedback setpoint samples.")
+        ini_voltage = float(np.mean(setpoint_samples))
+
+        self.feedback_started = True
+        shift_arr = []
+        voltage_arr = []
+        pid_integral = [0.0]
+        pid_prev_error = [None]
+        pid_prev_time = [None]
+        last_emit = 0.0
+
+        while self.scanning:
+            self._refresh_feedback_settings_from_ui()
+            self._set_rf_frequency_ghz(rf_inst, self.res_freq)
+            if not self._sleep_with_stop_flag(self, settle_time_s):
+                return
+
+            voltage_now = self._read_lia_voltage_average(
+                lia_daq, lia_device, scale, self.scalar_feedback_demod_mode
+            )
             self.dV = voltage_now - ini_voltage
-            self.df = (1 / self.res_grad) * (-self.dV)
-            self.res_freq = self.res_freq + self.df
-            self.main_window.rfController.inst.write("FREQ " + str(round(float(self.res_freq) * 1e9, 12)))
-            if len(df_arr) > 100:
-                df_arr.pop(0)
-                dV_arr.pop(0)
-                res_freq_arr.pop(0)
-            df_arr.append(self.df)
-            dV_arr.append(self.dV)
-            time.sleep(0.1)
+            error_mhz = (1.0 / float(self.res_grad)) * (-self.dV)
+
+            if abs(self.dV) < self.deadband_voltage:
+                raw_df = 0.0
+                pid_prev_time[0] = None
+                pid_prev_error[0] = 0.0
+            else:
+                if self.feedback_control_mode == "PID":
+                    raw_df, _p_term, _i_term, _d_term = self._compute_pid_df(
+                        error_mhz, 0, pid_integral, pid_prev_error, pid_prev_time
+                    )
+                else:
+                    raw_df = error_mhz
+
+            self.df = float(np.clip(raw_df, -self.max_df_step_mhz, self.max_df_step_mhz))
+            candidate_freq = float(self.res_freq) + self.df / 1e3
+            min_freq = self.scalar_ini_freq - (self.max_tracking_offset_mhz / 1e3)
+            max_freq = self.scalar_ini_freq + (self.max_tracking_offset_mhz / 1e3)
+            self.res_freq = float(np.clip(candidate_freq, min_freq, max_freq))
+            self._set_rf_frequency_ghz(rf_inst, self.res_freq)
+
+            if self.enable_baseline_adaptation and self.baseline_adapt_alpha > 0.0:
+                ini_voltage = (
+                    (1.0 - self.baseline_adapt_alpha) * ini_voltage
+                    + self.baseline_adapt_alpha * voltage_now
+                )
+
+            shift_mhz = (float(self.res_freq) - float(self.scalar_ini_freq)) * 1e3
+            self.latest_feedback_voltage = voltage_now
+            self.latest_feedback_shift_mhz = shift_mhz
+            shift_arr.append(shift_mhz)
+            voltage_arr.append(voltage_now)
+
+            while len(shift_arr) > self.max_history_points:
+                shift_arr.pop(0)
+            while len(voltage_arr) > self.max_history_points:
+                voltage_arr.pop(0)
+
+            if not self._sleep_with_stop_flag(self, 0.03):
+                return
             now = time.monotonic()
-            if now - last_emit >= 0.1:
-                kwargs["progress_callback"].emit([res_freq_arr, dV_arr])
+            if now - last_emit >= self.emit_interval_s:
+                kwargs["progress_callback"].emit([shift_arr, voltage_arr])
                 last_emit = now
 
     def initialise_vector_feedback(self, *args, **kwargs):
-        ini_voltage = []
-        self.ini_freq = []
-        scale = 750
-        self.vector_freqs_plotting = self.vector_freqs
+        self._refresh_feedback_settings_from_ui()
+        rf_inst = getattr(self.main_window.rfController, "inst", None)
+        lia_daq = getattr(self.main_window.LIAController, "daq", None)
+        lia_device = getattr(self.main_window.LIAController, "device", None)
+        if rf_inst is None:
+            raise RuntimeError("RF source is not connected. Connect RF before vector scan.")
+        if lia_daq is None or lia_device is None:
+            raise RuntimeError("LIA is not connected. Connect LIA before vector scan.")
+
+        runtime_scale = float(
+            getattr(self.main_window.LIAController, "scaling_Factor", None)
+            or self.main_window.scalingFactorSpinBox.value()
+            or 1.0
+        )
+        scale = runtime_scale if self.use_scaled_feedback_voltage else 1.0
+        settle_time_s = max(
+            0.03,
+            min(
+                0.3,
+                3.0 * float(self.main_window.get_lia_time_constant_seconds()),
+            ),
+        )
+
+        self.ini_freq = list(self.vector_freqs)
+        ini_voltage = [None, None, None, None]
+        demod_path = f"/{lia_device}/demods/0/sample"
         for i in range(len(self.vector_freqs)):
-            self.ini_freq.append(self.vector_freqs[i])
-            self.main_window.rfController.inst.write(
-                "FREQ " + str(round(float(self.vector_freqs[i]) * 1e9, 12))
-            )
-            time.sleep(1)
-            sample = self.main_window.LIAController.daq.getSample(
-                "/%s/demods/0/sample" % self.main_window.LIAController.device
-            )
-            ini_voltage.append(sample["x"][0] * scale)
+            if not self.scanning:
+                return
+            self._set_rf_frequency_ghz(rf_inst, self.vector_freqs[i])
+            if not self._sleep_with_stop_flag(self, settle_time_s):
+                return
+            setpoint_samples = []
+            setpoint_end = time.monotonic() + self.setpoint_duration_s
+            while time.monotonic() < setpoint_end:
+                if not self.scanning:
+                    return
+                sample = lia_daq.getSample(demod_path)
+                x_val = float(sample["x"][0])
+                y_val = float(sample["y"][0])
+                if self.vector_feedback_demod_mode == "X":
+                    setpoint_samples.append(x_val * float(scale))
+                else:
+                    setpoint_samples.append(float(np.hypot(x_val, y_val)) * float(scale))
+                time.sleep(0.01)
+            ini_voltage[i] = float(np.mean(setpoint_samples)) if setpoint_samples else 0.0
+
         df_arr = [[], [], [], []]
         dV_arr = [[], [], [], []]
         res_freq_arr = [[], [], [], []]
         self.feedback_started = True
+        pid_integral = [0.0, 0.0, 0.0, 0.0]
+        pid_prev_error = [None, None, None, None]
+        pid_prev_time = [None, None, None, None]
         last_emit = 0.0
         while self.scanning:
+            self._refresh_feedback_settings_from_ui()
             for i in range(len(self.vector_freqs)):
-                self.main_window.rfController.inst.write(
-                    "FREQ " + str(round(float(self.vector_freqs[i]) * 1e9, 12))
+                if not self.scanning:
+                    return
+                self._set_rf_frequency_ghz(rf_inst, self.vector_freqs[i])
+                if not self._sleep_with_stop_flag(self, settle_time_s):
+                    return
+
+                voltage_now = self._read_lia_voltage_average(
+                    lia_daq, lia_device, scale, self.vector_feedback_demod_mode
                 )
-                time.sleep(0.08)
-                sample = self.main_window.LIAController.daq.getSample(
-                    "/%s/demods/0/sample" % self.main_window.LIAController.device
-                )
-                voltage_now = sample["x"][0] * scale
                 self.dV = voltage_now - ini_voltage[i]
-                self.df = (1 / self.vector_grads[i]) * (-self.dV)
-                self.vector_freqs[i] = self.vector_freqs[i] + self.df / 1e3
+                gradient = float(self.vector_grads[i])
+                if abs(gradient) < self.min_gradient_abs:
+                    raise ValueError(
+                        f"Gradient for resonance {i + 1} is too close to zero ({gradient})."
+                    )
+
+                error_mhz = (1.0 / gradient) * (-self.dV)
+                if abs(self.dV) < self.deadband_voltage:
+                    raw_df = 0.0
+                    pid_prev_time[i] = None
+                    pid_prev_error[i] = 0.0
+                else:
+                    if self.feedback_control_mode == "PID":
+                        raw_df, _p_term, _i_term, _d_term = self._compute_pid_df(
+                            error_mhz, i, pid_integral, pid_prev_error, pid_prev_time
+                        )
+                    else:
+                        raw_df = error_mhz
+
+                self.df = float(np.clip(raw_df, -self.max_df_step_mhz, self.max_df_step_mhz))
+                candidate_freq = self.vector_freqs[i] + self.df / 1e3
+                base_freq = self.ini_freq[i]
+                min_freq = base_freq - (self.max_tracking_offset_mhz / 1e3)
+                max_freq = base_freq + (self.max_tracking_offset_mhz / 1e3)
+                self.vector_freqs[i] = float(np.clip(candidate_freq, min_freq, max_freq))
+
+                if self.enable_baseline_adaptation and self.baseline_adapt_alpha > 0.0:
+                    ini_voltage[i] = (
+                        (1.0 - self.baseline_adapt_alpha) * ini_voltage[i]
+                        + self.baseline_adapt_alpha * voltage_now
+                    )
+
                 df_arr[i].append(self.df)
                 dV_arr[i].append(self.dV)
                 res_freq_arr[i].append(self.vector_freqs[i])
-
-            if len(df_arr[0]) > 100:
-                for i in range(len(self.vector_freqs)):
+                while len(df_arr[i]) > self.max_history_points:
                     df_arr[i].pop(0)
+                while len(dV_arr[i]) > self.max_history_points:
                     dV_arr[i].pop(0)
+                while len(res_freq_arr[i]) > self.max_history_points:
                     res_freq_arr[i].pop(0)
-            time.sleep(0.1)
+
+            if not self._sleep_with_stop_flag(self, 0.03):
+                return
             now = time.monotonic()
-            if now - last_emit >= 0.1:
-                kwargs["progress_callback"].emit([res_freq_arr, dV_arr])
+            if now - last_emit >= self.emit_interval_s:
+                shift_mhz_arr = [
+                    [(freq - self.ini_freq[i]) * 1e3 for freq in res_freq_arr[i]]
+                    for i in range(4)
+                ]
+                kwargs["progress_callback"].emit([shift_mhz_arr, dV_arr])
                 last_emit = now
 
     def scan_no_vector(self, *args, **kwargs):
@@ -370,7 +696,16 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                 self.StageControl.set_stage_pos(x_position, y_position)
                 time.sleep(scan_time)
                 if self.feedback:
-                    self.df_arr[0, j, i] = self.res_freq
+                    self.df_arr[0, j, i] = (
+                        self.latest_feedback_shift_mhz
+                        if self.latest_feedback_shift_mhz is not None
+                        else (float(self.res_freq) - float(self.scalar_ini_freq)) * 1e3
+                    )
+                    self.voltageArr[0, j, i] = (
+                        self.latest_feedback_voltage
+                        if self.latest_feedback_voltage is not None
+                        else 0.0
+                    )
                     emit_if_due(self.df_arr)
                 else:
                     if self.scan_averaging:
@@ -383,7 +718,7 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                         sample = self.main_window.LIAController.daq.getSample(
                             "/%s/demods/0/sample" % self.main_window.LIAController.device
                         )
-                        self.voltageArr[0, j, i] = np.sqrt(((sample["x"][0]) ** 2 + (sample["y"][0]) ** 2))
+                        self.voltageArr[0, j, i] = float(sample["x"][0])
                         emit_if_due(self.voltageArr)
                 i = i - 1
                 te = time.time()
@@ -473,6 +808,16 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
             self.fc2.setData(arrs[1][1], pen=get_plot_pen(1))
             self.fc3.setData(arrs[1][2], pen=get_plot_pen(2))
             self.fc4.setData(arrs[1][3], pen=get_plot_pen(3))
+        else:
+            self.vc1.setData(arrs[0], pen=get_plot_pen(0))
+            self.vc2.setData([])
+            self.vc3.setData([])
+            self.vc4.setData([])
+
+            self.fc1.setData(arrs[1], pen=get_plot_pen(0))
+            self.fc2.setData([])
+            self.fc3.setData([])
+            self.fc4.setData([])
 
     def export_data(self):
         folderpath = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Folder")

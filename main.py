@@ -145,6 +145,12 @@ class MainUI(QtWidgets.QMainWindow):
 
         self.startScanButton.clicked.connect(self.open_scan_window)
         self.autoDiscoverDevicesButton.clicked.connect(self.auto_discover_devices)
+        self.feedbackToggle.toggled.connect(self._update_feedback_row_selector_state)
+        self._update_feedback_row_selector_state(self.feedbackToggle.isChecked())
+        self.scanFbControlModeCombo.currentIndexChanged.connect(
+            self._update_scan_pid_control_state
+        )
+        self._update_scan_pid_control_state()
 
         #  LIA ui controls
         self.connectLIAButton.clicked.connect(self.connect_lia)
@@ -217,6 +223,42 @@ class MainUI(QtWidgets.QMainWindow):
         self._health_check_timer.timeout.connect(self._run_idle_health_check)
         self._health_check_timer.start()
         return
+
+    @staticmethod
+    def _time_constant_to_3db_hz(time_constant_s, filter_order):
+        n = max(1, int(filter_order))
+        tau = max(1e-9, float(time_constant_s))
+        factor = np.sqrt((2.0 ** (1.0 / n)) - 1.0)
+        return float(factor / (2.0 * np.pi * tau))
+
+    @staticmethod
+    def _3db_hz_to_time_constant(bandwidth_hz, filter_order):
+        n = max(1, int(filter_order))
+        bw = max(1e-9, float(bandwidth_hz))
+        factor = np.sqrt((2.0 ** (1.0 / n)) - 1.0)
+        return float(factor / (2.0 * np.pi * bw))
+
+    def get_lia_filter_order(self):
+        order_text = str(self.harmonicOrderSelect.currentText()).strip()
+        if order_text and order_text.replace('.', '', 1).isdigit():
+            return max(1, int(float(order_text)))
+        return max(1, int(self.harmonicOrderSelect.currentIndex()) + 1)
+
+    def get_lia_time_constant_seconds(self):
+        return self._3db_hz_to_time_constant(
+            float(self.timeConstantSpinBox.value()),
+            self.get_lia_filter_order(),
+        )
+
+    def _update_feedback_row_selector_state(self, feedback_enabled):
+        self.feedbackRowSelect.setEnabled(bool(feedback_enabled))
+
+    def _update_scan_pid_control_state(self, _index=None):
+        pid_enabled = self.scanFbControlModeCombo.currentText() == "PID"
+        self.scanFbPidKpSpinBox.setEnabled(pid_enabled)
+        self.scanFbPidKiSpinBox.setEnabled(pid_enabled)
+        self.scanFbPidKdSpinBox.setEnabled(pid_enabled)
+        self.scanFbPidIntegralLimitSpinBox.setEnabled(pid_enabled)
     
     def auto_discover_devices(self):
         found = []
@@ -693,6 +735,26 @@ class MainUI(QtWidgets.QMainWindow):
             "RF_Params": {
                 "Ext_Mod": "False",
                 "Feedback_Freq_Table": [[2.71, 2.72, 2.73, 2.74], [0.1, 0.1, 0.1, 0.1]],
+                "Feedback_Selected_Row": "0",
+                "Scan_Feedback_Settings": {
+                    "Avg_Samples": "3",
+                    "Sample_Spacing_s": "0.01",
+                    "Setpoint_Duration_s": "2.0",
+                    "Max_df_Step_MHz": "0.4",
+                    "Max_Tracking_Offset_MHz": "25.0",
+                    "Emit_Interval_s": "0.1",
+                    "Deadband_V": "0.0",
+                    "Control_Mode": "Proportional",
+                    "PID_Kp": "1.0",
+                    "PID_Ki": "0.0",
+                    "PID_Kd": "0.0",
+                    "PID_Integral_Limit": "5.0",
+                    "Use_Scaled_Voltage": "False",
+                    "Baseline_Adapt": "False",
+                    "Baseline_Alpha": "0.0",
+                    "Scalar_Demod_Mode": "X",
+                    "Vector_Demod_Mode": "R",
+                },
                 "A_Matrix_Values": [[1, 1, 1], [1, 1, 1], [1, 1, 1], [1, 1, 1]],
                 "Freq": "2.75",
                 "Mod_Amp": "2.8",
@@ -716,7 +778,7 @@ class MainUI(QtWidgets.QMainWindow):
                 "Range": "0",
                 "Sample_Rate": "50",
                 "Scaling": "750",
-                "Time_Const": "600",
+                "Bandwidth_3dB_Hz": "53",
             },
         }
 
@@ -993,6 +1055,60 @@ class MainUI(QtWidgets.QMainWindow):
                     row, 1, QtWidgets.QTableWidgetItem(str(grads[row]))
                 )
             self._refresh_scan_table_set_buttons()
+            selected_row = int(
+                self.default_parameters["RF_Params"].get("Feedback_Selected_Row", 0)
+            )
+            self.feedbackRowSelect.setCurrentIndex(max(0, min(3, selected_row)))
+
+            scan_fb_cfg = self.default_parameters["RF_Params"].get(
+                "Scan_Feedback_Settings", {}
+            )
+            self.scanFbAvgSamplesSpinBox.setValue(
+                int(scan_fb_cfg.get("Avg_Samples", 3))
+            )
+            self.scanFbSampleSpacingSpinBox.setValue(
+                float(scan_fb_cfg.get("Sample_Spacing_s", 0.01))
+            )
+            self.scanFbSetpointDurationSpinBox.setValue(
+                float(scan_fb_cfg.get("Setpoint_Duration_s", 2.0))
+            )
+            self.scanFbMaxDfStepSpinBox.setValue(
+                float(scan_fb_cfg.get("Max_df_Step_MHz", 0.4))
+            )
+            self.scanFbMaxTrackingOffsetSpinBox.setValue(
+                float(scan_fb_cfg.get("Max_Tracking_Offset_MHz", 25.0))
+            )
+            self.scanFbEmitIntervalSpinBox.setValue(
+                float(scan_fb_cfg.get("Emit_Interval_s", 0.1))
+            )
+            self.scanFbDeadbandSpinBox.setValue(
+                float(scan_fb_cfg.get("Deadband_V", 0.0))
+            )
+            self.scanFbControlModeCombo.setCurrentText(
+                str(scan_fb_cfg.get("Control_Mode", "Proportional"))
+            )
+            self.scanFbPidKpSpinBox.setValue(float(scan_fb_cfg.get("PID_Kp", 1.0)))
+            self.scanFbPidKiSpinBox.setValue(float(scan_fb_cfg.get("PID_Ki", 0.0)))
+            self.scanFbPidKdSpinBox.setValue(float(scan_fb_cfg.get("PID_Kd", 0.0)))
+            self.scanFbPidIntegralLimitSpinBox.setValue(
+                float(scan_fb_cfg.get("PID_Integral_Limit", 5.0))
+            )
+            self.scanFbUseScaledCheckBox.setChecked(
+                str(scan_fb_cfg.get("Use_Scaled_Voltage", "False")).strip().lower() == "true"
+            )
+            self.scanFbBaselineAdaptCheckBox.setChecked(
+                str(scan_fb_cfg.get("Baseline_Adapt", "False")).strip().lower() == "true"
+            )
+            self.scanFbBaselineAlphaSpinBox.setValue(
+                float(scan_fb_cfg.get("Baseline_Alpha", 0.0))
+            )
+            self.scanFbScalarDemodModeCombo.setCurrentText(
+                str(scan_fb_cfg.get("Scalar_Demod_Mode", "X"))
+            )
+            self.scanFbVectorDemodModeCombo.setCurrentText(
+                str(scan_fb_cfg.get("Vector_Demod_Mode", "R"))
+            )
+            self._update_scan_pid_control_state()
 
             # set lia params
             self.odmrAqDurBox.setValue(
@@ -1007,15 +1123,22 @@ class MainUI(QtWidgets.QMainWindow):
             self.scalingFactorSpinBox.setValue(
                 int(self.default_parameters["LIA_Params"]["Scaling"])
             )
-            self.timeConstantSpinBox.setValue(
-                int(self.default_parameters["LIA_Params"]["Time_Const"])
-            )
             self.rangeSelect.setCurrentIndex(
                 int(self.default_parameters["LIA_Params"]["Range"])
             )
             self.harmonicOrderSelect.setCurrentIndex(
                 int(self.default_parameters["LIA_Params"]["Filter_Order"])
             )
+            lia_cfg = self.default_parameters["LIA_Params"]
+            bw_value = lia_cfg.get("Bandwidth_3dB_Hz", None)
+            if bw_value is not None:
+                self.timeConstantSpinBox.setValue(max(1, int(float(bw_value))))
+            else:
+                # Backward compatibility with older configs storing time constant in microseconds.
+                legacy_tc_us = float(lia_cfg.get("Time_Const", 600.0))
+                filter_order = self.get_lia_filter_order()
+                bw_hz = self._time_constant_to_3db_hz(legacy_tc_us / 1e6, filter_order)
+                self.timeConstantSpinBox.setValue(max(1, int(round(bw_hz))))
             self.fftAverageSpinBox.setValue(
                 int(self.default_parameters["LIA_Params"]["FFT_Average"])
             )
@@ -1089,6 +1212,28 @@ class MainUI(QtWidgets.QMainWindow):
         new_config["RF_Params"]["Mod_On"] = str(self.toggleModOnOff.isChecked())
         new_config["RF_Params"]["Ext_Mod"] = str(self.toggleExtModOnOff.isChecked())
         new_config["RF_Params"]["A_Matrix_Values"] = self.a_matrix_values
+        new_config["RF_Params"]["Feedback_Selected_Row"] = str(
+            self.feedbackRowSelect.currentIndex()
+        )
+        new_config["RF_Params"]["Scan_Feedback_Settings"] = {
+            "Avg_Samples": str(self.scanFbAvgSamplesSpinBox.value()),
+            "Sample_Spacing_s": str(self.scanFbSampleSpacingSpinBox.value()),
+            "Setpoint_Duration_s": str(self.scanFbSetpointDurationSpinBox.value()),
+            "Max_df_Step_MHz": str(self.scanFbMaxDfStepSpinBox.value()),
+            "Max_Tracking_Offset_MHz": str(self.scanFbMaxTrackingOffsetSpinBox.value()),
+            "Emit_Interval_s": str(self.scanFbEmitIntervalSpinBox.value()),
+            "Deadband_V": str(self.scanFbDeadbandSpinBox.value()),
+            "Control_Mode": str(self.scanFbControlModeCombo.currentText()),
+            "PID_Kp": str(self.scanFbPidKpSpinBox.value()),
+            "PID_Ki": str(self.scanFbPidKiSpinBox.value()),
+            "PID_Kd": str(self.scanFbPidKdSpinBox.value()),
+            "PID_Integral_Limit": str(self.scanFbPidIntegralLimitSpinBox.value()),
+            "Use_Scaled_Voltage": str(self.scanFbUseScaledCheckBox.isChecked()),
+            "Baseline_Adapt": str(self.scanFbBaselineAdaptCheckBox.isChecked()),
+            "Baseline_Alpha": str(self.scanFbBaselineAlphaSpinBox.value()),
+            "Scalar_Demod_Mode": str(self.scanFbScalarDemodModeCombo.currentText()),
+            "Vector_Demod_Mode": str(self.scanFbVectorDemodModeCombo.currentText()),
+        }
 
         freqs = []
         grads = []
@@ -1108,7 +1253,7 @@ class MainUI(QtWidgets.QMainWindow):
         new_config["LIA_Params"]["Burst_Dur"] = str(self.odmrAqBurstDurBox.value())
         new_config["LIA_Params"]["Sample_Rate"] = str(self.odmrAqSampleRateBox.value())
         new_config["LIA_Params"]["Scaling"] = str(self.scalingFactorSpinBox.value())
-        new_config["LIA_Params"]["Time_Const"] = str(self.timeConstantSpinBox.value())
+        new_config["LIA_Params"]["Bandwidth_3dB_Hz"] = str(self.timeConstantSpinBox.value())
         new_config["LIA_Params"]["Range"] = str(self.rangeSelect.currentIndex())
         new_config["LIA_Params"]["Filter_Order"] = str(
             self.harmonicOrderSelect.currentIndex()
@@ -1648,7 +1793,7 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
             0.03,
             min(
                 0.3,
-                3.0 * (float(window.timeConstantSpinBox.value()) / 1e6),
+                3.0 * float(window.get_lia_time_constant_seconds()),
             ),
         )
         ini_voltage = [None, None, None, None]
