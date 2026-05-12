@@ -532,15 +532,22 @@ class MainWindowUIBuilder:
         feedback_group = QtWidgets.QGroupBox("Feedback Frequencies")
         feedback_layout = QtWidgets.QVBoxLayout(feedback_group)
 
-        window.scanODMRPropertiesTable = QtWidgets.QTableWidget(4, 2)
+        window.scanODMRPropertiesTable = QtWidgets.QTableWidget(4, 3)
         window.scanODMRPropertiesTable.setObjectName("scanODMRPropertiesTable")
         window.scanODMRPropertiesTable.setHorizontalHeaderLabels([
             "Frequency (GHz)",
             "Gradient (V/MHz)",
+            "Set RF",
         ])
-        window.scanODMRPropertiesTable.horizontalHeader().setStretchLastSection(True)
+        window.scanODMRPropertiesTable.horizontalHeader().setStretchLastSection(False)
         window.scanODMRPropertiesTable.horizontalHeader().setSectionResizeMode(
             0, QtWidgets.QHeaderView.ResizeMode.Stretch
+        )
+        window.scanODMRPropertiesTable.horizontalHeader().setSectionResizeMode(
+            1, QtWidgets.QHeaderView.ResizeMode.Stretch
+        )
+        window.scanODMRPropertiesTable.horizontalHeader().setSectionResizeMode(
+            2, QtWidgets.QHeaderView.ResizeMode.ResizeToContents
         )
         window.scanODMRPropertiesTable.verticalHeader().setVisible(False)
 

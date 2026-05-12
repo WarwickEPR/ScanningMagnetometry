@@ -117,6 +117,7 @@ class MainUI(QtWidgets.QMainWindow):
         except Exception as error:
             print(error)
             self.load_config(config_file_name=self.fallback_config_file)
+        self._refresh_scan_table_set_buttons()
 
         # Device discovery is now user-triggered via button click.
 
@@ -415,6 +416,38 @@ class MainUI(QtWidgets.QMainWindow):
         use_dropdown = bool(use_dropdown_values)
         self.rfDiscoveredIpCombo.setEnabled(use_dropdown)
         self.MWSourceIPAddressBox.setEnabled(not use_dropdown)
+
+    def _refresh_scan_table_set_buttons(self):
+        for row in range(self.scanODMRPropertiesTable.rowCount()):
+            button = QtWidgets.QPushButton("Set")
+            button.clicked.connect(
+                lambda _checked=False, row_index=row: self._set_rf_from_scan_table_row(row_index)
+            )
+            self.scanODMRPropertiesTable.setCellWidget(row, 2, button)
+
+    def _set_rf_from_scan_table_row(self, row_index):
+        freq_item = self.scanODMRPropertiesTable.item(int(row_index), 0)
+        if freq_item is None:
+            self.show_error_message("Selected row does not contain a frequency value.")
+            return
+        try:
+            freq_ghz = float(freq_item.text())
+        except Exception:
+            self.show_error_message("Selected row frequency is invalid.")
+            return
+
+        if not bool(getattr(self.rfController, "rf_connected", False)):
+            self.show_error_message("RF source is not connected.")
+            return
+        if bool(getattr(self.rfController, "sweeping", False)):
+            self.show_error_message("Cannot set frequency while ODMR sweep is running.")
+            return
+
+        self.freqBox.setValue(freq_ghz)
+        try:
+            self.rfController.set_freq()
+        except Exception as error:
+            self.show_error_message(error)
 
     def _update_rf_discovered_values(self, device_ips=None):
         device_ips = device_ips or []
@@ -959,6 +992,7 @@ class MainUI(QtWidgets.QMainWindow):
                 self.scanODMRPropertiesTable.setItem(
                     row, 1, QtWidgets.QTableWidgetItem(str(grads[row]))
                 )
+            self._refresh_scan_table_set_buttons()
 
             # set lia params
             self.odmrAqDurBox.setValue(
@@ -1618,18 +1652,32 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
             ),
         )
         ini_voltage = [None, None, None, None]
+        _setpoint_duration_s = 2.0  # sample for 2 seconds per resonance to measure setpoint
 
         #  iterate through the starting frequency list, set the RF source to that value and get the voltage value
         # this will be used as the set-point for the feedback, these are appended to list ini_voltage
-        for i in [index for index, value in enumerate(self.vector_freqs) if value is not None]:
+        demod_path = f"/{lia_device}/demods/0/sample"
+        for i in self._get_active_tracking_indices(validate=True):
             if not self.scanning:
                 return
             self._set_rf_frequency_ghz(rf_inst, self.vector_freqs[i])
             if not self._sleep_with_stop_flag(self, settle_time_s):
                 return
-            ini_voltage[i] = (
-                self._read_lia_voltage_average(lia_daq, lia_device, scale)
-            )
+            # Average over 2 seconds to get a stable setpoint
+            _sp_samples = []
+            _sp_t_end = time.monotonic() + _setpoint_duration_s
+            while time.monotonic() < _sp_t_end:
+                if not self.scanning:
+                    return
+                sample = lia_daq.getSample(demod_path)
+                x_val = float(sample["x"][0])
+                y_val = float(sample["y"][0])
+                if self.feedback_demod_mode == "X":
+                    _sp_samples.append(x_val * float(scale))
+                else:
+                    _sp_samples.append(float(np.hypot(x_val, y_val)) * float(scale))
+                time.sleep(0.01)
+            ini_voltage[i] = float(np.mean(_sp_samples)) if _sp_samples else 0.0
         self.feedback_started = True  # check if the feedback is on or off and stop the thread if set to false
         df_arr = [[], [], [], []]
         dV_arr = [[], [], [], []]

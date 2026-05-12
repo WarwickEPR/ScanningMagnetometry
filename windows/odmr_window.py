@@ -406,7 +406,8 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         for row in range(self.linearRegionTable.rowCount()):
             if self.linearRegionTable.cellWidget(row, 2).isChecked():
                 freqs.append(float(self.linearRegionTable.item(row, 0).text()))
-                grads.append(float(self.linearRegionTable.item(row, 1).text()))
+                # Linear fit slope is V/GHz; scan table expects V/MHz.
+                grads.append(float(self.linearRegionTable.item(row, 1).text()) / 1000.0)
 
         self.main_window.scanODMRPropertiesTable.setRowCount(0)
         for row in range(len(freqs)):
@@ -415,5 +416,6 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
                 row, 0, QtWidgets.QTableWidgetItem(str(round(freqs[row], 3)))
             )
             self.main_window.scanODMRPropertiesTable.setItem(
-                row, 1, QtWidgets.QTableWidgetItem(str(round(grads[row], 3)))
+                row, 1, QtWidgets.QTableWidgetItem(f"{grads[row]:.9f}")
             )
+        self.main_window._refresh_scan_table_set_buttons()
