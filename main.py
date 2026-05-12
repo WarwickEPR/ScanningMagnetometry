@@ -153,6 +153,8 @@ class MainUI(QtWidgets.QMainWindow):
             self._update_scan_pid_control_state
         )
         self._update_scan_pid_control_state()
+        self._connect_scan_estimate_signals()
+        self._update_scan_time_estimate_label()
 
         #  LIA ui controls
         self.connectLIAButton.clicked.connect(self.connect_lia)
@@ -261,6 +263,71 @@ class MainUI(QtWidgets.QMainWindow):
         self.scanFbPidKiSpinBox.setEnabled(pid_enabled)
         self.scanFbPidKdSpinBox.setEnabled(pid_enabled)
         self.scanFbPidIntegralLimitSpinBox.setEnabled(pid_enabled)
+
+    def _connect_scan_estimate_signals(self):
+        watched = [
+            self.xStartSpinBox,
+            self.xEndSpinBox,
+            self.xStepSpinBox,
+            self.yStartSpinBox,
+            self.yEndSpinBox,
+            self.yStepSpinBox,
+            self.scanDwellTimeSpinBox,
+            self.scanAveragingTimeSpinBox,
+            self.scalarRadio,
+            self.vectorRadio,
+            self.scanAveragingToggle,
+            self.scanPatternCombo,
+        ]
+        for widget in watched:
+            if hasattr(widget, "valueChanged"):
+                widget.valueChanged.connect(self._update_scan_time_estimate_label)
+            elif hasattr(widget, "toggled"):
+                widget.toggled.connect(self._update_scan_time_estimate_label)
+            elif hasattr(widget, "currentIndexChanged"):
+                widget.currentIndexChanged.connect(self._update_scan_time_estimate_label)
+
+    @staticmethod
+    def _format_duration_hms(total_seconds):
+        total = max(0, int(round(float(total_seconds))))
+        hours = total // 3600
+        minutes = (total % 3600) // 60
+        seconds = total % 60
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        return f"{minutes:02d}:{seconds:02d}"
+
+    def _update_scan_time_estimate_label(self, *_args):
+        try:
+            x_coords = np.arange(
+                self.xStartSpinBox.value(),
+                self.xEndSpinBox.value() + self.xStepSpinBox.value(),
+                self.xStepSpinBox.value(),
+            )
+            y_coords = np.arange(
+                self.yStartSpinBox.value(),
+                self.yEndSpinBox.value() + self.yStepSpinBox.value(),
+                self.yStepSpinBox.value(),
+            )
+            pixel_count = int(len(x_coords) * len(y_coords))
+            if pixel_count <= 0:
+                self.scanEstimateLabel.setText("Estimated Scan Time: --")
+                return
+
+            if self.vectorRadio.isChecked():
+                per_pixel_s = 0.2
+            else:
+                per_pixel_s = float(self.scanDwellTimeSpinBox.value())
+                if self.scanAveragingToggle.isChecked():
+                    per_pixel_s += float(self.scanAveragingTimeSpinBox.value())
+
+            rough_total_s = (pixel_count * max(0.0, per_pixel_s)) + 4.0
+            formatted = self._format_duration_hms(rough_total_s)
+            self.scanEstimateLabel.setText(
+                f"Estimated Scan Time (rough): {formatted} ({pixel_count} px)"
+            )
+        except Exception:
+            self.scanEstimateLabel.setText("Estimated Scan Time: --")
     
     def auto_discover_devices(self):
         found = []

@@ -61,8 +61,12 @@ class ScanningWindowUIBuilder:
         window.gaussianSigmaSpinBox.setPrefix("\u03c3 ")
         window.gaussianSigmaSpinBox.setEnabled(False)
 
+        window.scanEtaLabel = QtWidgets.QLabel("ETA: estimating...")
+        window.scanEtaLabel.setObjectName("scanEtaLabel")
+
         layout.addLayout(title_col)
         layout.addStretch(1)
+        layout.addWidget(window.scanEtaLabel)
         layout.addWidget(window.gaussianBlurCheck)
         layout.addWidget(window.gaussianSigmaSpinBox)
         layout.addWidget(window.stopScanButton)

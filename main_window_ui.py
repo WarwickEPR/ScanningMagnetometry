@@ -480,6 +480,10 @@ class MainWindowUIBuilder:
         area_grid.addWidget(QtWidgets.QLabel("Scan Pattern"), 2, 4)
         area_grid.addWidget(window.scanPatternCombo, 2, 5)
 
+        window.scanEstimateLabel = QtWidgets.QLabel("Estimated Scan Time: --")
+        window.scanEstimateLabel.setObjectName("scanEstimateLabel")
+        area_grid.addWidget(window.scanEstimateLabel, 3, 0, 1, 6)
+
         sweep_group = QtWidgets.QGroupBox("ODMR Sweep")
         sweep_grid = QtWidgets.QGridLayout(sweep_group)
 

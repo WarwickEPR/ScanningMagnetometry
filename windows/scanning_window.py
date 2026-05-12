@@ -100,7 +100,11 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         self.scalar_feedback_demod_mode = "X"
         self.vector_feedback_demod_mode = "R"
         self.setpoint_duration_s = 2.0
+        self.total_pixels = int(len(self.xCoords) * len(self.yCoords))
+        self.completed_pixels = 0
+        self.scan_start_time_monotonic = None
         self._refresh_feedback_settings_from_ui()
+        self._set_eta_label_initial()
 
         if self.vector:
             self.main_window.feedbackToggle.setChecked(True)
@@ -307,8 +311,43 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                 if idx != -1:
                     map_sub_tabs.setTabText(idx, tab_label)
 
+    @staticmethod
+    def _format_duration_hms(total_seconds):
+        total = max(0, int(round(float(total_seconds))))
+        hours = total // 3600
+        minutes = (total % 3600) // 60
+        seconds = total % 60
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        return f"{minutes:02d}:{seconds:02d}"
+
+    def _set_eta_label_initial(self):
+        if self.total_pixels > 0:
+            self.scanEtaLabel.setText(f"ETA: estimating... (0/{self.total_pixels} px)")
+        else:
+            self.scanEtaLabel.setText("ETA: --")
+
+    def _update_eta_label(self, completed, total, elapsed_s):
+        completed_i = int(max(0, completed))
+        total_i = int(max(1, total))
+        if completed_i <= 0:
+            self.scanEtaLabel.setText(f"ETA: estimating... ({completed_i}/{total_i} px)")
+            return
+        if completed_i >= total_i:
+            total_time = self._format_duration_hms(elapsed_s)
+            self.scanEtaLabel.setText(f"ETA: complete ({total_i}/{total_i} px, {total_time})")
+            return
+        rate = float(completed_i) / max(1e-6, float(elapsed_s))
+        remaining_px = total_i - completed_i
+        eta_s = remaining_px / max(1e-6, rate)
+        eta_text = self._format_duration_hms(eta_s)
+        self.scanEtaLabel.setText(f"ETA: {eta_text} ({completed_i}/{total_i} px)")
+
     def start_scan(self):
         self.scanning = True
+        self.completed_pixels = 0
+        self.scan_start_time_monotonic = time.monotonic()
+        self._set_eta_label_initial()
         if self.feedback:
             if self.vector:
                 self.thread_function(
@@ -715,15 +754,9 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         self.df_arr = np.zeros([1, len(y_positions), len(x_positions)])
         last_emit = 0.0
 
-        def emit_if_due(payload):
-            nonlocal last_emit
-            now = time.monotonic()
-            if now - last_emit >= 0.1:
-                kwargs["progress_callback"].emit(payload)
-                last_emit = now
-
         j = 0
         totalSize = len(x_positions) * len(y_positions)
+        total_pixels = int(totalSize)
         for row_index, y_position in enumerate(y_positions):
             # Serpentine: reverse x direction on odd rows
             if self.serpentine and row_index % 2 == 1:
@@ -755,20 +788,28 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                         if self.latest_feedback_voltage is not None
                         else 0.0
                     )
-                    emit_if_due(self.df_arr)
                 else:
                     if self.scan_averaging:
                         stream = self.main_window.LIAController.daq.poll(self.avg_time, 200, 1, True)
                         sample_path = f"/{self.main_window.LIAController.device}/demods/0/sample"
                         self.voltageArr[0, j, i] = np.mean(stream[sample_path]["x"])
                         self.voltageArrSTD[0, j, i] = np.std(stream[sample_path]["x"])
-                        emit_if_due(self.voltageArr)
                     else:
                         sample = self.main_window.LIAController.daq.getSample(
                             "/%s/demods/0/sample" % self.main_window.LIAController.device
                         )
                         self.voltageArr[0, j, i] = float(sample["x"][0])
-                        emit_if_due(self.voltageArr)
+                self.completed_pixels += 1
+                now_emit = time.monotonic()
+                if now_emit - last_emit >= 0.1:
+                    payload = {
+                        "image": self.df_arr if self.feedback else self.voltageArr,
+                        "completed": self.completed_pixels,
+                        "total": total_pixels,
+                        "elapsed_s": now_emit - (self.scan_start_time_monotonic or now_emit),
+                    }
+                    kwargs["progress_callback"].emit(payload)
+                    last_emit = now_emit
                 i += i_step
                 te = time.time()
                 eta = (te - ts) * totalSize
@@ -776,6 +817,14 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                 if self.scanning is False:
                     return
             j += 1
+        kwargs["progress_callback"].emit(
+            {
+                "image": self.df_arr if self.feedback else self.voltageArr,
+                "completed": total_pixels,
+                "total": total_pixels,
+                "elapsed_s": time.monotonic() - (self.scan_start_time_monotonic or time.monotonic()),
+            }
+        )
         time.sleep(1)
         self.scanning = False
 
@@ -792,6 +841,7 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         j = 0
         A_pinv = np.linalg.pinv(np.array(self.main_window.a_matrix_values))
         totalSize = len(x_positions) * len(y_positions)
+        total_pixels = int(totalSize)
         last_emit = 0.0
         for row_index, y_position in enumerate(y_positions):
             # Serpentine: reverse x direction on odd rows
@@ -821,8 +871,16 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                 for k in range(3):
                     self.b_arr[k, j, i] = B[k][0]
                 now = time.monotonic()
+                self.completed_pixels += 1
                 if now - last_emit >= 0.1:
-                    kwargs["progress_callback"].emit(self.b_arr)
+                    kwargs["progress_callback"].emit(
+                        {
+                            "image": self.b_arr,
+                            "completed": self.completed_pixels,
+                            "total": total_pixels,
+                            "elapsed_s": now - (self.scan_start_time_monotonic or now),
+                        }
+                    )
                     last_emit = now
                 i += i_step
                 te = time.time()
@@ -831,6 +889,14 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                 if self.scanning is False:
                     return
             j += 1
+        kwargs["progress_callback"].emit(
+            {
+                "image": self.b_arr,
+                "completed": total_pixels,
+                "total": total_pixels,
+                "elapsed_s": time.monotonic() - (self.scan_start_time_monotonic or time.monotonic()),
+            }
+        )
         time.sleep(1)
         self.scanning = False
 
@@ -863,6 +929,18 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         image_view.ui.histogram.setLevels(*levels)
 
     def update_plot(self, image_arr):
+        completed = None
+        total = None
+        elapsed_s = None
+        if isinstance(image_arr, dict):
+            completed = image_arr.get("completed")
+            total = image_arr.get("total")
+            elapsed_s = image_arr.get("elapsed_s")
+            image_arr = image_arr.get("image")
+
+        if image_arr is None:
+            return
+
         self._last_plot_arr = image_arr
         if self.vector:
             levels0 = self.calculate_levels(image_arr[0])
@@ -874,6 +952,9 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         else:
             levels = self.calculate_levels(image_arr)
             self._apply_image(self.imageWidget, self._maybe_blur(image_arr), levels)
+
+        if completed is not None and total is not None and elapsed_s is not None:
+            self._update_eta_label(completed, total, elapsed_s)
 
     def debug_plot(self, arrs):
         if self.vector:
@@ -930,6 +1011,7 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
 
     def stop_scan(self):
         self.scanning = False
+        self.scanEtaLabel.setText("ETA: stopped")
 
     def closeEvent(self, event):
         self.scanning = False
