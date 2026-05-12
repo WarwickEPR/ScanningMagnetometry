@@ -139,6 +139,8 @@ class MainUI(QtWidgets.QMainWindow):
             self.stageController.set_max_stage_position
         )
         self.actionDataViewer.triggered.connect(self.open_data_viewer)
+        self.actionChange_Max_Position_Values.setEnabled(False)
+        self.actionDataViewer.setEnabled(False)
         self.actionDefaultParameters.triggered.connect(self.open_default_param)
         self.actionLoadConfig.triggered.connect(self.load_config_button_selected)
         self.actionSaveConfig.triggered.connect(self.save_config)
@@ -807,6 +809,35 @@ class MainUI(QtWidgets.QMainWindow):
             event.ignore()
             return
 
+        save_prompt = QtWidgets.QMessageBox.question(
+            self,
+            "Save Settings",
+            "Do you want to save current settings as the default before exiting?",
+            QtWidgets.QMessageBox.StandardButton.Yes
+            | QtWidgets.QMessageBox.StandardButton.No
+            | QtWidgets.QMessageBox.StandardButton.Cancel,
+            QtWidgets.QMessageBox.StandardButton.Yes,
+        )
+        if save_prompt == QtWidgets.QMessageBox.StandardButton.Cancel:
+            event.ignore()
+            return
+
+        if save_prompt == QtWidgets.QMessageBox.StandardButton.Yes:
+            cfg_path = (
+                self.config_path.get("Config_Path", {}).get("Path", self.fallback_config_file)
+                if isinstance(self.config_path, dict)
+                else self.fallback_config_file
+            )
+            if not cfg_path:
+                cfg_path = self.fallback_config_file
+            try:
+                self.save_config(filepath=cfg_path)
+            except Exception as error:
+                error_dialog = QtWidgets.QErrorMessage(self)
+                error_dialog.showMessage(f"Failed to save settings on exit: {error}")
+                event.ignore()
+                return
+
         if hasattr(self, "_health_check_timer"):
             self._health_check_timer.stop()
 
@@ -1172,7 +1203,7 @@ class MainUI(QtWidgets.QMainWindow):
             print(error)
         return
 
-    def save_config(self):
+    def save_config(self, filepath=None):
         if not isinstance(self.default_parameters, dict) or not self.default_parameters:
             self.default_parameters = self._default_config_template()
 
@@ -1277,18 +1308,30 @@ class MainUI(QtWidgets.QMainWindow):
             int(ext_ref_signal_path)
         )
 
-        default_save_path = os.path.join(self.base_dir, "configs", "config.yml")
-        filepath = QtWidgets.QFileDialog.getSaveFileName(
-            self, "Select File", default_save_path, filter="YAML Files (*.yml *.yaml)"
-        )[0]
-        if not filepath:
-            return
+        if filepath is None:
+            default_save_path = os.path.join(self.base_dir, "configs", "config.yml")
+            filepath = QtWidgets.QFileDialog.getSaveFileName(
+                self, "Select File", default_save_path, filter="YAML Files (*.yml *.yaml)"
+            )[0]
+            if not filepath:
+                return
+        self._save_current_settings_to_path(filepath, config_data=new_config)
+        return
+
+    def _save_current_settings_to_path(self, filepath, config_data=None):
         if not filepath.lower().endswith((".yml", ".yaml")):
             filepath = f"{filepath}.yml"
+
+        if config_data is None:
+            config_data = self._default_config_template()
+
         with open(filepath, "w") as f:
-            yaml.dump(new_config, f, default_flow_style=False)
-        self.default_parameters = new_config
-        return
+            yaml.dump(config_data, f, default_flow_style=False)
+
+        self.default_parameters = config_data
+        self.config_path = {"Config_Path": {"Path": str(filepath)}}
+        with open(self.settings_file, "w") as f:
+            yaml.dump(self.config_path, f)
 
 
 class VectorMatrixWindow(QtWidgets.QWidget):

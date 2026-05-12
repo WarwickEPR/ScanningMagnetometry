@@ -469,10 +469,16 @@ class MainWindowUIBuilder:
         area_grid.addWidget(QtWidgets.QLabel("Y Step"), 1, 4)
         area_grid.addWidget(window.yStepSpinBox, 1, 5)
 
+        window.scanPatternCombo = QtWidgets.QComboBox()
+        window.scanPatternCombo.setObjectName("scanPatternCombo")
+        window.scanPatternCombo.addItems(["Row-by-row", "Serpentine"])
+
         area_grid.addWidget(QtWidgets.QLabel("Averaging Time"), 2, 0)
         area_grid.addWidget(window.scanAveragingTimeSpinBox, 2, 1)
         area_grid.addWidget(QtWidgets.QLabel("Dwell Time"), 2, 2)
         area_grid.addWidget(window.scanDwellTimeSpinBox, 2, 3)
+        area_grid.addWidget(QtWidgets.QLabel("Scan Pattern"), 2, 4)
+        area_grid.addWidget(window.scanPatternCombo, 2, 5)
 
         sweep_group = QtWidgets.QGroupBox("ODMR Sweep")
         sweep_grid = QtWidgets.QGridLayout(sweep_group)

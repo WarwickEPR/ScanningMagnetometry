@@ -48,8 +48,23 @@ class ScanningWindowUIBuilder:
         window.stopScanButton = QtWidgets.QPushButton("Stop Scan")
         window.stopScanButton.setObjectName("stopScanButton")
 
+        window.gaussianBlurCheck = QtWidgets.QCheckBox("Gaussian Blur")
+        window.gaussianBlurCheck.setObjectName("gaussianBlurCheck")
+        window.gaussianBlurCheck.setChecked(False)
+
+        window.gaussianSigmaSpinBox = QtWidgets.QDoubleSpinBox()
+        window.gaussianSigmaSpinBox.setObjectName("gaussianSigmaSpinBox")
+        window.gaussianSigmaSpinBox.setRange(0.1, 20.0)
+        window.gaussianSigmaSpinBox.setSingleStep(0.1)
+        window.gaussianSigmaSpinBox.setValue(1.0)
+        window.gaussianSigmaSpinBox.setDecimals(1)
+        window.gaussianSigmaSpinBox.setPrefix("\u03c3 ")
+        window.gaussianSigmaSpinBox.setEnabled(False)
+
         layout.addLayout(title_col)
         layout.addStretch(1)
+        layout.addWidget(window.gaussianBlurCheck)
+        layout.addWidget(window.gaussianSigmaSpinBox)
         layout.addWidget(window.stopScanButton)
         layout.addWidget(window.exportDataButton)
         return bar
@@ -146,9 +161,7 @@ class ScanningWindowUIBuilder:
 
     @staticmethod
     def _attach_image_widget(card: QtWidgets.QGroupBox, image_widget: pg.ImageView):
-        image_widget.ui.histogram.hide()
-        image_widget.ui.roiBtn.hide()
-        image_widget.ui.menuBtn.hide()
+        # histogram/roi/menu visibility is handled by style_image_view in ui_theme
         card.layout().addWidget(image_widget)
 
     @staticmethod

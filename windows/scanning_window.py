@@ -4,6 +4,7 @@ import h5py
 import cv2
 import numpy as np
 import pyqtgraph as pg
+from scipy.ndimage import gaussian_filter
 from PIL import Image
 from PyQt6 import QtCore, QtWidgets
 
@@ -63,7 +64,7 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         )
         self.yCoords = np.arange(
             self.main_window.yStartSpinBox.value(),
-            (self.main_window.yEndSpinBox.value() + self.main_window.xStepSpinBox.value()),
+            (self.main_window.yEndSpinBox.value() + self.main_window.yStepSpinBox.value()),
             self.main_window.yStepSpinBox.value(),
         )
         self.xStep = self.main_window.xStepSpinBox.value()
@@ -75,6 +76,10 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         )
         self.scan_averaging = self.main_window.scanAveragingToggle.isChecked()
         self.avg_time = self.main_window.scanAveragingTimeSpinBox.value()
+        _pattern_combo = getattr(self.main_window, "scanPatternCombo", None)
+        self.serpentine = (
+            _pattern_combo.currentText() == "Serpentine" if _pattern_combo is not None else False
+        )
         self.scanning = False
         self.feedback_voltage_avg_samples = 3
         self.feedback_voltage_sample_spacing_s = 0.01
@@ -115,6 +120,9 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
 
         self.exportDataButton.clicked.connect(self.export_data)
         self.stopScanButton.clicked.connect(self.stop_scan)
+        self.gaussianBlurCheck.toggled.connect(self._on_blur_setting_changed)
+        self.gaussianSigmaSpinBox.valueChanged.connect(self._on_blur_setting_changed)
+        self._last_plot_arr = None
         self.test_data = np.random.random([4, 10, 10])
 
         if (
@@ -198,13 +206,32 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                     ).text()
                 )
 
-        self.StageControl.set_stage_pos(
-            self.main_window.xStartSpinBox.value(), self.main_window.yStartSpinBox.value()
-        )
-        self.StageControl.move_stage_pos_wait(
+        if not self.StageControl.move_stage_pos_wait(
             self.main_window.xStartSpinBox.value(),
             self.main_window.yStartSpinBox.value(),
-        )
+            use_motion_barrier=True,
+        ):
+            raise RuntimeError("Stage failed to reach scan start position.")
+
+    def _move_stage_to_measurement_point(self, x_position, y_position, require_full_wait=False):
+        if not self.scanning:
+            return False
+        if require_full_wait:
+            reached_target = self.StageControl.move_stage_pos_wait(
+                x_position,
+                y_position,
+                tolerance_mm=0.02,
+                poll_s=0.01,
+                settle_s=0.02,
+                use_motion_barrier=True,
+            )
+            if not reached_target:
+                raise RuntimeError(
+                    f"Stage failed to reach scan position X={float(x_position):.5f}, Y={float(y_position):.5f}."
+                )
+        else:
+            self.StageControl.set_stage_pos(x_position, y_position)
+        return self.scanning
 
     def _apply_mode_visibility(self):
         use_tracking = bool(self.feedback or self.vector)
@@ -263,6 +290,22 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
             widget = getattr(self, widget_name, None)
             if widget is not None:
                 widget.setVisible(use_tracking)
+
+        # Rename the primary map card and its sub-tab to reflect scan content
+        if not use_vector_maps:
+            if self.feedback:
+                primary_title = "\u0394f Map (MHz)"
+                tab_label = "\u0394f Map"
+            else:
+                primary_title = "Voltage Map (V)"
+                tab_label = "Voltage Map"
+            primary_card = getattr(self, "primaryMapCard", None)
+            if primary_card is not None:
+                primary_card.setTitle(primary_title)
+            if map_sub_tabs is not None and primary_tab is not None:
+                idx = map_sub_tabs.indexOf(primary_tab)
+                if idx != -1:
+                    map_sub_tabs.setTabText(idx, tab_label)
 
     def start_scan(self):
         self.scanning = True
@@ -681,15 +724,26 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
 
         j = 0
         totalSize = len(x_positions) * len(y_positions)
-        for _idx, y_position in enumerate(y_positions, 2):
-            i = len(x_positions) - 1
-            self.StageControl.move_stage_pos_wait(x_positions[0], y_position)
-            for x_position in x_positions:
+        for row_index, y_position in enumerate(y_positions):
+            # Serpentine: reverse x direction on odd rows
+            if self.serpentine and row_index % 2 == 1:
+                row_x = list(reversed(x_positions))
+            else:
+                row_x = list(x_positions)
+            i_start = 0 if (self.serpentine and row_index % 2 == 1) else len(x_positions) - 1
+            i_step = 1 if (self.serpentine and row_index % 2 == 1) else -1
+            i = i_start
+            for col_index, x_position in enumerate(row_x):
                 timeStart = time.time()
                 ts = time.time()
                 totalSize -= 1
-                self.StageControl.set_stage_pos(x_position, y_position)
-                time.sleep(scan_time)
+                require_full_wait = col_index == 0
+                if not self._move_stage_to_measurement_point(
+                    x_position, y_position, require_full_wait=require_full_wait
+                ):
+                    return
+                if scan_time > 0 and not self._sleep_with_stop_flag(self, scan_time):
+                    return
                 if self.feedback:
                     self.df_arr[0, j, i] = (
                         self.latest_feedback_shift_mhz
@@ -715,7 +769,7 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                         )
                         self.voltageArr[0, j, i] = float(sample["x"][0])
                         emit_if_due(self.voltageArr)
-                i = i - 1
+                i += i_step
                 te = time.time()
                 eta = (te - ts) * totalSize
                 print(time.ctime(int(timeStart + eta)))
@@ -739,14 +793,26 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         A_pinv = np.linalg.pinv(np.array(self.main_window.a_matrix_values))
         totalSize = len(x_positions) * len(y_positions)
         last_emit = 0.0
-        for _idx, y_position in enumerate(y_positions, 2):
-            i = len(x_positions) - 1
-            for x_position in x_positions:
+        for row_index, y_position in enumerate(y_positions):
+            # Serpentine: reverse x direction on odd rows
+            if self.serpentine and row_index % 2 == 1:
+                row_x = list(reversed(x_positions))
+            else:
+                row_x = list(x_positions)
+            i_start = 0 if (self.serpentine and row_index % 2 == 1) else len(x_positions) - 1
+            i_step = 1 if (self.serpentine and row_index % 2 == 1) else -1
+            i = i_start
+            for col_index, x_position in enumerate(row_x):
                 timeStart = time.time()
                 ts = time.time()
                 totalSize -= 1
-                self.StageControl.set_stage_pos(x_position, y_position)
-                time.sleep(scan_time)
+                require_full_wait = col_index == 0
+                if not self._move_stage_to_measurement_point(
+                    x_position, y_position, require_full_wait=require_full_wait
+                ):
+                    return
+                if scan_time > 0 and not self._sleep_with_stop_flag(self, scan_time):
+                    return
                 for k in range(4):
                     self.df_arr[k, j, i] = self.vector_freqs[k]
                 df1, df2, df3, df4 = (np.array(self.vector_freqs) - np.array(self.ini_freq)) * 1000
@@ -758,14 +824,13 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                 if now - last_emit >= 0.1:
                     kwargs["progress_callback"].emit(self.b_arr)
                     last_emit = now
-                i = i - 1
+                i += i_step
                 te = time.time()
                 eta = (te - ts) * totalSize
                 print(time.ctime(int(timeStart + eta)))
                 if self.scanning is False:
                     return
             j += 1
-            self.StageControl.move_stage_pos_wait(x_positions[0], y_position)
         time.sleep(1)
         self.scanning = False
 
@@ -779,17 +844,36 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
             return px[px_low[k - 1]], px[px_high[-k - 1]]
         return min(px), max(px)
 
+    def _maybe_blur(self, data_2d):
+        """Return data_2d with optional Gaussian blur applied."""
+        if self.gaussianBlurCheck.isChecked():
+            sigma = float(self.gaussianSigmaSpinBox.value())
+            return gaussian_filter(data_2d.astype(float), sigma=sigma)
+        return data_2d
+
+    def _on_blur_setting_changed(self, *_):
+        """Enable/disable the sigma box and re-render the last frame immediately."""
+        self.gaussianSigmaSpinBox.setEnabled(self.gaussianBlurCheck.isChecked())
+        if self._last_plot_arr is not None:
+            self.update_plot(self._last_plot_arr)
+
+    @staticmethod
+    def _apply_image(image_view, data, levels):
+        image_view.setImage(data, levels=levels, autoHistogramRange=False)
+        image_view.ui.histogram.setLevels(*levels)
+
     def update_plot(self, image_arr):
+        self._last_plot_arr = image_arr
         if self.vector:
             levels0 = self.calculate_levels(image_arr[0])
             levels1 = self.calculate_levels(image_arr[1])
             levels2 = self.calculate_levels(image_arr[2])
-            self.imageWidget_2.setImage(image_arr[0], levels=levels0)
-            self.imageWidget_3.setImage(image_arr[1], levels=levels1)
-            self.imageWidget_4.setImage(image_arr[2], levels=levels2)
+            self._apply_image(self.imageWidget_2, self._maybe_blur(image_arr[0]), levels0)
+            self._apply_image(self.imageWidget_3, self._maybe_blur(image_arr[1]), levels1)
+            self._apply_image(self.imageWidget_4, self._maybe_blur(image_arr[2]), levels2)
         else:
             levels = self.calculate_levels(image_arr)
-            self.imageWidget.setImage(image_arr, levels=levels)
+            self._apply_image(self.imageWidget, self._maybe_blur(image_arr), levels)
 
     def debug_plot(self, arrs):
         if self.vector:

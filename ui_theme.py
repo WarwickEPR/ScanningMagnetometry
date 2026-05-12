@@ -68,11 +68,17 @@ def build_image_colormap():
     return pg.ColorMap(positions, colors)
 
 
-def style_image_view(image_view):
+def style_image_view(image_view, show_colorbar=True):
     """Style an ImageView to match the light card layout."""
     image_view.view.setBackgroundColor(PLOT_BACKGROUND)
     image_view.view.setBorder(pg.mkPen(PLOT_BORDER, width=1))
     image_view.setColorMap(build_image_colormap())
+    image_view.ui.roiBtn.hide()
+    image_view.ui.menuBtn.hide()
+    if show_colorbar:
+        image_view.ui.histogram.show()
+    else:
+        image_view.ui.histogram.hide()
 
 
 def apply_ui_polish(widget):

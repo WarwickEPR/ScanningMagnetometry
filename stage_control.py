@@ -8,6 +8,7 @@ Uses G-code commands to control movement.
 from PyQt6 import QtWidgets
 import serial
 import re
+import threading
 import time
 
 
@@ -28,8 +29,13 @@ class StageControl:
         self.stage_options_cls = stage_options_cls
         self.stage_options = None
         self.ser = None
+        self._serial_lock = threading.Lock()
         self.stage_connected = False
         return
+
+    @staticmethod
+    def _format_axis_value(value):
+        return f"{float(value):.5f}"
 
     def execute_gcode(self, command):
         """Send a g-code command to the stage without expecting a response.
@@ -38,7 +44,9 @@ class StageControl:
         :return:
         """
         try:
-            self.ser.write(f'{command}\r\n'.encode())
+            with self._serial_lock:
+                self.ser.write(f'{command}\r\n'.encode())
+                self.ser.flush()
         except:
             self.show_error_message("ERROR: Could not execute stage command")
 
@@ -66,6 +74,34 @@ class StageControl:
         decoded = response.decode("utf-8", errors="ignore").strip()
         return self._parse_position_from_response(decoded)
 
+    def wait_for_motion_complete(self, timeout_s=10.0):
+        if self.ser is None:
+            return False
+
+        deadline = time.monotonic() + max(0.1, float(timeout_s))
+        try:
+            with self._serial_lock:
+                previous_timeout = self.ser.timeout
+                self.ser.reset_input_buffer()
+                self.ser.write(b"M400\r\n")
+                self.ser.flush()
+                self.ser.timeout = min(0.25, max(0.05, float(timeout_s)))
+                try:
+                    while time.monotonic() < deadline:
+                        response = self.ser.readline()
+                        if not response:
+                            continue
+                        decoded = response.decode("utf-8", errors="ignore").strip().lower()
+                        if decoded == "ok" or decoded.endswith("ok"):
+                            return True
+                        if "error" in decoded:
+                            return False
+                finally:
+                    self.ser.timeout = previous_timeout
+        except Exception:
+            return False
+        return False
+
     def move_stage_pos_wait(
         self,
         x,
@@ -74,6 +110,8 @@ class StageControl:
         speed_mm_s=5.0,
         timeout_s=None,
         poll_s=0.05,
+        settle_s=0.03,
+        use_motion_barrier=False,
     ):
         """Move stage in XY and wait until position reaches target within tolerance.
 
@@ -90,6 +128,9 @@ class StageControl:
             else:
                 timeout_s = 5.0
 
+        if use_motion_barrier:
+            self.wait_for_motion_complete(timeout_s=timeout_s)
+
         end_t = time.monotonic() + max(0.1, float(timeout_s))
         while time.monotonic() < end_t:
             pos = self.get_stage_position_tuple()
@@ -97,6 +138,8 @@ class StageControl:
                 dx = abs(pos[0] - float(x))
                 dy = abs(pos[1] - float(y))
                 if dx <= float(tolerance_mm) and dy <= float(tolerance_mm):
+                    if settle_s and float(settle_s) > 0.0:
+                        time.sleep(float(settle_s))
                     return True
             time.sleep(max(0.01, float(poll_s)))
         return False
@@ -111,9 +154,21 @@ class StageControl:
         """
         response = b""
         try:
-            self.ser.write(f'{command}\r\n'.encode())
-            response = self.ser.readline()
-            self.ser.readline()  # clears next line
+            with self._serial_lock:
+                self.ser.reset_input_buffer()
+                self.ser.write(f'{command}\r\n'.encode())
+                self.ser.flush()
+
+                lines = []
+                deadline = time.monotonic() + max(0.2, float(getattr(self.ser, "timeout", 0.5) or 0.5))
+                while time.monotonic() < deadline:
+                    line = self.ser.readline()
+                    if not line:
+                        if lines:
+                            break
+                        continue
+                    lines.append(line.rstrip())
+                response = b"\n".join(line for line in lines if line)
 
         except Exception as error:
             error_dialog = QtWidgets.QErrorMessage(self.window)
@@ -160,7 +215,9 @@ class StageControl:
         :param y: (float) desired y position in mm
         :return:
         """
-        self.execute_gcode(f'G00 X{x} Y{y}')
+        x_cmd = self._format_axis_value(x)
+        y_cmd = self._format_axis_value(y)
+        self.execute_gcode(f'G00 X{x_cmd} Y{y_cmd}')
         return
 
     def set_stage_height(self, z):
@@ -169,7 +226,8 @@ class StageControl:
         :param z: (float) desired z position or "height" in mm
         :return:
         """
-        self.execute_gcode(f'G00 Z{z}')
+        z_cmd = self._format_axis_value(z)
+        self.execute_gcode(f'G00 Z{z_cmd}')
         return
 
     def get_stage_pos(self):
