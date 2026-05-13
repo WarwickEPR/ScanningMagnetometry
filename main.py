@@ -1271,6 +1271,16 @@ class MainUI(QtWidgets.QMainWindow):
         return
 
     def save_config(self, filepath=None):
+        # QAction.triggered emits a bool checked state; ignore it when save_config is used as a slot.
+        if isinstance(filepath, bool):
+            filepath = None
+
+        if filepath is not None:
+            try:
+                filepath = os.fspath(filepath)
+            except TypeError:
+                filepath = None
+
         if not isinstance(self.default_parameters, dict) or not self.default_parameters:
             self.default_parameters = self._default_config_template()
 
@@ -1386,6 +1396,7 @@ class MainUI(QtWidgets.QMainWindow):
         return
 
     def _save_current_settings_to_path(self, filepath, config_data=None):
+        filepath = os.fspath(filepath)
         if not filepath.lower().endswith((".yml", ".yaml")):
             filepath = f"{filepath}.yml"
 

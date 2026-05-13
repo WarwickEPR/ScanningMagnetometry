@@ -44,6 +44,47 @@ pip install -r requirements.txt
 python main.py
 ```
 
+### 2.5 Building a Single Executable on Windows
+
+The project includes reusable build scripts in the repository root:
+
+- `build_exe.ps1` for PowerShell
+- `build_exe.bat` for Command Prompt or double-click use
+
+Both scripts:
+
+- use `.venv\Scripts\python.exe` when available
+- fall back to `py -3` if no local virtual environment is found
+- install or upgrade `PyInstaller`
+- build a one-file GUI executable from `main.py`
+- bundle the `configs` directory into the executable
+
+From PowerShell:
+
+```powershell
+.\build_exe.ps1
+```
+
+From Command Prompt:
+
+```bat
+build_exe.bat
+```
+
+Successful builds place the executable here:
+
+```text
+dist\ScanningMagnetometry.exe
+```
+
+PyInstaller temporary and intermediate files are written to:
+
+```text
+build\ScanningMagnetometry
+```
+
+If the build fails, run the PowerShell script from a terminal to see the full error output.
+
 ---
 
 ## 3. Configuration Files
