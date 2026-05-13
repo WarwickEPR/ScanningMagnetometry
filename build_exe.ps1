@@ -35,16 +35,17 @@ function Invoke-Python {
     }
 }
 
+$specPath = Join-Path $scriptDir "configs\main.spec"
+if (-not (Test-Path $specPath)) {
+    throw "Could not find PyInstaller spec file at $specPath"
+}
+
 Invoke-Python -Args @("-m", "pip", "install", "--upgrade", "pip", "pyinstaller")
 Invoke-Python -Args @(
     "-m", "PyInstaller",
     "--noconfirm",
     "--clean",
-    "--onefile",
-    "--windowed",
-    "--name", "ScanningMagnetometry",
-    "--add-data", "configs;configs",
-    "main.py"
+    $specPath
 )
 
 $exePath = Join-Path $scriptDir "dist\ScanningMagnetometry.exe"

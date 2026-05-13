@@ -1,10 +1,10 @@
-# -*- mode: python ; coding: utf-8 -*-
+﻿# -*- mode: python ; coding: utf-8 -*-
 
 import os
 from PyInstaller.utils.hooks import collect_data_files, collect_submodules, copy_metadata
 
 
-PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.getcwd(), ".."))
 MAIN_SCRIPT = os.path.join(PROJECT_ROOT, "main.py")
 ICON_PATH = os.path.join(PROJECT_ROOT, "software_icon.ico")
 
