@@ -2143,11 +2143,15 @@ def _create_startup_splash(app):
         QtGui.QColor("#e6e8ee"),
     )
     splash.show()
+    splash.raise_()
+    splash.activateWindow()
     app.processEvents()
     return splash
 
 
 app = QtWidgets.QApplication(sys.argv)  # Create an instance of QtWidgets.QApplication
+startup_timer = QtCore.QElapsedTimer()
+startup_timer.start()
 splash = _create_startup_splash(app)
 
 if dark_theme:
@@ -2167,5 +2171,9 @@ splash.showMessage(
 app.processEvents()
 
 window = MainUI()  # Create an instance of our class
-splash.finish(window)
+
+# Keep the splash visible briefly so users can clearly see startup progress.
+minimum_splash_ms = 1400
+remaining_ms = max(0, minimum_splash_ms - int(startup_timer.elapsed()))
+QtCore.QTimer.singleShot(remaining_ms, lambda: splash.finish(window))
 app.exec()
