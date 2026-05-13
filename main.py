@@ -361,7 +361,7 @@ class MainUI(QtWidgets.QMainWindow):
                 
         # print(f"Auto-discovery complete. Found devices at: {found}")
 
-        rm = pyvisa.ResourceManager()
+        rm = RfControl.create_resource_manager()
         # look for agilent
         for ip in found:
             try:

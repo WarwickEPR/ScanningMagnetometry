@@ -47,6 +47,18 @@ class RfControl(ThreadedComponent):
         self.sweeping = False
 
     @staticmethod
+    def create_resource_manager():
+        last_error = None
+        for backend in (None, "@py"):
+            try:
+                if backend is None:
+                    return pyvisa.ResourceManager()
+                return pyvisa.ResourceManager(backend)
+            except Exception as error:
+                last_error = error
+        raise last_error
+
+    @staticmethod
     def _estimate_points_from_step(start_ghz, stop_ghz, step_khz):
         step_ghz = abs(float(step_khz)) / 1e6
         if step_ghz <= 0:
@@ -81,7 +93,7 @@ class RfControl(ThreadedComponent):
         :return:
         """
         ip_address = args[0][0]
-        self.rm = pyvisa.ResourceManager()
+        self.rm = self.create_resource_manager()
         ip_address = "TCPIP::" + ip_address + "::INSTR"
         self.inst = self.rm.open_resource(ip_address,
                                           query_delay=0.1,

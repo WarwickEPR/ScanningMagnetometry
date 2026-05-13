@@ -1,0 +1,86 @@
+Connection_Params:
+  Device_ID: dev7811
+  Device_IP: 192.168.1.101
+  RF_IP: 192.168.1.102
+LIA_Params:
+  Bandwidth_3dB_Hz: '100'
+  Burst_Dur: '0.005'
+  Duration: '10'
+  Ext_Ref_Signal_Path: '8'
+  FFT_50_Ohm: 'False'
+  FFT_AC_Coupling: 'True'
+  FFT_Average: '10'
+  FFT_Duration: '1'
+  FFT_Sample_Rate: '3000'
+  Filter_Order: '7'
+  Range: '6'
+  Ref_Input_Type: external
+  Sample_Rate: '50'
+  Scaling: '750'
+  Time_Const: '477'
+RF_Params:
+  A_Matrix_Values:
+  - - 1.0
+    - 2.0
+    - 3.0
+  - - 1.0
+    - 2.0
+    - 3.0
+  - - 1.0
+    - 2.0
+    - 3.0
+  - - 1.0
+    - 2.0
+    - 3.0
+  Ext_Mod: 'False'
+  Feedback_Freq_Table:
+  - - 2.9
+    - 2.918
+    - 2.938
+    - 2.955
+  - - -5.113e-05
+    - -5.9429e-05
+    - -4.0167e-05
+    - -3.766e-05
+  Feedback_Selected_Row: '1'
+  Freq: '2.9'
+  Mod_Amp: '3.0'
+  Mod_Freq: '3.05'
+  Mod_On: 'True'
+  Mod_Type: '1'
+  Power: '0.0'
+  Power_On: 'True'
+  Scan_Feedback_Settings:
+    Avg_Samples: '3'
+    Baseline_Adapt: 'False'
+    Baseline_Alpha: '0.0'
+    Control_Mode: Proportional
+    Deadband_V: '0.0'
+    Emit_Interval_s: '0.1'
+    Max_Tracking_Offset_MHz: '25.0'
+    Max_df_Step_MHz: '0.4'
+    PID_Integral_Limit: '5.0'
+    PID_Kd: '0.0'
+    PID_Ki: '0.0'
+    PID_Kp: '1.0'
+    Sample_Spacing_s: '0.01'
+    Scalar_Demod_Mode: X
+    Setpoint_Duration_s: '2.0'
+    Use_Scaled_Voltage: 'False'
+    Vector_Demod_Mode: X
+Stage_Params:
+  Avg_Time: '0.1'
+  Dwell: '0.1'
+  X_End: '105.0'
+  X_Start: '85.0'
+  X_Step: '1.0'
+  Y_End: '75.0'
+  Y_Start: '55.0'
+  Y_Step: '1.0'
+Sweep_Params:
+  Dwell: '3.0'
+  Points: '1000'
+  Sweep_End: '2.97'
+  Sweep_Start: '2.88'
+  Sweep_Step: '100.0'
+  Sweep_Type: '1'
