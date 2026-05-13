@@ -35,7 +35,7 @@ function Invoke-Python {
     }
 }
 
-$specPath = Join-Path $scriptDir "configs\main.spec"
+$specPath = Join-Path $scriptDir "ScanningMagnetometry.spec"
 if (-not (Test-Path $specPath)) {
     throw "Could not find PyInstaller spec file at $specPath"
 }

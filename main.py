@@ -7,7 +7,7 @@ also controls the flow of data between these bits of equipment and sorts out the
 data.
 """
 
-from PyQt6 import QtCore, QtWidgets
+from PyQt6 import QtCore, QtWidgets, QtGui
 import pyqtgraph as pg
 import os
 import copy
@@ -2131,8 +2131,41 @@ class StageOptions(QtWidgets.QWidget):
         return
 
 
+def _create_startup_splash(app):
+    splash_pixmap = QtGui.QPixmap(520, 200)
+    splash_pixmap.fill(QtGui.QColor("#1f232a"))
+
+    splash = QtWidgets.QSplashScreen(splash_pixmap)
+    splash.setWindowFlag(QtCore.Qt.WindowType.WindowStaysOnTopHint, True)
+    splash.showMessage(
+        "Loading Scanning Magnetometer...",
+        QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignBottom,
+        QtGui.QColor("#e6e8ee"),
+    )
+    splash.show()
+    app.processEvents()
+    return splash
+
+
 app = QtWidgets.QApplication(sys.argv)  # Create an instance of QtWidgets.QApplication
+splash = _create_startup_splash(app)
+
 if dark_theme:
+    splash.showMessage(
+        "Applying theme...",
+        QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignBottom,
+        QtGui.QColor("#e6e8ee"),
+    )
+    app.processEvents()
     qdarktheme.setup_theme()
+
+splash.showMessage(
+    "Initializing main window...",
+    QtCore.Qt.AlignmentFlag.AlignHCenter | QtCore.Qt.AlignmentFlag.AlignBottom,
+    QtGui.QColor("#e6e8ee"),
+)
+app.processEvents()
+
 window = MainUI()  # Create an instance of our class
+splash.finish(window)
 app.exec()

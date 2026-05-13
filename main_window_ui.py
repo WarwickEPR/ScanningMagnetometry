@@ -519,6 +519,8 @@ class MainWindowUIBuilder:
         window.scalarRadio.setObjectName("scalarRadio")
         window.vectorRadio = QtWidgets.QRadioButton("Vector")
         window.vectorRadio.setObjectName("vectorRadio")
+        window.scalarRadio.setAutoExclusive(True)
+        window.vectorRadio.setAutoExclusive(True)
         window.scalarRadio.setChecked(True)
 
         mode_layout = QtWidgets.QHBoxLayout()
@@ -570,6 +572,7 @@ class MainWindowUIBuilder:
             2, QtWidgets.QHeaderView.ResizeMode.ResizeToContents
         )
         window.scanODMRPropertiesTable.verticalHeader().setVisible(False)
+        window.scanODMRPropertiesTable.setMinimumHeight(180)
 
         feedback_layout.addWidget(window.scanODMRPropertiesTable)
 
@@ -663,10 +666,16 @@ class MainWindowUIBuilder:
         scan_feedback_grid.addWidget(QtWidgets.QLabel("Vector Demod"), 5, 0)
         scan_feedback_grid.addWidget(window.scanFbVectorDemodModeCombo, 5, 1)
 
+        lower_splitter = QtWidgets.QSplitter(QtCore.Qt.Orientation.Horizontal)
+        lower_splitter.setChildrenCollapsible(False)
+        lower_splitter.addWidget(feedback_group)
+        lower_splitter.addWidget(scan_feedback_group)
+        lower_splitter.setStretchFactor(0, 2)
+        lower_splitter.setStretchFactor(1, 3)
+
         layout.addWidget(area_group)
         layout.addWidget(sweep_group)
-        layout.addWidget(feedback_group, 1)
-        layout.addWidget(scan_feedback_group)
+        layout.addWidget(lower_splitter, 1)
 
         return tab
 
@@ -863,6 +872,28 @@ class MainWindowUIBuilder:
             }
             QCheckBox, QRadioButton {
                 spacing: 6px;
+            }
+            QCheckBox::indicator {
+                width: 14px;
+                height: 14px;
+                border: 1px solid #8ea0b3;
+                border-radius: 3px;
+                background: #ffffff;
+            }
+            QCheckBox::indicator:checked {
+                border: 1px solid #1f5a82;
+                background: #1f5a82;
+            }
+            QRadioButton::indicator {
+                width: 14px;
+                height: 14px;
+                border: 1px solid #8ea0b3;
+                border-radius: 7px;
+                background: #ffffff;
+            }
+            QRadioButton::indicator:checked {
+                border: 1px solid #1f5a82;
+                background: #1f5a82;
             }
             QTableWidget {
                 gridline-color: #dbe2ea;

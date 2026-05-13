@@ -49,8 +49,12 @@ class RfControl(ThreadedComponent):
     @staticmethod
     def create_resource_manager():
         last_error = None
-        for backend in (None, "@py"):
+        for backend in ("direct_pyvisa_py", None, "@py"):
             try:
+                if backend == "direct_pyvisa_py":
+                    from pyvisa_py import PyVisaLibrary
+
+                    return pyvisa.ResourceManager(PyVisaLibrary())
                 if backend is None:
                     return pyvisa.ResourceManager()
                 return pyvisa.ResourceManager(backend)
