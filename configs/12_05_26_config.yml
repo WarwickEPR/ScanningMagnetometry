@@ -51,7 +51,7 @@ RF_Params:
   Power: '0.0'
   Power_On: 'True'
   Scan_Feedback_Settings:
-    Avg_Samples: '3'
+    Avg_Samples: '2'
     Baseline_Adapt: 'False'
     Baseline_Alpha: '0.0'
     Control_Mode: Proportional
@@ -71,11 +71,11 @@ RF_Params:
 Stage_Params:
   Avg_Time: '0.1'
   Dwell: '0.1'
-  X_End: '105.0'
-  X_Start: '85.0'
+  X_End: '205.0'
+  X_Start: '125.0'
   X_Step: '1.0'
-  Y_End: '75.0'
-  Y_Start: '55.0'
+  Y_End: '195.0'
+  Y_Start: '75.0'
   Y_Step: '1.0'
 Sweep_Params:
   Dwell: '3.0'

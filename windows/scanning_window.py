@@ -381,11 +381,9 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         start = time.monotonic()
         while not self.feedback_started and self.scanning:
             if time.monotonic() - start >= timeout:
-                error_dialog = QtWidgets.QErrorMessage(self.main_window)
-                error_dialog.showMessage("Error: Feedback failed to start within timeout")
-                return False
+                raise RuntimeError("Feedback failed to start within timeout")
             time.sleep(poll)
-        return True
+        return bool(self.feedback_started)
 
     def _refresh_feedback_settings_from_ui(self):
         if hasattr(self.main_window, "scanFbAvgSamplesSpinBox"):
@@ -457,7 +455,10 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         while time.monotonic() < end_t:
             if not instance.scanning:
                 return False
-            time.sleep(min(chunk_s, end_t - time.monotonic()))
+            remaining = end_t - time.monotonic()
+            if remaining <= 0.0:
+                break
+            time.sleep(min(float(chunk_s), remaining))
         return True
 
     @staticmethod

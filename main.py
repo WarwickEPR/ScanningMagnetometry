@@ -951,6 +951,16 @@ class MainUI(QtWidgets.QMainWindow):
         of the current scan.
         """
         self.stop_lia_live_trace()
+        if self.scan_window is not None:
+            try:
+                if bool(getattr(self.scan_window, "scanning", False)):
+                    self.scan_window.stop_scan()
+            except Exception:
+                pass
+            try:
+                self.scan_window.close()
+            except Exception:
+                pass
         self.scan_window = scanningImageWindow(self)
 
     def open_lia_live_trace(self):
@@ -1629,7 +1639,10 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
         while time.monotonic() < end_t:
             if not instance.scanning:
                 return False
-            time.sleep(min(chunk_s, end_t - time.monotonic()))
+            remaining = end_t - time.monotonic()
+            if remaining <= 0.0:
+                break
+            time.sleep(min(float(chunk_s), remaining))
         return True
 
     @staticmethod
