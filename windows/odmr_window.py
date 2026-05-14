@@ -4,6 +4,7 @@ import pyqtgraph as pg
 from PyQt6 import QtCore, QtWidgets
 from sklearn.linear_model import LinearRegression
 
+from analysis.odmr_fit_colin import ODMR_Fit
 from threading_utils import ThreadedComponent
 from ui_theme import (
     PLOT_BACKGROUND,
@@ -62,13 +63,12 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         self.linearRegionTable.viewport().installEventFilter(self)
 
         self.setODMRButton.clicked.connect(self.send_to_scan_table)
-        self.autoFitButton.setText("Select Linear Region")
-        self.autoFitButton.clicked.connect(self.start_linear_region_selection)
+        self.autoFitButton.setText("Auto Fit Regions")
+        self.autoFitButton.clicked.connect(self.auto_fit_linear_regions)
         self.autoFitButton.setEnabled(False)
         self.autoFitAfterSweepCheckBox.hide()
         self._hide_legacy_auto_fit_controls()
         self.stopSweepButton.clicked.connect(self.stop_odmr_sweep)
-        self.graphWidget.scene().sigMouseClicked.connect(self._on_plot_mouse_clicked)
 
         self.thread_function(
             self.main_window.rfController.setup_sweep,
@@ -112,7 +112,7 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         self.autoFitButton.setEnabled(len(self.x) >= 3)
         self._selection_mode_active = False
         self._selected_indices = []
-        self.autoFitButton.setText("Select Linear Region")
+        self.autoFitButton.setText("Auto Fit Regions")
 
     def progress_fn(self, results):
         self.y = results
@@ -120,14 +120,108 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         self.dummy_data(self.x, self.y)
         self.autoFitButton.setEnabled(False)
 
-    def start_linear_region_selection(self):
+    def auto_fit_linear_regions(self):
         if self.main_window.rfController.sweeping:
             return
         if self.x is None or self.y is None or len(self.x) < 3:
             return
-        self._selection_mode_active = True
-        self._selected_indices = []
-        self.autoFitButton.setText("Click first point...")
+
+        self.autoFitButton.setEnabled(False)
+        self.autoFitButton.setText("Fitting...")
+        QtWidgets.QApplication.processEvents()
+
+        try:
+            fitter = ODMR_Fit(np.asarray(self.x, dtype=float), np.asarray(self.y, dtype=float))
+            resonance_frequency = fitter.find_resonances()
+        except Exception as exc:
+            self.autoFitButton.setText("Auto Fit Regions")
+            self.autoFitButton.setEnabled(True)
+            self.main_window.show_error_message(str(exc))
+            return
+
+        self._clear_linear_regions()
+
+        if resonance_frequency is None or len(resonance_frequency) == 0:
+            self.autoFitButton.setText("Auto Fit Regions")
+            self.autoFitButton.setEnabled(True)
+            QtWidgets.QMessageBox.information(
+                self,
+                "ODMR Auto Fit",
+                "No resonances were detected in the current sweep.",
+            )
+            return
+
+        n_added = 0
+        for i, center_freq in enumerate(resonance_frequency):
+            if not np.isfinite(center_freq):
+                continue
+
+            slope = float(fitter.resonance_slope[i])
+            if not np.isfinite(slope):
+                continue
+
+            interval, fit_line = fitter.fitted_slope(i)
+            interval = np.asarray(interval, dtype=float)
+            fit_line = np.asarray(fit_line, dtype=float)
+            if len(interval) < 3 or len(interval) != len(fit_line):
+                continue
+
+            row_idx = self.linearRegionTable.rowCount()
+            self.linearRegionTable.insertRow(row_idx)
+            self.linearRegionTable.setItem(
+                row_idx,
+                0,
+                QtWidgets.QTableWidgetItem(str(round(float(center_freq), 9))),
+            )
+            self.linearRegionTable.setItem(
+                row_idx,
+                1,
+                QtWidgets.QTableWidgetItem(str(round(slope, 9))),
+            )
+            checkbox = QtWidgets.QCheckBox()
+            checkbox.setChecked(True)
+            self.linearRegionTable.setCellWidget(row_idx, 2, checkbox)
+
+            delete_button = QtWidgets.QPushButton("X")
+            delete_button.setToolTip("Delete this fit")
+            delete_button.setMaximumWidth(26)
+            delete_button.clicked.connect(self._on_delete_linear_region_clicked)
+            self.linearRegionTable.setCellWidget(row_idx, 3, delete_button)
+
+            if self.linear_region_list is None:
+                self.linear_region_list = []
+            line_plot = self.graphWidget.plot(
+                interval,
+                fit_line,
+                pen=self._linear_region_default_pen,
+            )
+            self.linear_region_list.append(line_plot)
+            n_added += 1
+
+        self.autoFitButton.setText("Auto Fit Regions")
+        self.autoFitButton.setEnabled(True)
+
+        if n_added == 0:
+            QtWidgets.QMessageBox.information(
+                self,
+                "ODMR Auto Fit",
+                "Detected resonances could not be converted into valid linear regions.",
+            )
+
+    def _clear_linear_regions(self):
+        if self.linear_region_list is not None:
+            for line_plot in self.linear_region_list:
+                try:
+                    self.graphWidget.removeItem(line_plot)
+                except Exception:
+                    try:
+                        line_plot.clear()
+                    except Exception:
+                        pass
+            self.linear_region_list = []
+
+        self.linearRegionTable.setRowCount(0)
+        self._hovered_linear_row = None
 
     def _hide_legacy_auto_fit_controls(self):
         legacy_widgets = [
@@ -357,7 +451,7 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
     def stop_odmr_sweep(self):
         self.worker_running = False
         self._selection_mode_active = False
-        self.autoFitButton.setText("Select Linear Region")
+        self.autoFitButton.setText("Auto Fit Regions")
         try:
             self.main_window.rfController.sweeping = False
         except Exception:

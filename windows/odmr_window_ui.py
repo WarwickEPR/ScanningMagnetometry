@@ -39,7 +39,7 @@ class ODMRWindowUIBuilder:
         title_col = QtWidgets.QVBoxLayout()
         title = QtWidgets.QLabel("ODMR Sweep")
         title.setObjectName("odmrTitle")
-        subtitle = QtWidgets.QLabel("Select two points to define linear regions")
+        subtitle = QtWidgets.QLabel("Automatically detect resonances and fit zero-crossing slopes")
         subtitle.setObjectName("odmrSubtitle")
         title_col.addWidget(title)
         title_col.addWidget(subtitle)
@@ -47,7 +47,7 @@ class ODMRWindowUIBuilder:
         window.stopSweepButton = QtWidgets.QPushButton("Stop Sweep")
         window.stopSweepButton.setObjectName("stopSweepButton")
 
-        window.autoFitButton = QtWidgets.QPushButton("Select Linear Region")
+        window.autoFitButton = QtWidgets.QPushButton("Auto Fit Regions")
         window.autoFitButton.setObjectName("autoFitButton")
 
         window.setODMRButton = QtWidgets.QPushButton("Send To Scan Table")
@@ -109,7 +109,7 @@ class ODMRWindowUIBuilder:
         region_layout.addWidget(window.linearRegionTable)
 
         tips = QtWidgets.QLabel(
-            "Tip: Click two points on the curve to add a linear fit region."
+            "Tip: Press Auto Fit Regions to detect peaks and populate linear regions automatically."
         )
         tips.setObjectName("odmrTips")
 
