@@ -508,6 +508,41 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
             raise RuntimeError("Failed to read LIA sample for feedback.")
         return float(np.mean(samples))
 
+    def _auto_zero_demod_phase(self, settle_after_s=None):
+        lia_ctrl = getattr(self.main_window, "LIAController", None)
+        if lia_ctrl is None:
+            return False
+
+        if settle_after_s is None:
+            tc = float(self.main_window.get_lia_time_constant_seconds())
+            settle_after_s = max(0.2, min(1.5, 6.0 * max(0.0, tc)))
+
+        ok = False
+        try:
+            if hasattr(lia_ctrl, "auto_zero_demod_phase"):
+                ok = bool(
+                    lia_ctrl.auto_zero_demod_phase(
+                        demod_index=0,
+                        settle_s=float(settle_after_s),
+                        timeout_s=3.0,
+                        poll_s=0.02,
+                    )
+                )
+            else:
+                daq = getattr(lia_ctrl, "daq", None)
+                dev = getattr(lia_ctrl, "device", None)
+                if daq is not None and dev is not None:
+                    daq.setInt(f"/{dev}/demods/0/phaseadjust", 1)
+                    daq.sync()
+                    ok = True
+        except Exception:
+            ok = False
+
+        if ok and settle_after_s and float(settle_after_s) > 0.0:
+            if not self._sleep_with_stop_flag(self, float(settle_after_s)):
+                return False
+        return ok
+
     def initialise_feedback(self, *args, **kwargs):
         self._refresh_feedback_settings_from_ui()
         rf_inst = getattr(self.main_window.rfController, "inst", None)
@@ -539,6 +574,7 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         self._set_rf_frequency_ghz(rf_inst, self.res_freq)
         if not self._sleep_with_stop_flag(self, settle_time_s):
             return
+        self._auto_zero_demod_phase()
 
         demod_path = f"/{lia_device}/demods/0/sample"
         setpoint_samples = []
@@ -643,12 +679,16 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         self.ini_freq = list(self.vector_freqs)
         ini_voltage = [None, None, None, None]
         demod_path = f"/{lia_device}/demods/0/sample"
+        phase_adjust_done = False
         for i in range(len(self.vector_freqs)):
             if not self.scanning:
                 return
             self._set_rf_frequency_ghz(rf_inst, self.vector_freqs[i])
             if not self._sleep_with_stop_flag(self, settle_time_s):
                 return
+            if (not phase_adjust_done) and i == 0:
+                self._auto_zero_demod_phase()
+                phase_adjust_done = True
             setpoint_samples = []
             setpoint_end = time.monotonic() + self.setpoint_duration_s
             while time.monotonic() < setpoint_end:

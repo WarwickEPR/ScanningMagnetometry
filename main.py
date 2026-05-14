@@ -1923,12 +1923,33 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
         #  iterate through the starting frequency list, set the RF source to that value and get the voltage value
         # this will be used as the set-point for the feedback, these are appended to list ini_voltage
         demod_path = f"/{lia_device}/demods/0/sample"
-        for i in self._get_active_tracking_indices(validate=True):
+        _active_tracking_indices = self._get_active_tracking_indices(validate=True)
+        _first_tracking_index = _active_tracking_indices[0] if _active_tracking_indices else None
+        for i in _active_tracking_indices:
             if not self.scanning:
                 return
             self._set_rf_frequency_ghz(rf_inst, self.vector_freqs[i])
             if not self._sleep_with_stop_flag(self, settle_time_s):
                 return
+            if i == _first_tracking_index:
+                try:
+                    if hasattr(window.LIAController, "auto_zero_demod_phase"):
+                        window.LIAController.auto_zero_demod_phase(
+                            demod_index=0,
+                            settle_s=max(0.2, min(1.5, 6.0 * float(window.get_lia_time_constant_seconds()))),
+                            timeout_s=3.0,
+                            poll_s=0.02,
+                        )
+                    else:
+                        lia_daq.setInt(f"/{lia_device}/demods/0/phaseadjust", 1)
+                        lia_daq.sync()
+                    if not self._sleep_with_stop_flag(
+                        self,
+                        max(0.2, min(1.5, 6.0 * float(window.get_lia_time_constant_seconds()))),
+                    ):
+                        return
+                except Exception:
+                    pass
             # Average over 2 seconds to get a stable setpoint
             _sp_samples = []
             _sp_t_end = time.monotonic() + _setpoint_duration_s

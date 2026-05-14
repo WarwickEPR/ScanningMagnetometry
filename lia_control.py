@@ -6,6 +6,7 @@ Manages data acquisition for both ODMR sweeps and FFT measurements.
 """
 
 import numpy as np
+import time
 import zhinst.utils
 from threading_utils import ThreadedComponent
 
@@ -42,6 +43,7 @@ class LIAControl(ThreadedComponent):
         self.fft_sweep = False
         self.daq = None
         self.device = None
+        self.last_phase_adjust_deg = None
         self.daq_module = None
         self.signal_paths = None
         return
@@ -123,6 +125,52 @@ class LIAControl(ThreadedComponent):
             self.scaling_Factor = scaling
         except Exception as error:
             raise RuntimeError(f"Failed to apply LIA runtime settings: {error}")
+
+    def auto_zero_demod_phase(self, demod_index=0, settle_s=None, timeout_s=2.0, poll_s=0.02):
+        """Trigger Zurich demodulator phase auto-adjust so signal is aligned into X.
+
+        This wraps the LabOne phaseadjust command:
+            /<device>/demods/<index>/phaseadjust = 1
+        """
+        if not self.LIA_connected or self.daq is None or self.device is None:
+            return False
+
+        try:
+            idx = max(0, int(demod_index))
+            phaseadjust_path = f"/{self.device}/demods/{idx}/phaseadjust"
+            phaseshift_path = f"/{self.device}/demods/{idx}/phaseshift"
+
+            self.daq.sync()
+            self.daq.setInt(phaseadjust_path, 1)
+            self.daq.sync()
+
+            deadline = time.monotonic() + max(0.1, float(timeout_s))
+            while time.monotonic() < deadline:
+                try:
+                    still_running = int(self.daq.getInt(phaseadjust_path))
+                except Exception:
+                    break
+                if still_running == 0:
+                    break
+                time.sleep(max(0.005, float(poll_s)))
+
+            if settle_s is None:
+                try:
+                    tau = float(self.daq.getDouble(f"/{self.device}/demods/{idx}/timeconstant"))
+                except Exception:
+                    tau = 0.05
+                settle_s = max(0.2, min(1.5, 6.0 * max(0.0, tau)))
+
+            if settle_s and float(settle_s) > 0.0:
+                time.sleep(float(settle_s))
+
+            try:
+                self.last_phase_adjust_deg = float(self.daq.getDouble(phaseshift_path))
+            except Exception:
+                self.last_phase_adjust_deg = None
+            return True
+        except Exception:
+            return False
 
     def setup_sweep(self):
         """Set parameters and arm data acquisition module for ODMR sweep.
