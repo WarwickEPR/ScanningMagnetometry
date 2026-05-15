@@ -89,6 +89,22 @@ class RfControl(ThreadedComponent):
             pass
         return None
 
+    def _query_float(self, command, default=None):
+        try:
+            response = self.inst.query(command)
+            return float(str(response).strip())
+        except Exception:
+            return default
+
+    def _query_int(self, command, default=None):
+        value = self._query_float(command, default=None)
+        if value is None:
+            return default
+        try:
+            return int(round(float(value)))
+        except Exception:
+            return default
+
     def connect_rf(self, *args, **kwargs):
         """Connect to the RF source via network address.
 
@@ -115,7 +131,7 @@ class RfControl(ThreadedComponent):
         self.window.modFreqLabel.setText(str(round(float(mod_freq) / 1e3, 3)))
 
         # Get current power state and set UI button to appropriate state
-        power = int(self.inst.query("OUTP?"))
+        power = self._query_int("OUTP?", default=0)
         if power == 0:
             self.mw_power_on = False
             self.window.togglePwrChk.setChecked(False)
@@ -303,7 +319,8 @@ class RfControl(ThreadedComponent):
             elif not got_new_samples:
                 time.sleep(0.01)
 
-            if (int(self.inst.query(':STATus:OPERation:CONDition?')) & 8) == 8:
+            status_condition = self._query_int(':STATus:OPERation:CONDition?', default=0)
+            if (status_condition & 8) == 8:
                 pass
             else:
                 if self.window.odmrSweepContinous.isChecked():

@@ -183,6 +183,20 @@ class StageControl:
         :return:
         """
         try:
+            target_port = str(com_port).strip().upper()
+
+            # If the current serial connection is already open on the same port,
+            # treat reconnect as success instead of failing with "port in use".
+            if self.ser is not None and bool(getattr(self.ser, "is_open", False)):
+                current_port = str(getattr(self.ser, "port", "")).strip().upper()
+                if current_port == target_port:
+                    self.stage_connected = True
+                    return True
+                try:
+                    self.ser.close()
+                except Exception:
+                    pass
+
             self.ser = serial.Serial(
                 port=com_port,
                 baudrate=baud_rate,
