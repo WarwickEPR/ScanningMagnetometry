@@ -42,3 +42,7 @@ configs/config.yml
 # Archives
 *.zip
 *.log
+
+
+#Data files
+data/

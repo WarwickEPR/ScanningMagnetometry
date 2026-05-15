@@ -1033,35 +1033,98 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
             self.fc4.setData([])
 
     def export_data(self):
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+
         folderpath = QtWidgets.QFileDialog.getExistingDirectory(self, "Select Folder")
-        date_time = time.strftime("/Scan_Data_%Y-%m-%d_%H-%M-%S", time.gmtime())
+        if not folderpath:
+            return
+
+        date_time = time.strftime("Scan_Data_%Y-%m-%d_%H-%M-%S", time.gmtime())
+        base_path = os.path.join(folderpath, date_time)
+        img_dir = base_path + "_IMAGES"
+        os.makedirs(img_dir, exist_ok=True)
+
+        def save_map_image(data_2d, filepath, title, cmap="inferno", unit_label=""):
+            fig, ax = plt.subplots(figsize=(6, 5))
+            im = ax.imshow(data_2d, cmap=cmap, origin="upper", aspect="equal")
+            cbar = fig.colorbar(im, ax=ax)
+            cbar.set_label(unit_label)
+            ax.set_title(title)
+            ax.set_xlabel("X pixel")
+            ax.set_ylabel("Y pixel")
+            fig.tight_layout()
+            fig.savefig(filepath, dpi=150)
+            plt.close(fig)
+
         try:
-            df_arr_data = np.array(self.df_arr)
-            voltage_arr_data = np.array(self.voltageArr)
-            voltage_std_arr_data = np.array(self.voltageArrSTD)
-            h5f = h5py.File(folderpath + date_time + ".h5", "w")
-            h5f.create_dataset("df_array", data=df_arr_data)
-            h5f.create_dataset("voltage_array", data=voltage_arr_data)
-            h5f.create_dataset("voltage_st_arrayy", data=voltage_std_arr_data)
-            h5f.close()
+            voltage = np.array(self.voltageArr)[0]  # [y, x]
+
+            with h5py.File(base_path + ".h5", "w") as h5f:
+                if self.vector:
+                    # Vector scan: df1..df4 + Bx/By/Bz
+                    df = np.array(self.df_arr)  # [4, y, x]
+                    b = np.array(self.b_arr)    # [3, y, x]
+
+                    for k in range(4):
+                        h5f.create_dataset(f"df{k + 1}", data=df[k])
+                        save_map_image(
+                            df[k],
+                            os.path.join(img_dir, f"df{k + 1}.png"),
+                            f"Δf{k + 1}",
+                            cmap="inferno",
+                            unit_label="Hz",
+                        )
+
+                    for k, lbl in enumerate(("Bx", "By", "Bz")):
+                        h5f.create_dataset(lbl, data=b[k])
+                        save_map_image(
+                            b[k],
+                            os.path.join(img_dir, f"{lbl}.png"),
+                            lbl,
+                            cmap="RdBu_r",
+                            unit_label="T",
+                        )
+
+                elif self.feedback:
+                    # Scalar + feedback: voltage + Δf
+                    df = np.array(self.df_arr)[0]  # [y, x]
+                    h5f.create_dataset("voltage", data=voltage)
+                    h5f.create_dataset("df", data=df)
+                    save_map_image(
+                        voltage,
+                        os.path.join(img_dir, "voltage.png"),
+                        "Voltage Map",
+                        cmap="inferno",
+                        unit_label="V",
+                    )
+                    save_map_image(
+                        df,
+                        os.path.join(img_dir, "df.png"),
+                        "Δf Map",
+                        cmap="inferno",
+                        unit_label="Hz",
+                    )
+
+                else:
+                    # Scalar, no feedback: voltage only
+                    h5f.create_dataset("voltage", data=voltage)
+                    save_map_image(
+                        voltage,
+                        os.path.join(img_dir, "voltage.png"),
+                        "Voltage Map",
+                        cmap="inferno",
+                        unit_label="V",
+                    )
+
         except Exception as error:
-            error_dialog = QtWidgets.QErrorMessage(self.main_window)
-            error_dialog.showMessage(str(error))
+            QtWidgets.QErrorMessage(self.main_window).showMessage(str(error))
+            return
 
-        if not os.path.exists(folderpath + date_time + "IMAGES"):
-            os.makedirs(folderpath + date_time + "IMAGES")
-        for i in range(len(df_arr_data)):
-            df_image = df_arr_data[i, :, :]
-            voltage_image = voltage_arr_data[i, :, :]
-            df_image = cv2.resize(df_image, dsize=(640, 640), interpolation=cv2.INTER_CUBIC)
-            voltage_image = cv2.resize(voltage_image, dsize=(640, 640), interpolation=cv2.INTER_CUBIC)
-            df_image8 = (((df_image - df_image.min()) / (df_image.max() - df_image.min())) * 255.9).astype(np.uint8)
-            voltage_image8 = (((voltage_image - voltage_image.min()) / (voltage_image.max() - voltage_image.min())) * 255.9).astype(np.uint8)
-            df_image = Image.fromarray(df_image8)
-            voltage_image = Image.fromarray(voltage_image8)
-
-            df_image.save(folderpath + date_time + "IMAGES/" + "_IMAGE_freq_" + str(i) + ".PNG")
-            voltage_image.save(folderpath + date_time + "IMAGES/" + "_IMAGE_voltage_" + str(i) + ".PNG")
+        QtWidgets.QMessageBox.information(
+            self, "Export Complete", f"Data saved to:\n{base_path}"
+        )
 
     def stop_scan(self):
         self.scanning = False
