@@ -174,11 +174,11 @@ class MainWindowUIBuilder:
         move_group = QtWidgets.QGroupBox("Manual Stage Movement")
         move_grid = QtWidgets.QGridLayout(move_group)
 
-        window.xPosSpinBox = self._make_spinbox(decimals=3, minimum=-1e6, maximum=1e6)
+        window.xPosSpinBox = self._make_spinbox(decimals=3, minimum=0.0, maximum=1e6)
         window.xPosSpinBox.setObjectName("xPosSpinBox")
-        window.yPosSpinBox = self._make_spinbox(decimals=3, minimum=-1e6, maximum=1e6)
+        window.yPosSpinBox = self._make_spinbox(decimals=3, minimum=0.0, maximum=1e6)
         window.yPosSpinBox.setObjectName("yPosSpinBox")
-        window.zPosSpinBox = self._make_spinbox(decimals=3, minimum=-1e6, maximum=1e6)
+        window.zPosSpinBox = self._make_spinbox(decimals=3, minimum=0.0, maximum=1e6)
         window.zPosSpinBox.setObjectName("zPosSpinBox")
 
         window.setPositionButton = QtWidgets.QPushButton("Set X/Y Position")
@@ -200,6 +200,38 @@ class MainWindowUIBuilder:
         move_grid.addWidget(window.setStageHeightButton, 1, 2)
         move_grid.addWidget(window.homeStageButton, 2, 2)
         move_grid.addWidget(window.getStagePositionButton, 3, 2)
+
+        jog_group = QtWidgets.QGroupBox("Jog Controls")
+        jog_grid = QtWidgets.QGridLayout(jog_group)
+
+        window.stageJogStepCombo = QtWidgets.QComboBox()
+        window.stageJogStepCombo.setObjectName("stageJogStepCombo")
+        window.stageJogStepCombo.addItems(["0.1", "1", "10"])
+        window.stageJogStepCombo.setCurrentText("1")
+
+        window.stageJogUpButton = QtWidgets.QPushButton("Up (Y+)")
+        window.stageJogUpButton.setObjectName("stageJogUpButton")
+        window.stageJogDownButton = QtWidgets.QPushButton("Down (Y-)")
+        window.stageJogDownButton.setObjectName("stageJogDownButton")
+        window.stageJogLeftButton = QtWidgets.QPushButton("Left (X-)")
+        window.stageJogLeftButton.setObjectName("stageJogLeftButton")
+        window.stageJogRightButton = QtWidgets.QPushButton("Right (X+)")
+        window.stageJogRightButton.setObjectName("stageJogRightButton")
+        window.stageJogZUpButton = QtWidgets.QPushButton("Z Up")
+        window.stageJogZUpButton.setObjectName("stageJogZUpButton")
+        window.stageJogZDownButton = QtWidgets.QPushButton("Z Down")
+        window.stageJogZDownButton.setObjectName("stageJogZDownButton")
+
+        jog_grid.addWidget(QtWidgets.QLabel("Step (mm)"), 0, 0)
+        jog_grid.addWidget(window.stageJogStepCombo, 0, 1, 1, 2)
+        jog_grid.addWidget(window.stageJogUpButton, 1, 1)
+        jog_grid.addWidget(window.stageJogLeftButton, 2, 0)
+        jog_grid.addWidget(window.stageJogRightButton, 2, 2)
+        jog_grid.addWidget(window.stageJogDownButton, 3, 1)
+        jog_grid.addWidget(window.stageJogZUpButton, 1, 3)
+        jog_grid.addWidget(window.stageJogZDownButton, 3, 3)
+
+        move_grid.addWidget(jog_group, 4, 0, 1, 3)
 
         layout.addWidget(conn_group)
         layout.addWidget(move_group)

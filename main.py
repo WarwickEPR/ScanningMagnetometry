@@ -134,8 +134,16 @@ class MainUI(QtWidgets.QMainWindow):
         self.setStageHeightButton.clicked.connect(
             lambda: self.stageController.set_stage_height(self.zPosSpinBox.value())
         )
+        self.stageJogUpButton.clicked.connect(lambda: self._jog_stage_xy(0, 1))
+        self.stageJogDownButton.clicked.connect(lambda: self._jog_stage_xy(0, -1))
+        self.stageJogLeftButton.clicked.connect(lambda: self._jog_stage_xy(-1, 0))
+        self.stageJogRightButton.clicked.connect(lambda: self._jog_stage_xy(1, 0))
+        self.stageJogZUpButton.clicked.connect(lambda: self._jog_stage_z(-1))
+        self.stageJogZDownButton.clicked.connect(lambda: self._jog_stage_z(1))
 
-        self.getStagePositionButton.clicked.connect(self.stageController.get_stage_pos)
+        self.getStagePositionButton.clicked.connect(
+            lambda: self._sync_stage_position_from_hardware(show_error=True)
+        )
         self.actionChange_Max_Position_Values.triggered.connect(
             self.stageController.set_max_stage_position
         )
@@ -703,8 +711,63 @@ class MainUI(QtWidgets.QMainWindow):
         connected = self.stageController.connect_stage(port)
         if connected:
             self._set_connection_indicator("stage", "connected", f"Connected: {port}")
+            self._sync_stage_position_from_hardware(show_error=False)
         else:
             self._set_connection_indicator("stage", "error", f"Failed: {port}")
+
+    def _sync_stage_position_from_hardware(self, show_error=False):
+        if not getattr(self.stageController, "stage_connected", False):
+            if show_error:
+                self.show_error_message("Stage is not connected.")
+            return False
+
+        try:
+            pos = self.stageController.get_stage_position_tuple()
+            if pos is None:
+                raise RuntimeError("No response from stage for position query (M114).")
+
+            x_pos, y_pos, z_pos = pos
+            self.xPosSpinBox.setValue(max(0.0, float(x_pos)))
+            self.yPosSpinBox.setValue(max(0.0, float(y_pos)))
+            self.zPosSpinBox.setValue(max(0.0, float(z_pos)))
+            self.currentXLabel.setText(str(x_pos))
+            self.currentYLabel.setText(str(y_pos))
+            self.currentHeightLabel.setText(str(z_pos))
+            return True
+        except Exception as error:
+            if show_error:
+                self.show_error_message(str(error))
+            return False
+
+    def _stage_jog_step_mm(self):
+        try:
+            return float(self.stageJogStepCombo.currentText())
+        except Exception:
+            return 1.0
+
+    def _jog_stage_xy(self, x_step_sign, y_step_sign):
+        if not getattr(self.stageController, "stage_connected", False):
+            self.show_error_message("Stage is not connected.")
+            return
+
+        self._sync_stage_position_from_hardware(show_error=False)
+        step_mm = self._stage_jog_step_mm()
+        x_target = max(0.0, self.xPosSpinBox.value() + float(x_step_sign) * step_mm)
+        y_target = max(0.0, self.yPosSpinBox.value() + float(y_step_sign) * step_mm)
+        self.xPosSpinBox.setValue(x_target)
+        self.yPosSpinBox.setValue(y_target)
+        self.stageController.set_stage_pos(x_target, y_target)
+
+    def _jog_stage_z(self, z_step_sign):
+        if not getattr(self.stageController, "stage_connected", False):
+            self.show_error_message("Stage is not connected.")
+            return
+
+        self._sync_stage_position_from_hardware(show_error=False)
+        step_mm = self._stage_jog_step_mm()
+        z_target = max(0.0, self.zPosSpinBox.value() + float(z_step_sign) * step_mm)
+        self.zPosSpinBox.setValue(z_target)
+        self.stageController.set_stage_height(z_target)
 
     def connect_rf(self):
         ip_address, source = self._current_rf_connection_ip()
@@ -1631,7 +1694,7 @@ class VectorTest(QtWidgets.QWidget, ThreadedComponent):
         self.worker_running = False
         if hasattr(self, "vectorStartButton"):
             self.vectorStartButton.setEnabled(True)
-        if hasattr(self, "vectorStopButton"):
+        if hasattr(self, "vectorStopButton"):#
             self.vectorStopButton.setEnabled(False)
 
     @staticmethod

@@ -215,8 +215,8 @@ class StageControl:
         :param y: (float) desired y position in mm
         :return:
         """
-        x_cmd = self._format_axis_value(x)
-        y_cmd = self._format_axis_value(y)
+        x_cmd = self._format_axis_value(max(0.0, float(x)))
+        y_cmd = self._format_axis_value(max(0.0, float(y)))
         self.execute_gcode(f'G00 X{x_cmd} Y{y_cmd}')
         return
 
@@ -226,7 +226,7 @@ class StageControl:
         :param z: (float) desired z position or "height" in mm
         :return:
         """
-        z_cmd = self._format_axis_value(z)
+        z_cmd = self._format_axis_value(max(0.0, float(z)))
         self.execute_gcode(f'G00 Z{z_cmd}')
         return
 
