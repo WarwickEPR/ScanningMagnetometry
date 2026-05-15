@@ -809,8 +809,6 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
             i_step = 1 if (self.serpentine and row_index % 2 == 1) else -1
             i = i_start
             for col_index, x_position in enumerate(row_x):
-                timeStart = time.time()
-                ts = time.time()
                 totalSize -= 1
                 require_full_wait = col_index == 0
                 if not self._move_stage_to_measurement_point(
@@ -853,9 +851,6 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                     kwargs["progress_callback"].emit(payload)
                     last_emit = now_emit
                 i += i_step
-                te = time.time()
-                eta = (te - ts) * totalSize
-                print(time.ctime(int(timeStart + eta)))
                 if self.scanning is False:
                     return
             j += 1
@@ -896,8 +891,6 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
             i_step = 1 if (self.serpentine and row_index % 2 == 1) else -1
             i = i_start
             for col_index, x_position in enumerate(row_x):
-                timeStart = time.time()
-                ts = time.time()
                 totalSize -= 1
                 require_full_wait = col_index == 0
                 if not self._move_stage_to_measurement_point(
@@ -937,9 +930,6 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                     )
                     last_emit = now
                 i += i_step
-                te = time.time()
-                eta = (te - ts) * totalSize
-                print(time.ctime(int(timeStart + eta)))
                 if self.scanning is False:
                     return
             j += 1
