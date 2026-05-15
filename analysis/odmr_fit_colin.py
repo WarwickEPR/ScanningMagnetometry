@@ -150,6 +150,8 @@ class ODMR_Fit:
     def calculate_A_matrix(self, selection=[4,5,6,7]):
 
         B0 = self.B_lab100
+        self.A_selection = list(selection)
+        self.A_reference_frequencies = np.asarray(self.resonance_frequency[selection], dtype=float)
         stepsize = 1e-9
         Bx = B0 + stepsize * np.array([1, 0, 0])
         By = B0 + stepsize * np.array([0, 1, 0])
@@ -167,7 +169,16 @@ class ODMR_Fit:
         self.A = A
         return A
     
-    def shift_to_field(self, frequency_shifts):
+    def shift_to_field(self, frequency_shifts, reference_frequencies=None):
+        frequency_shifts = np.asarray(frequency_shifts, dtype=float)
+        if reference_frequencies is not None:
+            reference_frequencies = np.asarray(reference_frequencies, dtype=float)
+            if reference_frequencies.shape != frequency_shifts.shape:
+                raise ValueError(
+                    "reference_frequencies must match frequency_shifts shape."
+                )
+            frequency_shifts = (frequency_shifts - reference_frequencies) * 1e9
+
         if not hasattr(self, 'A'):
             self.calculate_A_matrix()
         return self.A @ frequency_shifts

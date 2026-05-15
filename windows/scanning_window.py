@@ -103,6 +103,7 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         self.total_pixels = int(len(self.xCoords) * len(self.yCoords))
         self.completed_pixels = 0
         self.scan_start_time_monotonic = None
+        self.field_model = getattr(self.main_window, "odmr_fit_model", None)
         self._refresh_feedback_settings_from_ui()
         self._set_eta_label_initial()
 
@@ -880,7 +881,8 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
         self.df_arr = np.zeros([4, len(y_positions), len(x_positions)])
         self.b_arr = np.zeros([3, len(y_positions), len(x_positions)])
         j = 0
-        A_pinv = np.linalg.pinv(np.array(self.main_window.a_matrix_values))
+        field_model = getattr(self.main_window, "odmr_fit_model", None) or self.field_model
+        A_pinv = None if field_model is not None else np.linalg.pinv(np.array(self.main_window.a_matrix_values))
         totalSize = len(x_positions) * len(y_positions)
         total_pixels = int(totalSize)
         last_emit = 0.0
@@ -906,11 +908,22 @@ class scanningImageWindow(QtWidgets.QWidget, ThreadedComponent):
                     return
                 for k in range(4):
                     self.df_arr[k, j, i] = self.vector_freqs[k]
-                df1, df2, df3, df4 = (np.array(self.vector_freqs) - np.array(self.ini_freq)) * 1000
-                freq_col = [[df1], [df2], [df3], [df4]]
-                B = np.dot(A_pinv, freq_col)
-                for k in range(3):
-                    self.b_arr[k, j, i] = B[k][0]
+                if field_model is not None:
+                    B = np.asarray(
+                        field_model.shift_to_field(
+                            np.asarray(self.vector_freqs, dtype=float),
+                            reference_frequencies=np.asarray(self.ini_freq, dtype=float),
+                        ),
+                        dtype=float,
+                    ).reshape(-1)
+                    for k in range(min(3, len(B))):
+                        self.b_arr[k, j, i] = B[k]
+                else:
+                    df1, df2, df3, df4 = (np.array(self.vector_freqs) - np.array(self.ini_freq)) * 1000
+                    freq_col = [[df1], [df2], [df3], [df4]]
+                    B = np.dot(A_pinv, freq_col)
+                    for k in range(3):
+                        self.b_arr[k, j, i] = B[k][0]
                 now = time.monotonic()
                 self.completed_pixels += 1
                 if now - last_emit >= 0.1:

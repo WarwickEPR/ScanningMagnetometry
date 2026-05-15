@@ -3,7 +3,7 @@ Connection_Params:
   Device_IP: 192.168.1.101
   RF_IP: 192.168.1.102
 LIA_Params:
-  Bandwidth_3dB_Hz: '100'
+  Bandwidth_3dB_Hz: '20'
   Burst_Dur: '0.005'
   Duration: '10'
   Ext_Ref_Signal_Path: '8'
@@ -34,16 +34,16 @@ RF_Params:
     - 3.0
   Ext_Mod: 'False'
   Feedback_Freq_Table:
-  - - 2.899
-    - 2.916
+  - - 2.9
+    - 2.917
     - 2.938
-    - 2.954
-  - - -4.1151e-05
-    - -4.3732e-05
-    - -3.8481e-05
-    - -3.4158e-05
+    - 2.955
+  - - 2.3794e-05
+    - 2.5127e-05
+    - 2.2455e-05
+    - 2.1494e-05
   Feedback_Selected_Row: '1'
-  Freq: '2.899'
+  Freq: '2.9'
   Mod_Amp: '3.0'
   Mod_Freq: '3.05'
   Mod_On: 'True'
@@ -51,7 +51,7 @@ RF_Params:
   Power: '0.0'
   Power_On: 'True'
   Scan_Feedback_Settings:
-    Avg_Samples: '2'
+    Avg_Samples: '3'
     Baseline_Adapt: 'False'
     Baseline_Alpha: '0.0'
     Control_Mode: Proportional

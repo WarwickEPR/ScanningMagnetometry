@@ -76,6 +76,7 @@ class MainUI(QtWidgets.QMainWindow):
         self.vector_test_window = None
         self.scan_window = None
         self.lia_live_trace_window = None
+        self.odmr_fit_model = None
         self.a_matrix_values = copy.deepcopy(
             self.default_parameters["RF_Params"]["A_Matrix_Values"]
         )

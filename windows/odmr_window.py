@@ -142,6 +142,7 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
         self._clear_linear_regions()
 
         if resonance_frequency is None or len(resonance_frequency) == 0:
+            self.main_window.odmr_fit_model = None
             self.autoFitButton.setText("Auto Fit Regions")
             self.autoFitButton.setEnabled(True)
             QtWidgets.QMessageBox.information(
@@ -152,6 +153,7 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
             return
 
         n_added = 0
+        self.main_window.odmr_fit_model = None
         for i, center_freq in enumerate(resonance_frequency):
             if not np.isfinite(center_freq):
                 continue
@@ -197,6 +199,18 @@ class ODMRGraphWindow(QtWidgets.QWidget, ThreadedComponent):
             )
             self.linear_region_list.append(line_plot)
             n_added += 1
+
+        if len(resonance_frequency) >= 8:
+            try:
+                fitter.find_B_lab100()
+                fitter.calculate_D_adjustment()
+                fitter.calculate_A_matrix()
+                self.main_window.odmr_fit_model = fitter
+            except Exception as exc:
+                self.main_window.odmr_fit_model = None
+                self.main_window.show_error_message(
+                    f"ODMR field model could not be prepared: {exc}"
+                )
 
         self.autoFitButton.setText("Auto Fit Regions")
         self.autoFitButton.setEnabled(True)
